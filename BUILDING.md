@@ -157,10 +157,29 @@ In addition to running tests through `ctest`, the standalone test binary can be 
 
 ---
 
-## 5. Build Options Reference
+## 5. Running the BitForge CLI Executable
+
+The build generates the `bitforge` command-line executable (or `bitforge.exe` on Windows):
+
+```bash
+# Windows
+.\build\debug\bitforge.exe --help
+.\build\debug\bitforge.exe assemble examples\01_arithmetic.asm
+.\build\debug\bitforge.exe run examples\01_arithmetic.asm --dump-regs
+
+# Linux / macOS
+./build/debug/bitforge --help
+./build/debug/bitforge assemble examples/01_arithmetic.asm
+./build/debug/bitforge run examples/01_arithmetic.asm --dump-regs
+```
+
+---
+
+## 6. Build Options Reference
 
 | CMake Option | Default | Description |
 |---|---|---|
 | `CMAKE_BUILD_TYPE` | `Debug` | Build profile (`Debug`, `Release`, `RelWithDebInfo`) |
 | `BITFORGE_WARNINGS_AS_ERRORS` | `OFF` | Treats compiler warnings as errors (`/WX` on MSVC, `-Werror` on GCC/Clang). Enabled by default in CI. |
 | `CMAKE_CXX_COMPILER` | System default | Explicit path or binary name for C++ compiler (e.g. `cl`, `g++`, `clang++`) |
+

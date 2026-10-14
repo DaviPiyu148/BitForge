@@ -56,6 +56,36 @@ target_include_directories(bitforge_core
 
 target_compile_options(bitforge_core PRIVATE ${BITFORGE_WARNING_FLAGS})
 
+# CLI static library
+add_library(bitforge_cli STATIC
+    src/cli/runner.cpp
+)
+
+target_include_directories(bitforge_cli
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
+
+target_link_libraries(bitforge_cli
+    PUBLIC
+        bitforge_core
+)
+
+target_compile_options(bitforge_cli PRIVATE ${BITFORGE_WARNING_FLAGS})
+
+# CLI executable
+add_executable(bitforge
+    src/cli/main.cpp
+)
+
+target_link_libraries(bitforge
+    PRIVATE
+        bitforge_cli
+)
+
+target_compile_options(bitforge PRIVATE ${BITFORGE_WARNING_FLAGS})
+
 # Automated testing suite
 enable_testing()
 
@@ -69,6 +99,7 @@ add_executable(bitforge_tests
     tests/unit/test_stack_instructions.cpp
     tests/unit/test_io_instructions.cpp
     tests/unit/test_assembler.cpp
+    tests/unit/test_cli.cpp
 )
 
 target_include_directories(bitforge_tests
@@ -79,6 +110,7 @@ target_include_directories(bitforge_tests
 target_link_libraries(bitforge_tests
     PRIVATE
         bitforge_core
+        bitforge_cli
 )
 
 target_compile_options(bitforge_tests PRIVATE ${BITFORGE_WARNING_FLAGS})
@@ -87,3 +119,4 @@ add_test(
     NAME BitForgeTests
     COMMAND bitforge_tests
 )
+
