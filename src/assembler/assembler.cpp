@@ -72,7 +72,17 @@ AssembleResult Assembler::assemble(std::string_view source) {
         }
 
         word_t entry_point() const noexcept { return entry_point_; }
+        bool entry_point_explicitly_set() const noexcept { return entry_point_set_; }
+        SourceLocation entry_point_location() const noexcept { return entry_point_loc_; }
         const std::vector<Segment>& segments() const noexcept { return segments_; }
+        std::size_t instruction_count() const noexcept { return instruction_count_; }
+        std::size_t total_bytes() const noexcept {
+            std::size_t total = 0;
+            for (const auto& seg : segments_) {
+                total += seg.data.size();
+            }
+            return total;
+        }
 
     private:
         const std::vector<Token>& tokens_;
@@ -83,6 +93,8 @@ AssembleResult Assembler::assemble(std::string_view source) {
         word_t location_counter_{0x0000};
         word_t entry_point_{0x0000};
         bool entry_point_set_{false};
+        SourceLocation entry_point_loc_{1, 1};
+        std::size_t instruction_count_{0};
 
         std::vector<Segment> segments_{};
         std::unordered_set<word_t> written_addresses_{};
@@ -154,6 +166,16 @@ AssembleResult Assembler::assemble(std::string_view source) {
             emit_byte(low_byte(w), loc);
         }
 
+        void expect_end_of_statement() {
+            if (peek().kind != TokenKind::Newline && peek().kind != TokenKind::EndOfFile) {
+                Token extra = advance();
+                add_error(extra.location, "Unexpected trailing token: '" + extra.lexeme + "'");
+                while (!is_at_end() && peek().kind != TokenKind::Newline) {
+                    advance();
+                }
+            }
+        }
+
         // Statement = [ Label ':' ] [ Directive | Instruction ]
         void parse_statement() {
             // Check for label definition
@@ -176,12 +198,14 @@ AssembleResult Assembler::assemble(std::string_view source) {
             // Directives
             if (peek().kind == TokenKind::Directive) {
                 parse_directive();
+                expect_end_of_statement();
                 return;
             }
 
             // Instructions
             if (peek().kind == TokenKind::Identifier) {
                 parse_instruction();
+                expect_end_of_statement();
                 return;
             }
 
@@ -198,6 +222,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
             std::string dir = to_upper(dir_tok.lexeme);
 
             if (dir == ".ORG") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(dir_tok.location, "Missing address operand for .ORG");
+                    return;
+                }
                 auto val = parse_expression();
                 if (!val) {
                     add_error(dir_tok.location, "Expected origin address after .ORG");
@@ -217,6 +245,15 @@ AssembleResult Assembler::assemble(std::string_view source) {
             }
 
             if (dir == ".ENTRY") {
+                if (entry_point_set_) {
+                    add_error(dir_tok.location, "Duplicate .ENTRY directive: multiple entry points not permitted");
+                    return;
+                }
+                entry_point_loc_ = dir_tok.location;
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(dir_tok.location, "Missing label or address operand for .ENTRY");
+                    return;
+                }
                 Token target_tok = peek();
                 if (target_tok.kind == TokenKind::Identifier) {
                     advance();
@@ -233,6 +270,8 @@ AssembleResult Assembler::assemble(std::string_view source) {
                                 entry_point_set_ = true;
                             }
                         }
+                    } else {
+                        entry_point_set_ = true;
                     }
                     return;
                 }
@@ -256,6 +295,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
             }
 
             if (dir == ".BYTE") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(dir_tok.location, "Missing byte value operand for .BYTE");
+                    return;
+                }
                 do {
                     SourceLocation arg_loc = peek().location;
                     auto val = parse_expression();
@@ -272,6 +315,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
             }
 
             if (dir == ".WORD") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(dir_tok.location, "Missing word value operand for .WORD");
+                    return;
+                }
                 do {
                     SourceLocation arg_loc = peek().location;
                     auto val = parse_expression();
@@ -288,6 +335,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
             }
 
             if (dir == ".ASCII") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(dir_tok.location, "Missing string literal operand for .ASCII");
+                    return;
+                }
                 if (peek().kind != TokenKind::String) {
                     add_error(dir_tok.location, "Expected string literal after .ASCII");
                     return;
@@ -350,6 +401,7 @@ AssembleResult Assembler::assemble(std::string_view source) {
         }
 
         void parse_instruction() {
+            instruction_count_++;
             Token mnem_tok = advance();
             std::string mnem = to_upper(mnem_tok.lexeme);
 
@@ -362,6 +414,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
             // Group 2: 1 register operand (INC, DEC, NOT, PUSH, POP)
             if (mnem == "INC" || mnem == "DEC" || mnem == "NOT" || mnem == "PUSH" || mnem == "POP") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing register operand for " + mnem);
+                    return;
+                }
                 Token reg_tok = advance();
                 auto reg = parse_register(reg_tok.lexeme);
                 if (!reg) {
@@ -382,6 +438,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
             // Group 3: 2 register operands (MOV, ADD, SUB, AND, OR, XOR, CMP)
             if (mnem == "MOV" || mnem == "ADD" || mnem == "SUB" || mnem == "AND" ||
                 mnem == "OR"  || mnem == "XOR" || mnem == "CMP") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing destination register for " + mnem);
+                    return;
+                }
                 Token r1_tok = advance();
                 auto r1 = parse_register(r1_tok.lexeme);
                 if (!r1) {
@@ -390,6 +450,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
                 }
                 if (!match(TokenKind::Comma)) {
                     add_error(peek().location, "Expected ',' between operands in " + mnem);
+                    return;
+                }
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(peek().location, "Missing source register for " + mnem);
                     return;
                 }
                 Token r2_tok = advance();
@@ -414,6 +478,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
             // Group 4: LDI Rd, imm8
             if (mnem == "LDI") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing destination register for LDI");
+                    return;
+                }
                 Token reg_tok = advance();
                 auto reg = parse_register(reg_tok.lexeme);
                 if (!reg) {
@@ -422,6 +490,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
                 }
                 if (!match(TokenKind::Comma)) {
                     add_error(peek().location, "Expected ',' after register in LDI");
+                    return;
+                }
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(peek().location, "Missing immediate value operand for LDI");
                     return;
                 }
                 SourceLocation imm_loc = peek().location;
@@ -441,6 +513,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
             // Group 5: LDI16 IX, addr16
             if (mnem == "LDI16") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing IX register operand for LDI16");
+                    return;
+                }
                 Token ix_tok = advance();
                 if (!is_ix(ix_tok.lexeme)) {
                     add_error(ix_tok.location, "First operand of LDI16 must be IX");
@@ -448,6 +524,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
                 }
                 if (!match(TokenKind::Comma)) {
                     add_error(peek().location, "Expected ',' after IX in LDI16");
+                    return;
+                }
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(peek().location, "Missing address operand for LDI16");
                     return;
                 }
                 SourceLocation addr_loc = peek().location;
@@ -466,6 +546,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
             // Group 6: LD Rd, [addr16]
             if (mnem == "LD") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing destination register for LD");
+                    return;
+                }
                 Token reg_tok = advance();
                 auto reg = parse_register(reg_tok.lexeme);
                 if (!reg) {
@@ -474,6 +558,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
                 }
                 if (!match(TokenKind::Comma)) {
                     add_error(peek().location, "Expected ',' after register in LD");
+                    return;
+                }
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(peek().location, "Missing memory operand for LD");
                     return;
                 }
                 if (!match(TokenKind::LeftBracket)) {
@@ -501,6 +589,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
             // Group 7: ST [addr16], Rs
             if (mnem == "ST") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing memory destination operand for ST");
+                    return;
+                }
                 if (!match(TokenKind::LeftBracket)) {
                     add_error(peek().location, "Expected '[' for memory destination in ST");
                     return;
@@ -517,6 +609,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
                 }
                 if (!match(TokenKind::Comma)) {
                     add_error(peek().location, "Expected ',' after memory operand in ST");
+                    return;
+                }
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(peek().location, "Missing source register for ST");
                     return;
                 }
                 Token reg_tok = advance();
@@ -536,6 +632,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
             // Group 8: LDX Rd, [IX]
             if (mnem == "LDX") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing destination register for LDX");
+                    return;
+                }
                 Token reg_tok = advance();
                 auto reg = parse_register(reg_tok.lexeme);
                 if (!reg) {
@@ -544,6 +644,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
                 }
                 if (!match(TokenKind::Comma)) {
                     add_error(peek().location, "Expected ',' after register in LDX");
+                    return;
+                }
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(peek().location, "Missing [IX] operand for LDX");
                     return;
                 }
                 if (!match(TokenKind::LeftBracket)) {
@@ -562,6 +666,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
             // Group 9: STX [IX], Rs
             if (mnem == "STX") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing [IX] destination operand for STX");
+                    return;
+                }
                 if (!match(TokenKind::LeftBracket)) {
                     add_error(peek().location, "Expected '[IX]' as first operand for STX");
                     return;
@@ -573,6 +681,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
                 }
                 if (!match(TokenKind::Comma)) {
                     add_error(peek().location, "Expected ',' after [IX] in STX");
+                    return;
+                }
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(peek().location, "Missing source register for STX");
                     return;
                 }
                 Token reg_tok = advance();
@@ -589,6 +701,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
             // Group 10: Branch and Call (JMP, JZ, JNZ, JC, JNC, CALL)
             if (mnem == "JMP" || mnem == "JZ" || mnem == "JNZ" ||
                 mnem == "JC"  || mnem == "JNC" || mnem == "CALL") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing target address or label for " + mnem);
+                    return;
+                }
                 SourceLocation target_loc = peek().location;
                 auto target = parse_expression();
                 if (!target) {
@@ -612,6 +728,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
             // Group 11: IN Rd, port8
             if (mnem == "IN") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing destination register for IN");
+                    return;
+                }
                 Token reg_tok = advance();
                 auto reg = parse_register(reg_tok.lexeme);
                 if (!reg) {
@@ -620,6 +740,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
                 }
                 if (!match(TokenKind::Comma)) {
                     add_error(peek().location, "Expected ',' after register in IN");
+                    return;
+                }
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(peek().location, "Missing port operand for IN");
                     return;
                 }
                 SourceLocation port_loc = peek().location;
@@ -639,6 +763,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
             // Group 12: OUT port8, Rs
             if (mnem == "OUT") {
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(mnem_tok.location, "Missing port operand for OUT");
+                    return;
+                }
                 SourceLocation port_loc = peek().location;
                 auto port = parse_expression();
                 if (!port) {
@@ -650,6 +778,10 @@ AssembleResult Assembler::assemble(std::string_view source) {
                 }
                 if (!match(TokenKind::Comma)) {
                     add_error(peek().location, "Expected ',' after port in OUT");
+                    return;
+                }
+                if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    add_error(peek().location, "Missing source register for OUT");
                     return;
                 }
                 Token reg_tok = advance();
@@ -696,10 +828,58 @@ AssembleResult Assembler::assemble(std::string_view source) {
         }
     }
 
+    // 1. Empty program check: must have emitted at least one byte
+    if (pass2.segments().empty() || pass2.total_bytes() == 0) {
+        result.diagnostics.push_back(Diagnostic{
+            DiagnosticSeverity::Error,
+            SourceLocation{1, 1},
+            "Empty program: no instructions or data emitted"
+        });
+        result.success = false;
+        return result;
+    }
+
+    // 2. Explicit entry point verification: must point to an emitted byte outside uninitialized gaps
+    if (pass2.entry_point_explicitly_set()) {
+        word_t ep = pass2.entry_point();
+        bool found_emitted = false;
+        for (const auto& seg : pass2.segments()) {
+            if (ep >= seg.start_address &&
+                static_cast<std::size_t>(ep - seg.start_address) < seg.data.size()) {
+                found_emitted = true;
+                break;
+            }
+        }
+        if (!found_emitted) {
+            result.diagnostics.push_back(Diagnostic{
+                DiagnosticSeverity::Error,
+                pass2.entry_point_location(),
+                "Explicit entry point " + to_hex_word(ep) + " does not point to an emitted byte (uninitialized memory gap)"
+            });
+            result.success = false;
+            return result;
+        }
+    }
+
+    // 3. Data-only program diagnostic: if no executable instructions were emitted
+    if (pass2.instruction_count() == 0) {
+        result.diagnostics.push_back(Diagnostic{
+            DiagnosticSeverity::Warning,
+            SourceLocation{1, 1},
+            "Program contains only data declarations (.BYTE, .WORD, .ASCII) and no executable instructions"
+        });
+    }
+
+    // Sort segments by start address
+    auto sorted_segments = pass2.segments();
+    std::sort(sorted_segments.begin(), sorted_segments.end(), [](const Segment& a, const Segment& b) {
+        return a.start_address < b.start_address;
+    });
+
     // Build ProgramImage
     ProgramImage image(pass2.entry_point());
-    for (const auto& seg : pass2.segments()) {
-        image.add_segment(seg);
+    for (auto& seg : sorted_segments) {
+        image.add_segment(std::move(seg));
     }
 
     result.image = std::move(image);

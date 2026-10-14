@@ -528,3 +528,441 @@ TEST(AssemblerTest, EndToEndSubroutineAndIoProgram) {
     EXPECT_EQ(bus.numeric_output(), "30");
     EXPECT_EQ(bus.text_output(), "!");
 }
+
+// =============================================================
+// 7. Phase 3.1 Conformance and Edge-Case Audit Tests
+// =============================================================
+
+TEST(AssemblerTest, RejectExplicitEntryInUninitializedGap) {
+    const std::string source = R"(
+        .ORG 0x0100
+        NOP
+        .ENTRY 0x0300
+        .ORG 0x0500
+        NOP
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_FALSE(res.success);
+
+    bool found_gap_error = false;
+    for (const auto& diag : res.diagnostics) {
+        if (diag.message.find("uninitialized memory gap") != std::string::npos ||
+            diag.message.find("does not point to an emitted byte") != std::string::npos) {
+            found_gap_error = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_gap_error);
+}
+
+TEST(AssemblerTest, RejectExplicitLabelEntryAtEndOfFileGap) {
+    const std::string source = R"(
+        .ORG 0x0100
+        NOP
+        end_label:
+        .ENTRY end_label
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_FALSE(res.success);
+
+    bool found_gap_error = false;
+    for (const auto& diag : res.diagnostics) {
+        if (diag.message.find("uninitialized memory gap") != std::string::npos ||
+            diag.message.find("does not point to an emitted byte") != std::string::npos) {
+            found_gap_error = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_gap_error);
+}
+
+TEST(AssemblerTest, RejectDuplicateEntryDirective) {
+    const std::string source = R"(
+        .ORG 0x0100
+        .ENTRY 0x0100
+        .ENTRY 0x0100
+        NOP
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_FALSE(res.success);
+
+    bool found_dup_entry = false;
+    for (const auto& diag : res.diagnostics) {
+        if (diag.message.find("Duplicate .ENTRY") != std::string::npos) {
+            found_dup_entry = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_dup_entry);
+}
+
+TEST(AssemblerTest, DefaultEntryBehaviorAtZero) {
+    const std::string source = R"(
+        NOP
+        HALT
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_TRUE(res.success);
+    EXPECT_EQ(res.image.entry_point(), 0x0000);
+    EXPECT_EQ(res.image.segments().size(), 1);
+    EXPECT_EQ(res.image.segments()[0].start_address, 0x0000);
+}
+
+TEST(AssemblerTest, EmptyProgramAndWhitespaceDiagnostics) {
+    bitforge::assembler::Assembler assem;
+
+    // Completely empty
+    auto res1 = assem.assemble("");
+    EXPECT_FALSE(res1.success);
+    bool found_empty1 = false;
+    for (const auto& d : res1.diagnostics) {
+        if (d.message.find("Empty program") != std::string::npos) found_empty1 = true;
+    }
+    EXPECT_TRUE(found_empty1);
+
+    // Whitespace only
+    auto res2 = assem.assemble("   \t  \r\n  \n  ");
+    EXPECT_FALSE(res2.success);
+    bool found_empty2 = false;
+    for (const auto& d : res2.diagnostics) {
+        if (d.message.find("Empty program") != std::string::npos) found_empty2 = true;
+    }
+    EXPECT_TRUE(found_empty2);
+
+    // Comments only
+    auto res3 = assem.assemble("; Just a comment\n; Another comment\n");
+    EXPECT_FALSE(res3.success);
+    bool found_empty3 = false;
+    for (const auto& d : res3.diagnostics) {
+        if (d.message.find("Empty program") != std::string::npos) found_empty3 = true;
+    }
+    EXPECT_TRUE(found_empty3);
+}
+
+TEST(AssemblerTest, ProgramContainingOnlyDataDiagnostic) {
+    const std::string source = R"(
+        .ORG 0x0000
+        .BYTE 1, 2, 3
+        .WORD 0x1234
+        .ASCII "DATA"
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_TRUE(res.success);
+    EXPECT_EQ(res.image.segments().size(), 1);
+    EXPECT_EQ(res.image.segments()[0].start_address, 0x0000);
+
+    bool found_data_warning = false;
+    for (const auto& d : res.diagnostics) {
+        if (d.severity == bitforge::assembler::DiagnosticSeverity::Warning &&
+            d.message.find("only data declarations") != std::string::npos) {
+            found_data_warning = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_data_warning);
+}
+
+TEST(AssemblerTest, ForwardAndBackwardOrgSegments) {
+    const std::string source = R"(
+        .ORG 0x0500
+        .BYTE 0xAA, 0xBB
+
+        .ORG 0x0200
+        .BYTE 0x11, 0x22
+
+        .ORG 0x0800
+        .BYTE 0x99
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_TRUE(res.success);
+
+    // Segments must be sorted in ascending address order
+    const auto& segs = res.image.segments();
+    EXPECT_EQ(segs.size(), 3);
+    EXPECT_EQ(segs[0].start_address, 0x0200);
+    EXPECT_EQ(segs[0].data.size(), 2);
+    EXPECT_EQ(segs[0].data[0], 0x11);
+    EXPECT_EQ(segs[0].data[1], 0x22);
+
+    EXPECT_EQ(segs[1].start_address, 0x0500);
+    EXPECT_EQ(segs[1].data.size(), 2);
+    EXPECT_EQ(segs[1].data[0], 0xAA);
+    EXPECT_EQ(segs[1].data[1], 0xBB);
+
+    EXPECT_EQ(segs[2].start_address, 0x0800);
+    EXPECT_EQ(segs[2].data.size(), 1);
+    EXPECT_EQ(segs[2].data[0], 0x99);
+}
+
+TEST(AssemblerTest, SegmentEndingExactlyAtPermittedBoundary) {
+    // 0xEFFF is the last valid address before reserved stack region (0xF000..0xFFFF)
+    const std::string source = R"(
+        .ORG 0xEFFF
+        NOP
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_TRUE(res.success);
+    EXPECT_EQ(res.image.segments().size(), 1);
+    EXPECT_EQ(res.image.segments()[0].start_address, 0xEFFF);
+    EXPECT_EQ(res.image.segments()[0].data.size(), 1);
+    EXPECT_EQ(res.image.segments()[0].data[0], 0x00); // NOP
+}
+
+TEST(AssemblerTest, EmissionCrossingIntoReservedStackRegion) {
+    // Emitting a 2-byte word starting at 0xEFFF means byte 2 lands at 0xF000
+    const std::string source = R"(
+        .ORG 0xEFFF
+        .WORD 0x1234
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_FALSE(res.success);
+
+    bool found_stack_error = false;
+    for (const auto& d : res.diagnostics) {
+        if (d.message.find("reserved stack region") != std::string::npos ||
+            d.message.find("0xF000") != std::string::npos) {
+            found_stack_error = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_stack_error);
+}
+
+TEST(AssemblerTest, InstructionCrossingIntoReservedStackRegion) {
+    // LDI R0, 42 is 3 bytes (0xEFFF, 0xF000, 0xF001)
+    const std::string source = R"(
+        .ORG 0xEFFF
+        LDI R0, 42
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_FALSE(res.success);
+
+    bool found_stack_error = false;
+    for (const auto& d : res.diagnostics) {
+        if (d.message.find("reserved stack region") != std::string::npos ||
+            d.message.find("0xF000") != std::string::npos) {
+            found_stack_error = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_stack_error);
+}
+
+TEST(AssemblerTest, LabelsImmediatelyBeforeAndAfterDirectives) {
+    const std::string source = R"(
+        .ORG 0x0100
+        label_before:
+            .BYTE 0x42
+        label_between:
+            .ORG 0x0300
+        label_after:
+            NOP
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_TRUE(res.success);
+
+    const auto* sym_before = res.symbols.lookup("label_before");
+    const auto* sym_between = res.symbols.lookup("label_between");
+    const auto* sym_after = res.symbols.lookup("label_after");
+
+    EXPECT_NE(sym_before, nullptr);
+    EXPECT_NE(sym_between, nullptr);
+    EXPECT_NE(sym_after, nullptr);
+
+    EXPECT_EQ(sym_before->address, 0x0100);
+    EXPECT_EQ(sym_between->address, 0x0101);
+    EXPECT_EQ(sym_after->address, 0x0300);
+}
+
+TEST(AssemblerTest, UnterminatedStringDiagnostics) {
+    bitforge::assembler::Assembler assem;
+
+    // Unterminated with newline
+    auto res1 = assem.assemble(".ASCII \"unterminated\nNOP\n");
+    EXPECT_FALSE(res1.success);
+    bool found_unterm1 = false;
+    for (const auto& d : res1.diagnostics) {
+        if (d.message.find("Unterminated string") != std::string::npos) found_unterm1 = true;
+    }
+    EXPECT_TRUE(found_unterm1);
+
+    // Unterminated at EOF
+    auto res2 = assem.assemble(".ASCII \"unterminated_at_eof");
+    EXPECT_FALSE(res2.success);
+    bool found_unterm2 = false;
+    for (const auto& d : res2.diagnostics) {
+        if (d.message.find("Unterminated string") != std::string::npos) found_unterm2 = true;
+    }
+    EXPECT_TRUE(found_unterm2);
+}
+
+TEST(AssemblerTest, InvalidEscapeSequenceDiagnostic) {
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(".ASCII \"bad \\k escape\"\n");
+    EXPECT_FALSE(res.success);
+
+    bool found_escape_err = false;
+    for (const auto& d : res.diagnostics) {
+        if (d.message.find("Unknown escape sequence") != std::string::npos) {
+            found_escape_err = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_escape_err);
+}
+
+TEST(AssemblerTest, InvalidAndOverflowingNumericLiterals) {
+    bitforge::assembler::Assembler assem;
+
+    // Decimal overflow
+    auto res1 = assem.assemble("LDI R0, 9999999999999999999999999999999999999999\n");
+    EXPECT_FALSE(res1.success);
+    bool found_ovf1 = false;
+    for (const auto& d : res1.diagnostics) {
+        if (d.message.find("representable integer range") != std::string::npos) found_ovf1 = true;
+    }
+    EXPECT_TRUE(found_ovf1);
+
+    // Malformed hex
+    auto res2 = assem.assemble("LDI R0, 0x\n");
+    EXPECT_FALSE(res2.success);
+
+    // Invalid hex digit
+    auto res3 = assem.assemble("LDI R0, 0x12G4\n");
+    EXPECT_FALSE(res3.success);
+
+    // Malformed binary
+    auto res4 = assem.assemble("LDI R0, 0b\n");
+    EXPECT_FALSE(res4.success);
+
+    // Invalid binary digit
+    auto res5 = assem.assemble("LDI R0, 0b1021\n");
+    EXPECT_FALSE(res5.success);
+
+    // Invalid decimal suffix
+    auto res6 = assem.assemble("LDI R0, 123abc\n");
+    EXPECT_FALSE(res6.success);
+}
+
+TEST(AssemblerTest, MissingOperandsDiagnostics) {
+    bitforge::assembler::Assembler assem;
+
+    // Missing operands for instructions
+    EXPECT_FALSE(assem.assemble("LDI\n").success);
+    EXPECT_FALSE(assem.assemble("LDI R0,\n").success);
+    EXPECT_FALSE(assem.assemble("MOV\n").success);
+    EXPECT_FALSE(assem.assemble("MOV R0,\n").success);
+    EXPECT_FALSE(assem.assemble("INC\n").success);
+    EXPECT_FALSE(assem.assemble("IN\n").success);
+    EXPECT_FALSE(assem.assemble("IN R0,\n").success);
+    EXPECT_FALSE(assem.assemble("OUT\n").success);
+    EXPECT_FALSE(assem.assemble("OUT 0x01,\n").success);
+    EXPECT_FALSE(assem.assemble("JMP\n").success);
+
+    // Missing operands for directives
+    EXPECT_FALSE(assem.assemble(".ORG\n").success);
+    EXPECT_FALSE(assem.assemble(".ENTRY\n").success);
+    EXPECT_FALSE(assem.assemble(".BYTE\n").success);
+    EXPECT_FALSE(assem.assemble(".WORD\n").success);
+    EXPECT_FALSE(assem.assemble(".ASCII\n").success);
+}
+
+TEST(AssemblerTest, UnexpectedTrailingTokensDiagnostic) {
+    bitforge::assembler::Assembler assem;
+
+    auto res1 = assem.assemble("NOP HALT\n");
+    EXPECT_FALSE(res1.success);
+    bool found_trail1 = false;
+    for (const auto& d : res1.diagnostics) {
+        if (d.message.find("Unexpected trailing token") != std::string::npos) found_trail1 = true;
+    }
+    EXPECT_TRUE(found_trail1);
+
+    auto res2 = assem.assemble("LDI R0, 42 extra_word\n");
+    EXPECT_FALSE(res2.success);
+
+    auto res3 = assem.assemble("RET 123\n");
+    EXPECT_FALSE(res3.success);
+}
+
+TEST(AssemblerTest, StandaloneCarriageReturnLineEndings) {
+    const std::string cr_source = ".ORG 0x0200\rLDI R0, 10\rHALT\r";
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(cr_source);
+
+    EXPECT_TRUE(res.success);
+    EXPECT_EQ(res.image.segments().size(), 1);
+    EXPECT_EQ(res.image.segments()[0].start_address, 0x0200);
+    EXPECT_EQ(res.image.segments()[0].data.size(), 4); // LDI(3) + HALT(1)
+}
+
+TEST(AssemblerTest, DiagnosticSourceLocationsPrecision) {
+    const std::string source = "NOP\nINVALID_MNEM\n";
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+
+    EXPECT_FALSE(res.success);
+    EXPECT_FALSE(res.diagnostics.empty());
+    EXPECT_EQ(res.diagnostics[0].location.line, 2);
+    EXPECT_GT(res.diagnostics[0].location.column, 0);
+}
+
+TEST(AssemblerTest, ProgramImageLoadIntoSeparation) {
+    const std::string source = R"(
+        .ENTRY start
+        .ORG 0x0100
+        start:
+            LDI R0, 99
+            HALT
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_TRUE(res.success);
+
+    bitforge::Memory memory;
+    bitforge::SystemBus bus(memory);
+    bitforge::Cpu cpu(bus);
+
+    // Initial CPU state before loading
+    EXPECT_EQ(cpu.state(), bitforge::MachineState::Ready);
+    EXPECT_EQ(cpu.registers().pc, 0x0000);
+    EXPECT_EQ(cpu.registers().sp, 0xFFFF);
+    EXPECT_EQ(cpu.registers().r[0], 0);
+
+    // load_into mutates ONLY memory
+    EXPECT_TRUE(res.image.load_into(memory));
+
+    // Verify memory was updated
+    EXPECT_EQ(memory.read_byte(0x0100), 0x10); // LDI opcode
+
+    // Verify CPU was NOT mutated by load_into
+    EXPECT_EQ(cpu.state(), bitforge::MachineState::Ready);
+    EXPECT_EQ(cpu.registers().pc, 0x0000);
+    EXPECT_EQ(cpu.registers().sp, 0xFFFF);
+    EXPECT_EQ(cpu.registers().r[0], 0);
+
+    // Separate explicit CPU reset
+    cpu.reset(res.image.entry_point());
+    EXPECT_EQ(cpu.registers().pc, 0x0100);
+}

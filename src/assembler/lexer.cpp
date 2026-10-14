@@ -1,6 +1,8 @@
 #include "bitforge/assembler/lexer.hpp"
 
 #include <cctype>
+#include <cerrno>
+#include <climits>
 #include <cstdlib>
 
 namespace bitforge::assembler {
@@ -202,8 +204,29 @@ Token Lexer::scan_number(std::vector<Diagnostic>& diagnostics) {
             });
             return Token{TokenKind::Number, "0", 0, loc};
         }
+        if (!is_at_end() && (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_')) {
+            std::string bad_suffix;
+            while (!is_at_end() && (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_')) {
+                bad_suffix += advance();
+            }
+            diagnostics.push_back(Diagnostic{
+                DiagnosticSeverity::Error,
+                loc,
+                "Invalid character in hexadecimal literal: '0x" + text + bad_suffix + "'"
+            });
+            return Token{TokenKind::Number, "0", 0, loc};
+        }
+        errno = 0;
         char* end = nullptr;
         unsigned long long val = std::strtoull(text.c_str(), &end, 16);
+        if (errno == ERANGE || (text.size() > 16 && val == ULLONG_MAX)) {
+            diagnostics.push_back(Diagnostic{
+                DiagnosticSeverity::Error,
+                loc,
+                "Hexadecimal literal out of representable integer range: '0x" + text + "'"
+            });
+            return Token{TokenKind::Number, "0", 0, loc};
+        }
         std::int64_t final_val = negative ? -static_cast<std::int64_t>(val) : static_cast<std::int64_t>(val);
         return Token{TokenKind::Number, (negative ? "-" : "") + text, final_val, loc};
     }
@@ -222,8 +245,29 @@ Token Lexer::scan_number(std::vector<Diagnostic>& diagnostics) {
             });
             return Token{TokenKind::Number, "0", 0, loc};
         }
+        if (!is_at_end() && (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_')) {
+            std::string bad_suffix;
+            while (!is_at_end() && (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_')) {
+                bad_suffix += advance();
+            }
+            diagnostics.push_back(Diagnostic{
+                DiagnosticSeverity::Error,
+                loc,
+                "Invalid digit in binary literal: '0b" + text + bad_suffix + "'"
+            });
+            return Token{TokenKind::Number, "0", 0, loc};
+        }
+        errno = 0;
         char* end = nullptr;
         unsigned long long val = std::strtoull(text.c_str(), &end, 2);
+        if (errno == ERANGE || (text.size() > 64 && val == ULLONG_MAX)) {
+            diagnostics.push_back(Diagnostic{
+                DiagnosticSeverity::Error,
+                loc,
+                "Binary literal out of representable integer range: '0b" + text + "'"
+            });
+            return Token{TokenKind::Number, "0", 0, loc};
+        }
         std::int64_t final_val = negative ? -static_cast<std::int64_t>(val) : static_cast<std::int64_t>(val);
         return Token{TokenKind::Number, (negative ? "-" : "") + text, final_val, loc};
     }
@@ -232,9 +276,30 @@ Token Lexer::scan_number(std::vector<Diagnostic>& diagnostics) {
     while (!is_at_end() && std::isdigit(static_cast<unsigned char>(peek()))) {
         text += advance();
     }
+    if (!is_at_end() && (std::isalpha(static_cast<unsigned char>(peek())) || peek() == '_')) {
+        std::string bad_suffix;
+        while (!is_at_end() && (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_')) {
+            bad_suffix += advance();
+        }
+        diagnostics.push_back(Diagnostic{
+            DiagnosticSeverity::Error,
+            loc,
+            "Invalid suffix on numeric literal: '" + text + bad_suffix + "'"
+        });
+        return Token{TokenKind::Number, "0", 0, loc};
+    }
 
+    errno = 0;
     char* end = nullptr;
     unsigned long long val = std::strtoull(text.c_str(), &end, 10);
+    if (errno == ERANGE || (text.size() > 19 && val == ULLONG_MAX)) {
+        diagnostics.push_back(Diagnostic{
+            DiagnosticSeverity::Error,
+            loc,
+            std::string("Decimal literal out of representable integer range: '") + (negative ? "-" : "") + text + "'"
+        });
+        return Token{TokenKind::Number, "0", 0, loc};
+    }
     std::int64_t final_val = negative ? -static_cast<std::int64_t>(val) : static_cast<std::int64_t>(val);
     return Token{TokenKind::Number, (negative ? "-" : "") + text, final_val, loc};
 }
