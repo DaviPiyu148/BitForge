@@ -1,0 +1,146 @@
+name: BitForge CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  # -------------------------------------------------------------
+  # Windows MSVC Build & Test (PowerShell shell prevents link.exe collisions)
+  # -------------------------------------------------------------
+  windows-msvc:
+    name: ${{ matrix.name }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Windows (MSVC 2022) [Debug]"
+            build_type: Debug
+          - name: "Windows (MSVC 2022) [Release]"
+            build_type: Release
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Set up Ninja
+        uses: ninja-build/setup-ninja@v1
+
+      - name: Verify MSVC compiler on PATH
+        run: |
+          Get-Command cl.exe | Select-Object -ExpandProperty Source
+          cmake --version
+          ninja --version
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_CXX_COMPILER=cl -DBITFORGE_WARNINGS_AS_ERRORS=ON
+
+      - name: Verify CMake-selected compiler in CMakeCache.txt
+        run: |
+          $line = Get-Content build/CMakeCache.txt | Where-Object { $_ -match "^CMAKE_CXX_COMPILER(:.*)?=(.*)$" }
+          if (-not $line) { throw "CMAKE_CXX_COMPILER entry not found in build/CMakeCache.txt" }
+          $cxxPath = $Matches[2]
+          Write-Host "Configured CMake CXX Compiler: $cxxPath"
+          if ($cxxPath -notmatch "cl(\.exe)?$") { throw "Expected MSVC cl.exe but found: $cxxPath" }
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
+
+  # -------------------------------------------------------------
+  # POSIX Linux & macOS Build & Test (Bash shell)
+  # -------------------------------------------------------------
+  posix-build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux GCC
+          - name: "Linux (GCC) [Debug]"
+            os: ubuntu-latest
+            cxx: g++
+            expected: "g++"
+            build_type: Debug
+
+          # Linux Clang
+          - name: "Linux (Clang) [Debug]"
+            os: ubuntu-latest
+            cxx: clang++
+            expected: "clang++"
+            build_type: Debug
+
+          # macOS Apple Silicon (arm64, macOS 15)
+          - name: "macOS Apple Silicon (Apple Clang) [Debug]"
+            os: macos-15
+            cxx: clang++
+            expected: "clang++"
+            build_type: Debug
+
+          # macOS Intel (x86_64, macOS 15 Intel fallback)
+          - name: "macOS Intel (Apple Clang) [Debug]"
+            os: macos-15-intel
+            cxx: clang++
+            expected: "clang++"
+            build_type: Debug
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Ninja
+        uses: ninja-build/setup-ninja@v1
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ clang
+
+      - name: Verify compiler on PATH
+        run: |
+          which ${{ matrix.cxx }}
+          ${{ matrix.cxx }} --version
+          cmake --version
+          ninja --version
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DBITFORGE_WARNINGS_AS_ERRORS=ON
+
+      - name: Verify CMake-selected compiler in CMakeCache.txt
+        run: |
+          CXX_PATH=$(grep -E "^CMAKE_CXX_COMPILER(:.*)?=" build/CMakeCache.txt | cut -d'=' -f2)
+          echo "Configured CMake CXX Compiler: $CXX_PATH"
+          if [ -z "$CXX_PATH" ]; then
+            echo "Error: CMAKE_CXX_COMPILER not found in build/CMakeCache.txt"
+            exit 1
+          fi
+          if [[ "$CXX_PATH" != *"${{ matrix.expected }}"* ]]; then
+            echo "Error: Expected compiler containing '${{ matrix.expected }}', got '$CXX_PATH'"
+            exit 1
+          fi
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
