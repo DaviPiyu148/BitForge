@@ -88,6 +88,7 @@ private slots:
     void testRunFromEntryVsContinueSemantics();
     void testBreakpointErgonomicsAndGutterF9();
     void testVirtualDevicesTabTitleNoScrollClipping();
+    void testFreshRunMemoryResetAndIoContract();
 };
 
 void GuiTest::initTestCase() {
@@ -1334,6 +1335,17 @@ void GuiTest::testExecutionSpeedModesAndBatching() {
     QCOMPARE(combo->count(), 4);
     QCOMPARE(combo->currentIndex(), 3); // Turbo by default
 
+    // Verify unified speed labels across combo box and Execution menu actions
+    QCOMPARE(combo->itemText(0), QString("Slow (500 ms / step)"));
+    QCOMPARE(combo->itemText(1), QString("Normal (100 ms / step)"));
+    QCOMPARE(combo->itemText(2), QString("Fast (50 ms / 5 steps)"));
+    QCOMPARE(combo->itemText(3), QString("Turbo (Full Speed)"));
+
+    QCOMPARE(window.speedSlowAction()->text().remove('&'), QString("Slow (500 ms / step)"));
+    QCOMPARE(window.speedNormalAction()->text().remove('&'), QString("Normal (100 ms / step)"));
+    QCOMPARE(window.speedFastAction()->text().remove('&'), QString("Fast (50 ms / 5 steps)"));
+    QCOMPARE(window.speedTurboAction()->text().remove('&'), QString("Turbo (Full Speed)"));
+
     QSignalSpy speedSpy(window.controller(), &ExecutionController::speedChanged);
 
     // Change to Slow
@@ -1493,6 +1505,92 @@ void GuiTest::testVirtualDevicesTabTitleNoScrollClipping() {
     // Verify shortcuts dialog action exists and works
     dismissModalMessageBox(QMessageBox::Ok);
     window.showKeyboardShortcuts();
+}
+
+void GuiTest::testFreshRunMemoryResetAndIoContract() {
+    MainWindow window;
+    const QString code =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LD R0, [counter]\n"
+        "    LDI R1, 3\n"
+        "    ADD R0, R1\n"
+        "    ST [counter], R0\n"
+        "    LDI R2, 0x41\n"
+        "    OUT 0x01, R2\n"
+        "    OUT 0x02, R0\n"
+        "    LDI R3, 0x0F\n"
+        "    OUT 0x10, R3\n"
+        "    HALT\n"
+        ".ORG 0x0300\n"
+        "counter:\n"
+        "    .BYTE 5\n";
+
+    window.editor()->setPlainText(code);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+
+    // Initial state after assemble: counter is 5
+    QCOMPARE(window.controller()->memory().read_byte(0x0300), static_cast<byte_t>(5));
+    QCOMPARE(window.controller()->bus().text_output(), std::string(""));
+    QCOMPARE(window.controller()->bus().numeric_output(), std::string(""));
+    QCOMPARE(window.controller()->bus().led_state(), static_cast<byte_t>(0x00));
+
+    // Run 1: Run from Entry (F5)
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+
+    // Verify Run 1 results
+    QCOMPARE(window.controller()->memory().read_byte(0x0300), static_cast<byte_t>(8));
+    QCOMPARE(QString::fromStdString(window.controller()->bus().text_output()), QString("A"));
+    QCOMPARE(QString::fromStdString(window.controller()->bus().numeric_output()), QString("8"));
+    QCOMPARE(window.controller()->bus().led_state(), static_cast<byte_t>(0x0F));
+    const auto steps_run1 = window.controller()->session().total_steps_executed();
+    QVERIFY(steps_run1 > 0);
+    QCOMPARE(window.controller()->session().trace().size(), static_cast<std::size_t>(steps_run1));
+
+    // Continue while halted: must do nothing and preserve state
+    window.onContinue();
+    QCOMPARE(window.controller()->session().state(), MachineState::Halted);
+    QCOMPARE(window.controller()->session().total_steps_executed(), steps_run1);
+    QCOMPARE(QString::fromStdString(window.controller()->bus().text_output()), QString("A"));
+
+    // Run 2: Run from Entry (F5) without manual reset or reassemble
+    // Contract: Fresh execution restores initial program image (counter=5), resets devices, step count, and trace
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+
+    // Verify Run 2 fresh run contract
+    QCOMPARE(window.controller()->memory().read_byte(0x0300), static_cast<byte_t>(8)); // 5 + 3 = 8 (NOT 8 + 3 = 11)
+    QCOMPARE(QString::fromStdString(window.controller()->bus().text_output()), QString("A")); // NOT "AA"
+    QCOMPARE(QString::fromStdString(window.controller()->bus().numeric_output()), QString("8")); // NOT "8 8" or "11"
+    QCOMPARE(window.controller()->bus().led_state(), static_cast<byte_t>(0x0F));
+    QCOMPARE(window.controller()->session().total_steps_executed(), steps_run1); // Exact same step count as single run
+    QCOMPARE(window.controller()->session().trace().size(), static_cast<std::size_t>(steps_run1));
+
+    // Now test Breakpoint + Continue preserving execution state and memory
+    // Place breakpoint on line 8 (LDI R2, 0x41)
+    auto bp_res = window.controller()->toggleBreakpoint(8);
+    QVERIFY(bp_res.success);
+
+    // Run from Entry with breakpoint active
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->lastStopReason(), debugger::StopReason::BreakpointHit, 2000);
+    QVERIFY(!window.controller()->isExecuting());
+
+    // Counter already stored as 8, but OUT instructions have not executed yet
+    QCOMPARE(window.controller()->memory().read_byte(0x0300), static_cast<byte_t>(8));
+    QCOMPARE(QString::fromStdString(window.controller()->bus().text_output()), QString(""));
+    QCOMPARE(QString::fromStdString(window.controller()->bus().numeric_output()), QString(""));
+
+    // Continue (F8) resumes and finishes execution without wiping memory or device state
+    window.onContinue();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+    QCOMPARE(window.controller()->memory().read_byte(0x0300), static_cast<byte_t>(8));
+    QCOMPARE(QString::fromStdString(window.controller()->bus().text_output()), QString("A"));
+    QCOMPARE(QString::fromStdString(window.controller()->bus().numeric_output()), QString("8"));
+    QCOMPARE(window.controller()->bus().led_state(), static_cast<byte_t>(0x0F));
 }
 
 QTEST_MAIN(GuiTest)

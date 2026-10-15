@@ -47,6 +47,10 @@ public:
     [[nodiscard]] QAction* toggleBreakpointAction() const noexcept { return toggle_bp_act_; }
     [[nodiscard]] QAction* clearBreakpointsAction() const noexcept { return clear_bps_act_; }
     [[nodiscard]] QAction* clearTraceAction() const noexcept { return clear_trace_act_; }
+    [[nodiscard]] QAction* speedSlowAction() const noexcept { return speed_slow_act_; }
+    [[nodiscard]] QAction* speedNormalAction() const noexcept { return speed_normal_act_; }
+    [[nodiscard]] QAction* speedFastAction() const noexcept { return speed_fast_act_; }
+    [[nodiscard]] QAction* speedTurboAction() const noexcept { return speed_turbo_act_; }
 
     bool loadFile(const QString& filePath);
     bool loadStartupFile(const QStringList& args);

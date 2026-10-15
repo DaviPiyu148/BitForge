@@ -22,7 +22,7 @@ Implemented capabilities include:
 - **Debugger Engine (`bitforge_debugger`):** Platform-independent, deterministic debugging layer (`DebuggerSession`) supporting single-stepping, bounded execution, address and source-line breakpoints with one-time bypass, read-only side-effect-free memory inspection with 16-bit address wrapping, ADR-001 stack frame inspection, bounded execution tracing with fault capture, and source location resolution.
 - **Qt 6 Desktop GUI Workbench (`bitforge_gui`):** Professional desktop IDE featuring an assembly code editor with line numbers, clickable breakpoint gutter with tooltips, current PC execution indicator, context menu toggling, syntax highlighting, streamlined non-redundant execution toolbar (`Assemble`, `Run from Entry`, `Continue`, `Step`, `Pause`, `Reset`), execution speed throttling (`Slow 2 Hz`, `Normal 10 Hz`, `Fast 100 Hz`, `Turbo Full Speed`), configurable step budget, CPU register/flag panel with diff highlighting and bit-level LED visualization (`BitViewWidget`), side-effect-free 64 KiB memory viewer, ADR-001 stack viewer, virtual devices (Text console, vector 3-digit Seven-Segment display, Port 0x00 input FIFO status, 8-bit LEDs), 4-column Breakpoints table with double-click line navigation, instruction inspector decoding upcoming instruction and last executed step, bounded chronological trace, and clickable diagnostics.
 - **Comprehensive Assembly Example Library (`examples/`):** 51 fully tested and verified assembly programs organized across 10 functional categories (Fundamentals, Arithmetic & Logic, Control Flow, Memory & Pointers, Stack & Subroutines, Virtual I/O Devices, Algorithms & ADS Benchmarks, Comprehensive Demonstrations, Edge Cases & Boundary Conditions, and Architectural Fault Demonstrations), achieving 100% ISA mnemonic coverage (all 31 canonical instructions) and validating all architectural invariants.
-- **Automated Test Suites:** 220 unit and regression tests (`BitForgeTests`) across 11 test suites plus 40 automated GUI integration test methods in `BitForgeGuiTests`, delivering 260 passing tests in the GUI preset covering core CPU/ALU execution, stack/memory invariants, 31-mnemonic ISA coverage, debugger sessions, file lifecycle, startup argument loading, seven-segment display vector rendering, bit visualization, instruction inspector, execution speed throttling, and all 51 assembly example programs.
+- **Automated Test Suites:** 220 unit and regression tests (`BitForgeTests`) across 11 test suites plus 41 automated GUI integration test methods in `BitForgeGuiTests`, delivering 261 passing tests in the GUI preset covering core CPU/ALU execution, stack/memory invariants, 31-mnemonic ISA coverage, debugger sessions, file lifecycle, startup argument loading, seven-segment display vector rendering, bit visualization, instruction inspector, execution speed throttling, fresh-run memory and I/O reset contracts, and all 51 assembly example programs.
 
 ---
 
@@ -147,9 +147,9 @@ The BitForge desktop application (expanded in Phase 8) integrates the full devel
   - `Pause`: Pauses active running execution cleanly.
   - `Reset` (F6): Resets the virtual CPU, registers, stack, and I/O devices to their initial state.
 - **Configurable Execution Speed:** Dynamic execution speed selector offering:
-  - `Slow (2 Hz)`: 500 ms per step (educational clock visualization).
-  - `Normal (10 Hz)`: 100 ms per step (step-by-step observation).
-  - `Fast (100 Hz)`: 50 ms per 5 steps (rapid simulation).
+  - `Slow (500 ms / step)`: 500 ms delay per step (educational clock visualization).
+  - `Normal (100 ms / step)`: 100 ms delay per step (step-by-step observation).
+  - `Fast (50 ms / 5 steps)`: 50 ms delay per 5-step batch (rapid simulation).
   - `Turbo (Full Speed)`: 0 ms delay, up to 10,000 steps per batch (maximum throughput up to the configured global budget).
 - **Bit-Level Register Visualization (`BitViewWidget`):** Dedicated `Bit Visualization` tab presenting:
   - 16-bit register bit displays (`PC`, `SP`, `IX`) with color-coded high and low bytes.

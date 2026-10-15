@@ -291,9 +291,9 @@ void MainWindow::setupMenusAndToolbars() {
     toolbar->addWidget(speed_label);
 
     speed_combo_ = new QComboBox(toolbar);
-    speed_combo_->addItem("Slow (500 ms)");
-    speed_combo_->addItem("Normal (100 ms)");
-    speed_combo_->addItem("Fast (50 ms)");
+    speed_combo_->addItem("Slow (500 ms / step)");
+    speed_combo_->addItem("Normal (100 ms / step)");
+    speed_combo_->addItem("Fast (50 ms / 5 steps)");
     speed_combo_->addItem("Turbo (Full Speed)");
     speed_combo_->setCurrentIndex(3); // Default Turbo
     toolbar->addWidget(speed_combo_);
