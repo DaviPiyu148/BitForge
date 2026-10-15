@@ -647,3 +647,454 @@ TEST(Debugger, ZeroBudgetRun) {
     EXPECT_EQ(res.steps_executed, 0);
     EXPECT_EQ(ctx.session->state(), MachineState::Ready);
 }
+
+// =================================================================
+// Phase 5.1 Debugger Edge-Case Audit Tests
+// =================================================================
+
+// 1. Budget boundary: run(0) preserves machine state from Ready, Running, and Halted
+TEST(Debugger, Audit_RunZeroBudgetDoesNotMutateState) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 42\n"
+        "    HALT\n"
+    );
+
+    // Initial state: Ready
+    EXPECT_EQ(ctx.session->state(), MachineState::Ready);
+    EXPECT_EQ(ctx.session->pc(), 0x0200);
+    EXPECT_EQ(ctx.session->r(0), 0);
+
+    auto res0 = ctx.session->run(0);
+    EXPECT_EQ(res0.stop_reason, StopReason::BudgetExhausted);
+    EXPECT_EQ(res0.steps_executed, 0);
+    EXPECT_EQ(ctx.session->state(), MachineState::Ready);
+    EXPECT_EQ(ctx.session->pc(), 0x0200);
+    EXPECT_EQ(ctx.session->r(0), 0);
+    EXPECT_EQ(ctx.session->total_steps_executed(), 0);
+
+    // Step once: state becomes Running
+    auto res_step = ctx.session->step();
+    EXPECT_EQ(res_step.stop_reason, StopReason::StepCompleted);
+    EXPECT_EQ(ctx.session->state(), MachineState::Running);
+    EXPECT_EQ(ctx.session->r(0), 42);
+
+    // run(0) from Running
+    auto res_run0 = ctx.session->run(0);
+    EXPECT_EQ(res_run0.stop_reason, StopReason::BudgetExhausted);
+    EXPECT_EQ(res_run0.steps_executed, 0);
+    EXPECT_EQ(ctx.session->state(), MachineState::Running);
+    EXPECT_EQ(ctx.session->r(0), 42);
+
+    // Run to HALT
+    auto res_halt = ctx.session->run();
+    EXPECT_EQ(res_halt.stop_reason, StopReason::Halted);
+    EXPECT_EQ(ctx.session->state(), MachineState::Halted);
+
+    // run(0) from Halted returns AlreadyHalted without mutating state
+    auto res_halt0 = ctx.session->run(0);
+    EXPECT_EQ(res_halt0.stop_reason, StopReason::AlreadyHalted);
+    EXPECT_EQ(res_halt0.steps_executed, 0);
+    EXPECT_EQ(ctx.session->state(), MachineState::Halted);
+}
+
+// 2. Budget boundary: HALT on final permitted step vs non-halting on final permitted step
+TEST(Debugger, Audit_HaltOnFinalPermittedStepVersusNonHalting) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 1\n"  // Step 1: 0x0200..0x0202
+        "    LDI R1, 2\n"  // Step 2: 0x0203..0x0205
+        "    HALT\n"       // Step 3: 0x0206
+    );
+
+    // Non-halting instruction consumes final permitted step -> BudgetExhausted, state is Running
+    auto res2 = ctx.session->run(2);
+    EXPECT_EQ(res2.stop_reason, StopReason::BudgetExhausted);
+    EXPECT_EQ(res2.steps_executed, 2);
+    EXPECT_EQ(ctx.session->state(), MachineState::Running);
+    EXPECT_EQ(ctx.session->pc(), 0x0206); // Points to HALT
+
+    // Resuming with run(1) executes HALT as final step -> Halted, not BudgetExhausted
+    auto res_halt = ctx.session->run(1);
+    EXPECT_EQ(res_halt.stop_reason, StopReason::Halted);
+    EXPECT_EQ(res_halt.steps_executed, 1);
+    EXPECT_EQ(ctx.session->state(), MachineState::Halted);
+    EXPECT_EQ(ctx.session->pc(), 0x0207);
+}
+
+// 3. Breakpoint bypass & control flow: self-loop hits breakpoint on subsequent encounter
+TEST(Debugger, Audit_BreakpointSelfLoopStopsOnNextEncounter) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY loop\n"
+        "loop:\n"
+        "    JMP loop\n"
+    );
+
+    auto bp = ctx.session->add_breakpoint(0x0200);
+    EXPECT_TRUE(bp.success);
+
+    // First run hits breakpoint at 0x0200 before executing
+    auto r1 = ctx.session->run(10);
+    EXPECT_EQ(r1.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(r1.steps_executed, 0);
+    EXPECT_EQ(ctx.session->pc(), 0x0200);
+    EXPECT_EQ(ctx.session->total_steps_executed(), 0);
+
+    // Continue execution: bypasses 0x0200 once, executes JMP loop (1 step),
+    // then encounters 0x0200 again and stops!
+    auto r2 = ctx.session->continue_execution(10);
+    EXPECT_EQ(r2.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(r2.steps_executed, 1);
+    EXPECT_EQ(ctx.session->pc(), 0x0200);
+    EXPECT_EQ(ctx.session->total_steps_executed(), 1);
+
+    // Continue again: executes another iteration and hits breakpoint again
+    auto r3 = ctx.session->continue_execution(10);
+    EXPECT_EQ(r3.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(r3.steps_executed, 1);
+    EXPECT_EQ(ctx.session->pc(), 0x0200);
+    EXPECT_EQ(ctx.session->total_steps_executed(), 2);
+}
+
+// 4. Breakpoint bypass & control flow: conditional branch loop stops on every iteration
+TEST(Debugger, Audit_BreakpointConditionalBranchLoop) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 3\n"     // 0x0200..0x0202
+        "loop:\n"
+        "    DEC R0\n"         // 0x0203..0x0204
+        "    JNZ loop\n"       // 0x0205..0x0207
+        "    HALT\n"           // 0x0208
+    );
+
+    // Place breakpoint at loop: DEC R0 (0x0203)
+    ctx.session->add_breakpoint(0x0203);
+
+    // Run: hits breakpoint before executing loop iteration 1
+    auto r1 = ctx.session->run();
+    EXPECT_EQ(r1.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(r1.steps_executed, 1); // executed LDI R0, 3
+    EXPECT_EQ(ctx.session->pc(), 0x0203);
+    EXPECT_EQ(ctx.session->r(0), 3); // DEC R0 has not executed yet
+
+    // Continue: executes DEC R0 (R0=2), JNZ jumps back to 0x0203, hits breakpoint again!
+    auto r2 = ctx.session->continue_execution();
+    EXPECT_EQ(r2.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(r2.steps_executed, 2); // DEC R0 + JNZ
+    EXPECT_EQ(ctx.session->pc(), 0x0203);
+    EXPECT_EQ(ctx.session->r(0), 2);
+
+    // Continue: executes DEC R0 (R0=1), JNZ jumps back to 0x0203, hits breakpoint again!
+    auto r3 = ctx.session->continue_execution();
+    EXPECT_EQ(r3.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(r3.steps_executed, 2); // DEC R0 + JNZ
+    EXPECT_EQ(ctx.session->pc(), 0x0203);
+    EXPECT_EQ(ctx.session->r(0), 1);
+
+    // Continue: executes DEC R0 (R0=0, Z flag set), JNZ falls through, reaches HALT!
+    auto r4 = ctx.session->continue_execution();
+    EXPECT_EQ(r4.stop_reason, StopReason::Halted);
+    EXPECT_EQ(r4.steps_executed, 3); // DEC R0 + JNZ + HALT
+    EXPECT_EQ(ctx.session->pc(), 0x0209);
+    EXPECT_EQ(ctx.session->r(0), 0);
+    EXPECT_EQ(ctx.session->state(), MachineState::Halted);
+}
+
+// 5. Breakpoint removal at current PC allows continue to proceed without stopping
+TEST(Debugger, Audit_BreakpointRemovalClearsHitState) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 10\n"  // 0x0200
+        "    LDI R1, 20\n"  // 0x0203
+        "    HALT\n"        // 0x0206
+    );
+
+    ctx.session->add_breakpoint(0x0203);
+    auto r1 = ctx.session->run();
+    EXPECT_EQ(r1.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(ctx.session->pc(), 0x0203);
+
+    // Remove breakpoint while stopped at it
+    auto rm = ctx.session->remove_breakpoint(0x0203);
+    EXPECT_TRUE(rm.success);
+    EXPECT_FALSE(ctx.session->has_breakpoint(0x0203));
+
+    // Run / continue to completion
+    auto r2 = ctx.session->run();
+    EXPECT_EQ(r2.stop_reason, StopReason::Halted);
+    EXPECT_EQ(r2.steps_executed, 2);
+    EXPECT_EQ(ctx.session->state(), MachineState::Halted);
+}
+
+// 6. Source line resolution: label and instruction on the same line
+TEST(Debugger, Audit_SourceLineWithLabelAndInstructionOnSameLine) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"                     // Line 1
+        ".ENTRY start\n"                    // Line 2
+        "start: LDI R0, 77\n"               // Line 3: label + instruction on same line!
+        "next:  HALT\n"                     // Line 4: label + HALT on same line!
+    );
+
+    auto bp3 = ctx.session->add_line_breakpoint(3);
+    EXPECT_TRUE(bp3.success);
+    EXPECT_EQ(bp3.address, 0x0200);
+
+    auto bp4 = ctx.session->add_line_breakpoint(4);
+    EXPECT_TRUE(bp4.success);
+    EXPECT_EQ(bp4.address, 0x0203);
+
+    // Resolving address back to source location
+    auto loc0 = ctx.session->resolve_source_location(0x0200);
+    ASSERT_TRUE(loc0.has_value());
+    EXPECT_EQ(loc0->line, 3);
+
+    auto loc1 = ctx.session->resolve_source_location(0x0203);
+    ASSERT_TRUE(loc1.has_value());
+    EXPECT_EQ(loc1->line, 4);
+
+    // Unmapped address returns nullopt
+    auto loc_none = ctx.session->resolve_source_location(0x5000);
+    EXPECT_FALSE(loc_none.has_value());
+}
+
+// 7. Source mappings across non-contiguous out-of-order segments
+TEST(Debugger, Audit_SourceLineResolutionNonContiguousOutOfOrderSegments) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0800\n"         // Line 1 (Higher address first)
+        ".ENTRY start\n"        // Line 2
+        "start:\n"              // Line 3
+        "    JMP lower\n"       // Line 4 (0x0800)
+        "\n"                    // Line 5
+        ".ORG 0x0300\n"         // Line 6 (Lower address second)
+        "lower:\n"              // Line 7
+        "    LDI R0, 99\n"      // Line 8 (0x0300)
+        "    HALT\n"            // Line 9 (0x0303)
+    );
+
+    // Breakpoint in second segment (lower address)
+    auto bp_low = ctx.session->add_line_breakpoint(8);
+    EXPECT_TRUE(bp_low.success);
+    EXPECT_EQ(bp_low.address, 0x0300);
+
+    // Breakpoint in first segment (higher address)
+    auto bp_high = ctx.session->add_line_breakpoint(4);
+    EXPECT_TRUE(bp_high.success);
+    EXPECT_EQ(bp_high.address, 0x0800);
+
+    // Check source line resolution
+    auto loc_high = ctx.session->resolve_source_location(0x0800);
+    ASSERT_TRUE(loc_high.has_value());
+    EXPECT_EQ(loc_high->line, 4);
+
+    auto loc_low = ctx.session->resolve_source_location(0x0300);
+    ASSERT_TRUE(loc_low.has_value());
+    EXPECT_EQ(loc_low->line, 8);
+
+    // Run to high breakpoint
+    auto r1 = ctx.session->run();
+    EXPECT_EQ(r1.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(r1.pc, 0x0800);
+
+    // Continue to low breakpoint
+    auto r2 = ctx.session->continue_execution();
+    EXPECT_EQ(r2.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(r2.pc, 0x0300);
+
+    // Continue to HALT
+    auto r3 = ctx.session->continue_execution();
+    EXPECT_EQ(r3.stop_reason, StopReason::Halted);
+    EXPECT_EQ(ctx.session->pc(), 0x0304);
+}
+
+// 8. Trace boundaries: capacity 0, capacity 1, draining, and chronological order
+TEST(Debugger, Audit_TraceCapacityBoundariesAndDraining) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 1\n"  // 1
+        "    LDI R1, 2\n"  // 2
+        "    LDI R2, 3\n"  // 3
+        "    HALT\n"       // 4
+    );
+
+    // Case A: Capacity 0 records 0 entries
+    ctx.session->set_trace_capacity(0);
+    EXPECT_EQ(ctx.session->trace_capacity(), 0);
+    ctx.session->run();
+    EXPECT_TRUE(ctx.session->trace().empty());
+
+    // Reset and test draining existing trace
+    ctx.session->reset(0x0200);
+    ctx.session->set_trace_capacity(10);
+    ctx.session->step(); // Step 1
+    ctx.session->step(); // Step 2
+    EXPECT_EQ(ctx.session->trace().size(), 2);
+    // Drain by setting capacity to 0
+    ctx.session->set_trace_capacity(0);
+    EXPECT_TRUE(ctx.session->trace().empty());
+
+    // Case B: Capacity 1 retains exactly the single most recent instruction
+    ctx.session->reset(0x0200);
+    ctx.session->set_trace_capacity(1);
+    ctx.session->run(); // Runs all 4 instructions to HALT
+    EXPECT_EQ(ctx.session->state(), MachineState::Halted);
+    const auto& trace1 = ctx.session->trace();
+    ASSERT_EQ(trace1.size(), 1);
+    EXPECT_EQ(trace1[0].step_number, 4);
+    EXPECT_EQ(trace1[0].mnemonic, "HALT");
+    EXPECT_EQ(trace1[0].state_after, MachineState::Halted);
+
+    // Case C: Capacity larger than total instructions retains all without truncation
+    ctx.session->reset(0x0200);
+    ctx.session->set_trace_capacity(10);
+    ctx.session->run();
+    const auto& trace_all = ctx.session->trace();
+    ASSERT_EQ(trace_all.size(), 4);
+    for (std::size_t i = 0; i < 4; ++i) {
+        EXPECT_EQ(trace_all[i].step_number, i + 1);
+    }
+    EXPECT_EQ(trace_all[0].mnemonic, "LDI");
+    EXPECT_EQ(trace_all[1].mnemonic, "LDI");
+    EXPECT_EQ(trace_all[2].mnemonic, "LDI");
+    EXPECT_EQ(trace_all[3].mnemonic, "HALT");
+}
+
+// 9. Trace fault atomicity and source mapping
+TEST(Debugger, Audit_TraceFaultAtomicityAndSourceMapping) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"         // Line 1
+        ".ENTRY start\n"        // Line 2
+        "start:\n"              // Line 3
+        "    LDI R0, 10\n"      // Line 4
+        "    .BYTE 0xFF\n"      // Line 5: Invalid opcode at 0x0203
+    );
+
+    ctx.session->set_trace_capacity(5);
+    auto res = ctx.session->run();
+    EXPECT_EQ(res.stop_reason, StopReason::Faulted);
+    EXPECT_EQ(res.pc, 0x0203);
+    EXPECT_EQ(ctx.session->state(), MachineState::Faulted);
+    EXPECT_EQ(ctx.session->pc(), 0x0203); // Fault atomicity: PC unadvanced
+
+    const auto& trace = ctx.session->trace();
+    ASSERT_EQ(trace.size(), 2);
+    // Step 1: LDI
+    EXPECT_EQ(trace[0].instruction_address, 0x0200);
+    EXPECT_FALSE(trace[0].faulted);
+    ASSERT_TRUE(trace[0].source_location.has_value());
+    EXPECT_EQ(trace[0].source_location->line, 4);
+
+    // Step 2: Faulting instruction
+    EXPECT_EQ(trace[1].instruction_address, 0x0203);
+    EXPECT_TRUE(trace[1].faulted);
+    EXPECT_EQ(trace[1].state_after, MachineState::Faulted);
+    ASSERT_TRUE(trace[1].fault.has_value());
+    EXPECT_EQ(trace[1].fault->type, FaultType::InvalidOpcode);
+    EXPECT_EQ(trace[1].fault->instruction_address, 0x0203);
+}
+
+// 10. Stack inspection boundaries: empty (0xFFFF), top-of-stack (0xFFFE), maximum capacity (0xF000)
+TEST(Debugger, Audit_StackInspectionBoundaries) {
+    DebuggerTestContext ctx;
+    // Construct program that pushes 4095 times to fill the stack down to 0xF000
+    // 15 * 256 = 3840 pushes, followed by 255 pushes = 4095 pushes total
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R2, 0x55\n"
+        "    ; Outer loop: 15 outer * 256 inner = 3840 pushes\n"
+        "    LDI R0, 15\n"
+        "outer:\n"
+        "    LDI R1, 0\n"
+        "inner:\n"
+        "    PUSH R2\n"
+        "    DEC R1\n"
+        "    JNZ inner\n"
+        "    DEC R0\n"
+        "    JNZ outer\n"
+        "    ; Final 255 pushes: 3840 + 255 = 4095 pushes\n"
+        "    LDI R1, 255\n"
+        "final_pushes:\n"
+        "    PUSH R2\n"
+        "    DEC R1\n"
+        "    JNZ final_pushes\n"
+        "    HALT\n"
+    );
+
+    // Initial state: SP = 0xFFFF (Empty stack sentinel)
+    EXPECT_EQ(ctx.session->sp(), 0xFFFF);
+    auto stack_empty = ctx.session->inspect_stack();
+    EXPECT_TRUE(stack_empty.is_empty);
+    EXPECT_EQ(stack_empty.depth, 0);
+    EXPECT_EQ(stack_empty.sp, 0xFFFF);
+    EXPECT_FALSE(stack_empty.overflow_or_corrupt);
+    EXPECT_TRUE(stack_empty.entries.empty());
+
+    // Run to HALT: completes 4095 pushes
+    auto run_res = ctx.session->run(100000);
+    EXPECT_EQ(run_res.stop_reason, StopReason::Halted);
+    EXPECT_EQ(ctx.session->sp(), 0xF000);
+
+    // Full stack inspection at 0xF000
+    auto stack_full = ctx.session->inspect_stack();
+    EXPECT_FALSE(stack_full.is_empty);
+    EXPECT_EQ(stack_full.depth, 4095);
+    EXPECT_EQ(stack_full.sp, 0xF000);
+    EXPECT_FALSE(stack_full.overflow_or_corrupt);
+    ASSERT_EQ(stack_full.entries.size(), 4095);
+    EXPECT_EQ(stack_full.entries[0].address, 0xF000); // Top-of-stack
+    EXPECT_EQ(stack_full.entries[0].value, 0x55);
+    EXPECT_EQ(stack_full.entries[4094].address, 0xFFFE); // Bottom-of-stack
+    EXPECT_EQ(stack_full.entries[4094].value, 0x55);
+}
+
+// 11. Read-only memory inspection at 64 KiB boundary wraps safely
+TEST(Debugger, Audit_MemoryInspectionModulo65536Wrapping) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    HALT\n"
+    );
+
+    ctx.memory.write_byte(0xFFFF, 0x11);
+    ctx.memory.write_byte(0x0000, 0x22);
+    ctx.memory.write_byte(0x0001, 0x33);
+    ctx.memory.write_byte(0x0002, 0x44);
+
+    // Read 4 bytes starting at 0xFFFF -> wraps to 0x0000, 0x0001, 0x0002
+    auto range = ctx.session->read_memory_range(0xFFFF, 4);
+    EXPECT_TRUE(range.success);
+    ASSERT_EQ(range.data.size(), 4);
+    EXPECT_EQ(range.data[0], 0x11);
+    EXPECT_EQ(range.data[1], 0x22);
+    EXPECT_EQ(range.data[2], 0x33);
+    EXPECT_EQ(range.data[3], 0x44);
+
+    // Length 0 request succeeds cleanly
+    auto range0 = ctx.session->read_memory_range(0x0200, 0);
+    EXPECT_TRUE(range0.success);
+    EXPECT_TRUE(range0.data.empty());
+}
+

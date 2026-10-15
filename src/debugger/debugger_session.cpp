@@ -39,6 +39,8 @@ void DebuggerSession::reset(std::optional<word_t> entry_point) {
     cpu_.reset(ep);
     last_breakpoint_hit_.reset();
     last_stop_reason_ = StopReason::None;
+    clear_trace();
+    total_steps_executed_ = 0;
 }
 
 // -----------------------------------------------------------------
