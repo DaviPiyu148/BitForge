@@ -12,7 +12,7 @@
 ;   R1:    0x01
 ;   R2:    0x7F (negative underflow result)
 ;   R3:    0x01
-;   Flags: [Z=0, C=0, N=0, V=1] (V=1 signed overflow from final subtraction)
+;   Flags: [Z=0, C=1, N=0, V=1] (V=1 signed overflow from final subtraction)
 ; ==============================================================================
 
 .ORG 0x0200
@@ -24,7 +24,7 @@ main:
     LDI R1, 0x01
     ADD R0, R1
 
-    ; Part B: -128 - 1 = +127 (Negative underflow: V=1, N=0, C=0)
+    ; Part B: -128 - 1 = +127 (Negative underflow: V=1, N=0, C=1)
     LDI R2, 0x80
     LDI R3, 0x01
     SUB R2, R3

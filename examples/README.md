@@ -85,11 +85,13 @@ Every single instruction in the BitForge ISA is executed by at least one runnabl
 ### Option 2: Command-Line Runner (CLI)
 From PowerShell (with MSYS2 UCRT64 in PATH):
 ```powershell
-# Assemble and run with register dump
-.\build\gui\bitforge.exe run examples/arithmetic/01_addition_subtraction.asm --dump-regs
+# Assemble and run with register dump (debug preset or gui preset)
+.\build\debug\bitforge.exe run examples/arithmetic/01_addition_subtraction.asm --dump-regs
+# or if built via the gui preset:
+# .\build\gui\bitforge.exe run examples/arithmetic/01_addition_subtraction.asm --dump-regs
 
 # Run an algorithm example
-.\build\gui\bitforge.exe run examples/algorithms/01_multiplication_repeated_addition.asm --dump-regs
+.\build\debug\bitforge.exe run examples/algorithms/01_multiplication_repeated_addition.asm --dump-regs
 ```
 
 ---
@@ -107,12 +109,12 @@ From PowerShell (with MSYS2 UCRT64 in PATH):
 
 | File | Description | Termination | Expected Registers | Expected Flags |
 | :--- | :--- | :---: | :--- | :---: |
-| `01_addition_subtraction.asm` | (50 + 25) - 15 = 60. | Halted | `R0=0x3C (60), R1=0x19, R2=0x0F` | `Z=0 C=0 N=0 V=0` |
+| `01_addition_subtraction.asm` | (50 + 25) - 15 = 60. | Halted | `R0=0x3C (60), R1=0x19, R2=0x0F` | `Z=0 C=1 N=0 V=0` |
 | `02_increment_decrement.asm` | INC past 0xFF (wraps to 0), DEC past 0x00. Preserves C flag. | Halted | `R0=0x00, R1=0xFF` | `Z=0 C=0 N=1 V=0` |
 | `03_bitwise_logic.asm` | Bitwise AND, OR, XOR, NOT operations. | Halted | `R0=0x5A, R1=0x0F, R2=0x50, R3=0xFF` | `Z=0 C=0 N=0 V=0` |
-| `04_comparison_flags.asm` | CMP 10, 20 updates flags without altering registers. | Halted | `R0=10, R1=20` | `Z=0 C=1 N=1 V=0` |
-| `05_carry_borrow_boundaries.asm` | Unsigned carry generation (0xFF + 1) and borrow (4 - 6). | Halted | `R0=0x00, R1=0x01, R2=0xFE, R3=0x06` | `Z=0 C=1 N=1 V=0` |
-| `06_signed_overflow_boundaries.asm` | Signed overflow (+127 + 1 = -128) and underflow (-128 - 1 = +127). | Halted | `R0=0x80, R1=0x01, R2=0x7F, R3=0x01` | `Z=0 C=0 N=0 V=1` |
+| `04_comparison_flags.asm` | CMP 10, 20 updates flags without altering registers. | Halted | `R0=10, R1=20` | `Z=0 C=0 N=1 V=0` |
+| `05_carry_borrow_boundaries.asm` | Unsigned carry generation (0xFF + 1) and borrow (4 - 6). | Halted | `R0=0x00, R1=0x01, R2=0xFE, R3=0x06` | `Z=0 C=0 N=1 V=0` |
+| `06_signed_overflow_boundaries.asm` | Signed overflow (+127 + 1 = -128) and underflow (-128 - 1 = +127). | Halted | `R0=0x80, R1=0x01, R2=0x7F, R3=0x01` | `Z=0 C=1 N=0 V=1` |
 
 ### 3. Control Flow (`examples/control_flow/`)
 

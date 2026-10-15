@@ -6,7 +6,7 @@ BitForge is an educational software model of a fictional 8-bit microprocessor an
 
 ---
 
-## Current Status: Phase 6 Complete (Qt 6 Desktop GUI Workbench)
+## Current Status: Phase 7 Complete (Comprehensive Assembly Example Library & Desktop Workbench)
 
 BitForge is developed incrementally in strict adherence to [BitForge Architecture Specification v1.7](BitForge_Architecture_Specification_v1.7.md).
 
@@ -21,7 +21,8 @@ Implemented capabilities include:
 - **Headless CLI Executable (`bitforge`):** Command-line assembler and execution runner supporting `help`, `assemble`, and `run` subcommands with execution step budgeting, register dumping, virtual I/O presentation, and stable numeric exit codes.
 - **Debugger Engine (`bitforge_debugger`):** Platform-independent, deterministic debugging layer (`DebuggerSession`) supporting single-stepping, bounded execution, address and source-line breakpoints with one-time bypass, read-only side-effect-free memory inspection with 16-bit address wrapping, ADR-001 stack frame inspection, bounded execution tracing with fault capture, and source location resolution.
 - **Qt 6 Desktop GUI Workbench (`bitforge_gui`):** Professional desktop IDE featuring an assembly code editor with line numbers, clickable breakpoint gutter, current PC execution indicator, syntax highlighting, execution toolbar (`Assemble`, `Run`, `Continue`, `Step`, `Pause`, `Reset`), configurable step budget, CPU register/flag panel with diff highlighting, side-effect-free 64 KiB memory viewer, ADR-001 stack viewer, virtual devices (Text console, Numeric console, 8-bit LEDs), breakpoint table, bounded chronological trace, and clickable diagnostics.
-- **Automated Test Suites:** 169 unit and regression tests plus 11 automated headless GUI integration tests (`BitForgeGuiTests`) covering assembly, execution, virtual I/O, single-stepping, breakpoints, stale-program detection, and diagnostic navigation.
+- **Comprehensive Assembly Example Library (`examples/`):** 51 fully tested and verified assembly programs organized across 10 functional categories (Fundamentals, Arithmetic & Logic, Control Flow, Memory & Pointers, Stack & Subroutines, Virtual I/O Devices, Algorithms & ADS Benchmarks, Comprehensive Demonstrations, Edge Cases & Boundary Conditions, and Architectural Fault Demonstrations), achieving 100% ISA mnemonic coverage (all 31 canonical instructions) and validating all architectural invariants.
+- **Automated Test Suites:** 220 unit and regression tests (`BitForgeTests`) across 11 test suites plus 29 automated headless GUI integration test methods (31 QTest execution slots in `BitForgeGuiTests`), delivering 251 passing tests in the GUI preset covering core CPU/ALU execution, stack/memory invariants, 31-mnemonic ISA coverage, debugger sessions, file lifecycle, and all 51 assembly example programs.
 
 ---
 
@@ -72,6 +73,8 @@ bitforge run <source.asm> [--max-steps N] [--dump-regs]
 | `4` | Budget Exceeded | Execution exceeded the step limit before reaching `HALT` or faulting. |
 
 ### Examples
+
+*(Note: When invoking directly from the build directory, use `.\build\debug\bitforge.exe` on Windows or `./build/debug/bitforge` on Linux/macOS, or `./build/gui/bitforge` if built using the GUI preset.)*
 
 #### Assembling a Program
 ```bash
@@ -146,6 +149,17 @@ Phase 6 provides a native, responsive Qt 6 desktop application integrating the f
 
 ### Configuring and Launching the GUI
 
+#### Windows One-Click Launcher (`launch_bitforge.bat`)
+For Windows developers using the MSYS2 UCRT64 toolchain:
+- **Launch GUI:** Double-click `launch_bitforge.bat` in the repository root, or execute `.\launch_bitforge.bat` from PowerShell / Command Prompt.
+- **Drag-and-Drop / Open on Launch:** Drag and drop any `.asm` file onto `launch_bitforge.bat` to launch the GUI and open the file immediately, or pass it via CLI:
+  ```cmd
+  launch_bitforge.bat examples\arithmetic\01_addition_subtraction.asm
+  ```
+- **Automatic PATH Setup & Auto-Build:** The launcher automatically prepends `C:\msys64\ucrt64\bin;C:\msys64\usr\bin` to `PATH` so required Qt 6 and MinGW runtime DLLs are located. If `build\gui\bitforge_gui.exe` has not been built yet, the script automatically configures and compiles it via `cmake --preset gui` before launching.
+- *Runtime Requirement:* Requires an installed MSYS2 UCRT64 environment with Qt 6 (`pacman -S mingw-w64-ucrt-x86_64-qt6-base`). The script is a developer launcher, not a standalone redistributable installer.
+
+#### Cross-Platform CMake Presets
 ```bash
 # Configure with GUI enabled preset
 cmake --preset gui
@@ -156,7 +170,11 @@ cmake --build --preset gui
 # Run tests headlessly
 ctest --preset gui --output-on-failure
 
-# Launch the desktop workbench
+# Launch the desktop workbench directly:
+# Windows (PowerShell/CMD with Qt 6 in PATH):
+.\build\gui\bitforge_gui.exe [optional_source.asm]
+
+# Linux / macOS:
 ./build/gui/bitforge_gui [optional_source.asm]
 ```
 

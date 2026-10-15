@@ -159,13 +159,16 @@ In addition to running tests through `ctest`, the standalone test binary can be 
 
 ## 5. Running the BitForge CLI Executable
 
-The build generates the `bitforge` command-line executable (or `bitforge.exe` on Windows):
+The build generates the `bitforge` command-line executable (or `bitforge.exe` on Windows).
+
+*(Note: When built under the default `debug` preset, the binary is located in `build/debug/`; if built under the `gui` preset, it is located in `build/gui/`.)*
 
 ```bash
-# Windows
+# Windows (debug preset)
 .\build\debug\bitforge.exe --help
 .\build\debug\bitforge.exe assemble examples\01_arithmetic.asm
 .\build\debug\bitforge.exe run examples\01_arithmetic.asm --dump-regs
+# (or use .\build\gui\bitforge.exe if built with the gui preset)
 
 # Linux / macOS
 ./build/debug/bitforge --help
@@ -209,13 +212,27 @@ ctest --preset gui --output-on-failure
 ```
 
 ### 6.3 Launching the Desktop GUI
+
+#### Windows One-Click Launcher (`launch_bitforge.bat`)
+For Windows developers using the MSYS2 UCRT64 toolchain, `launch_bitforge.bat` in the repository root simplifies execution:
+- **Double-click:** Launch directly from Windows Explorer.
+- **Drag-and-Drop:** Drag and drop any `.asm` file onto `launch_bitforge.bat` to launch the GUI and open the file immediately.
+- **Command Line:**
+  ```cmd
+  launch_bitforge.bat [optional_source.asm]
+  ```
+- **Automatic PATH Configuration:** Automatically prepends `C:\msys64\ucrt64\bin;C:\msys64\usr\bin` to `PATH`, ensuring Qt 6 dynamic link libraries and the MinGW C++ runtime are resolved without manual environment variable editing.
+- **Automatic Fallback Build:** If `build\gui\bitforge_gui.exe` does not exist yet, the script automatically configures and builds it via `cmake --preset gui` before launching.
+- *Runtime Requirement:* Requires an installed MSYS2 UCRT64 environment with Qt 6 (`pacman -S mingw-w64-ucrt-x86_64-qt6-base`). The script is a convenience developer launcher, not a standalone redistributable installer.
+
+#### Direct Binary Execution
 ```bash
-# Windows
+# Windows (requires Qt 6 DLLs in PATH):
 .\build\gui\bitforge_gui.exe
 # or open an initial assembly file on launch:
 .\build\gui\bitforge_gui.exe examples\01_arithmetic.asm
 
-# Linux / macOS
+# Linux / macOS:
 ./build/gui/bitforge_gui
 # or with an initial file:
 ./build/gui/bitforge_gui examples/01_arithmetic.asm
