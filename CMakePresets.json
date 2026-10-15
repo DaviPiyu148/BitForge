@@ -33,7 +33,19 @@
       "binaryDir": "${sourceDir}/build/ci",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "BITFORGE_WARNINGS_AS_ERRORS": "ON"
+        "BITFORGE_WARNINGS_AS_ERRORS": "ON",
+        "BITFORGE_BUILD_GUI": "OFF"
+      }
+    },
+    {
+      "name": "gui",
+      "displayName": "GUI Build",
+      "description": "Debug configuration with Qt 6 desktop GUI and tests enabled",
+      "binaryDir": "${sourceDir}/build/gui",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BITFORGE_BUILD_GUI": "ON",
+        "BITFORGE_WARNINGS_AS_ERRORS": "OFF"
       }
     }
   ],
@@ -52,6 +64,11 @@
       "name": "ci",
       "displayName": "Build CI",
       "configurePreset": "ci"
+    },
+    {
+      "name": "gui",
+      "displayName": "Build GUI",
+      "configurePreset": "gui"
     }
   ],
   "testPresets": [
@@ -80,6 +97,16 @@
       "displayName": "CI Strict Tests",
       "description": "Run test suite for CI configuration with output on failure",
       "configurePreset": "ci",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "gui",
+      "displayName": "GUI Tests",
+      "description": "Run unit and GUI test suites for GUI configuration",
+      "configurePreset": "gui",
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true

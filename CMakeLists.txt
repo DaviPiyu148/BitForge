@@ -140,3 +140,102 @@ add_test(
     COMMAND bitforge_tests
 )
 
+# -----------------------------------------------------------------
+# GUI desktop application and automated GUI tests (opt-in)
+# -----------------------------------------------------------------
+option(BITFORGE_BUILD_GUI "Build the BitForge Qt 6 GUI application and GUI tests" OFF)
+
+if (BITFORGE_BUILD_GUI)
+    set(CMAKE_AUTOMOC ON)
+    set(CMAKE_AUTORCC ON)
+    set(CMAKE_AUTOUIC ON)
+
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Test)
+
+    set(BITFORGE_GUI_HEADERS
+        include/bitforge/gui/execution_controller.hpp
+        include/bitforge/gui/code_editor.hpp
+        include/bitforge/gui/line_number_area.hpp
+        include/bitforge/gui/asm_highlighter.hpp
+        include/bitforge/gui/registers_panel.hpp
+        include/bitforge/gui/memory_viewer.hpp
+        include/bitforge/gui/stack_viewer.hpp
+        include/bitforge/gui/devices_panel.hpp
+        include/bitforge/gui/breakpoints_panel.hpp
+        include/bitforge/gui/trace_panel.hpp
+        include/bitforge/gui/main_window.hpp
+    )
+
+    set(BITFORGE_GUI_SOURCES
+        src/gui/main_window.cpp
+        src/gui/code_editor.cpp
+        src/gui/line_number_area.cpp
+        src/gui/asm_highlighter.cpp
+        src/gui/registers_panel.cpp
+        src/gui/memory_viewer.cpp
+        src/gui/stack_viewer.cpp
+        src/gui/devices_panel.cpp
+        src/gui/breakpoints_panel.cpp
+        src/gui/trace_panel.cpp
+        src/gui/execution_controller.cpp
+        ${BITFORGE_GUI_HEADERS}
+    )
+
+    add_executable(bitforge_gui
+        src/gui/main.cpp
+        ${BITFORGE_GUI_SOURCES}
+    )
+
+    target_include_directories(bitforge_gui
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+
+    target_link_libraries(bitforge_gui
+        PRIVATE
+            bitforge_debugger
+            bitforge_core
+            Qt6::Widgets
+            Qt6::Gui
+            Qt6::Core
+    )
+
+    set(BITFORGE_GUI_WARNING_FLAGS "")
+    if (MSVC)
+        list(APPEND BITFORGE_GUI_WARNING_FLAGS /W4 /permissive-)
+    else()
+        list(APPEND BITFORGE_GUI_WARNING_FLAGS -Wall -Wextra)
+    endif()
+    target_compile_options(bitforge_gui PRIVATE ${BITFORGE_GUI_WARNING_FLAGS})
+
+    # Automated GUI testing suite
+    add_executable(bitforge_gui_tests
+        tests/gui/test_gui.cpp
+        ${BITFORGE_GUI_SOURCES}
+    )
+
+    target_include_directories(bitforge_gui_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    )
+
+    target_link_libraries(bitforge_gui_tests
+        PRIVATE
+            bitforge_debugger
+            bitforge_core
+            Qt6::Widgets
+            Qt6::Gui
+            Qt6::Core
+            Qt6::Test
+    )
+
+    target_compile_options(bitforge_gui_tests PRIVATE ${BITFORGE_GUI_WARNING_FLAGS})
+
+    add_test(
+        NAME BitForgeGuiTests
+        COMMAND bitforge_gui_tests -platform offscreen
+    )
+endif()
+
+

@@ -6,7 +6,7 @@ BitForge is an educational software model of a fictional 8-bit microprocessor an
 
 ---
 
-## Current Status: Phase 5 Complete (Debugger Engine & Execution Control)
+## Current Status: Phase 6 Complete (Qt 6 Desktop GUI Workbench)
 
 BitForge is developed incrementally in strict adherence to [BitForge Architecture Specification v1.7](BitForge_Architecture_Specification_v1.7.md).
 
@@ -20,7 +20,8 @@ Implemented capabilities include:
 - **Two-Pass Assembler & Source Mapping:** Lexer, parser, symbol table, expression evaluation, multi-segment program image generation, explicit entry-point validation, line classification, and bidirectional instruction-to-source location mapping.
 - **Headless CLI Executable (`bitforge`):** Command-line assembler and execution runner supporting `help`, `assemble`, and `run` subcommands with execution step budgeting, register dumping, virtual I/O presentation, and stable numeric exit codes.
 - **Debugger Engine (`bitforge_debugger`):** Platform-independent, deterministic debugging layer (`DebuggerSession`) supporting single-stepping, bounded execution, address and source-line breakpoints with one-time bypass, read-only side-effect-free memory inspection with 16-bit address wrapping, ADR-001 stack frame inspection, bounded execution tracing with fault capture, and source location resolution.
-- **Automated Test Suite:** 158 passing tests covering units, edge cases, integration scenarios, CLI operations, and debugger session workflows in both Debug and strict CI mode (`-DBITFORGE_WARNINGS_AS_ERRORS=ON`).
+- **Qt 6 Desktop GUI Workbench (`bitforge_gui`):** Professional desktop IDE featuring an assembly code editor with line numbers, clickable breakpoint gutter, current PC execution indicator, syntax highlighting, execution toolbar (`Assemble`, `Run`, `Continue`, `Step`, `Pause`, `Reset`), configurable step budget, CPU register/flag panel with diff highlighting, side-effect-free 64 KiB memory viewer, ADR-001 stack viewer, virtual devices (Text console, Numeric console, 8-bit LEDs), breakpoint table, bounded chronological trace, and clickable diagnostics.
+- **Automated Test Suites:** 169 unit and regression tests plus 11 automated headless GUI integration tests (`BitForgeGuiTests`) covering assembly, execution, virtual I/O, single-stepping, breakpoints, stale-program detection, and diagnostic navigation.
 
 ---
 
@@ -127,6 +128,37 @@ Phase 5 introduces a platform-independent, headless debugging engine designed fo
 - **Breakpoints:** Supports 16-bit address breakpoints and source-line breakpoints resolved via the assembler's `SourceMap`. Includes explicit one-time breakpoint bypass semantics to prevent infinite breakpoint re-triggering upon resumption.
 - **State & Memory Inspection (Side-Effect Free):** Read-only inspection of registers (`R0`–`R3`, `IX`, `SP`, `PC`), status flags (`Z`, `C`, `N`, `V`), memory bytes, memory ranges with safe modulo 65,536 address wrapping across `0xFFFF`, and ADR-001 stack frames.
 - **Execution Tracing:** Bounded ring buffer recording recent execution steps, starting instruction addresses, canonical mnemonics, raw instruction bytes, resolved source locations, and post-step CPU states (with complete fault records upon architectural exceptions).
+
+---
+
+## Qt 6 Desktop GUI Workbench (`bitforge_gui`)
+
+Phase 6 provides a native, responsive Qt 6 desktop application integrating the full BitForge development and debugging stack into a compact, IDE-style interface:
+
+- **Source Editor:** `QPlainTextEdit` with line numbers, adjacent clickable breakpoint gutter, visual execution line indicator (`▶`), distinct composite markers when a breakpoint coincides with the current PC, syntax highlighting for all 31 mnemonics, registers, directives, labels, literals, and comments.
+- **Execution Toolbar:** One-click controls for `Assemble` (F7), `Run` (F5), `Continue` (F8), `Step` (F10), `Pause`, and `Reset` (F6). Includes a configurable execution step budget (default 1,000,000) and color-coded status badges (`READY`, `RUNNING`, `PAUSED`, `HALTED`, `FAULTED`, and `STALE`).
+- **CPU Registers & Flags:** Fixed-width hexadecimal displays for 16-bit registers (`PC`, `SP`, `IX`), 8-bit registers (`R0`–`R3`), and individual ALU flag indicators (`Z`, `C`, `N`, `V`). Values that change across execution steps are temporarily highlighted with an amber background.
+- **Side-Effect-Free Memory Viewer:** Read-only 16-column hexadecimal memory grid with printable ASCII representation. Supports quick jumps (`PC`, `SP`, `0x0200`, `0x8000`) and arbitrary 16-bit hex address navigation with safe modulo-65536 wrapping across `0xFFFF`.
+- **ADR-001 Stack Viewer:** Visualizes the occupied stack starting from Top-of-Stack (`SP`) down to `0xFFFE`. Correctly identifies empty stack (`SP = 0xFFFF`) and corrupt/out-of-bounds stack pointers (`SP < 0xF000`).
+- **Virtual Devices & Consoles:** Dedicated text output console (Port 0x01), numeric integer console (Port 0x02), and an 8-bit virtual LED indicator (Port 0x10) displaying individual bit states, hex value, and binary representation.
+- **Diagnostics & Clickable Navigation:** Displays assembler warnings/errors and CPU faults in a dedicated table. Clicking any diagnostic instantly navigates the source editor to the relevant line and column.
+- **Breakpoints & Trace History:** Chronological execution trace table showing step number, PC, instruction mnemonic, raw bytes, source line, and post-step state, with distinct visual highlights for `HALT` and CPU faults.
+
+### Configuring and Launching the GUI
+
+```bash
+# Configure with GUI enabled preset
+cmake --preset gui
+
+# Build GUI executable and test suites
+cmake --build --preset gui
+
+# Run tests headlessly
+ctest --preset gui --output-on-failure
+
+# Launch the desktop workbench
+./build/gui/bitforge_gui [optional_source.asm]
+```
 
 ---
 

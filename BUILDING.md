@@ -175,11 +175,67 @@ The build generates the `bitforge` command-line executable (or `bitforge.exe` on
 
 ---
 
-## 6. Build Options Reference
+---
+
+## 6. Building and Running the Qt 6 Desktop GUI Workbench (`bitforge_gui`)
+
+Phase 6 introduces a native Qt 6 desktop application integrating the code editor, assembler, debugger, memory viewer, stack viewer, trace panel, and virtual I/O consoles.
+
+### 6.1 Qt 6 Prerequisites
+- **Qt 6 Base:** Version 6.5+ with `Core`, `Gui`, `Widgets`, and `Test` modules.
+- **Windows (MSYS2 UCRT64):**
+  ```bash
+  pacman -S mingw-w64-ucrt-x86_64-qt6-base
+  ```
+- **Linux (Ubuntu/Debian):**
+  ```bash
+  sudo apt install -y qt6-base-dev
+  ```
+- **macOS:**
+  ```bash
+  brew install qt
+  ```
+
+### 6.2 Building with CMake Presets
+```bash
+# 1. Configure GUI build
+cmake --preset gui
+
+# 2. Build GUI application and test suites
+cmake --build --preset gui
+
+# 3. Run all tests (unit tests and headless GUI test suite)
+ctest --preset gui --output-on-failure
+```
+
+### 6.3 Launching the Desktop GUI
+```bash
+# Windows
+.\build\gui\bitforge_gui.exe
+# or open an initial assembly file on launch:
+.\build\gui\bitforge_gui.exe examples\01_arithmetic.asm
+
+# Linux / macOS
+./build/gui/bitforge_gui
+# or with an initial file:
+./build/gui/bitforge_gui examples/01_arithmetic.asm
+```
+
+### 6.4 Running Automated GUI Tests Directly
+```bash
+# Headless test execution using offscreen platform
+.\build\gui\bitforge_gui_tests.exe -platform offscreen
+```
+
+---
+
+## 7. Build Options Reference
 
 | CMake Option | Default | Description |
 |---|---|---|
 | `CMAKE_BUILD_TYPE` | `Debug` | Build profile (`Debug`, `Release`, `RelWithDebInfo`) |
-| `BITFORGE_WARNINGS_AS_ERRORS` | `OFF` | Treats compiler warnings as errors (`/WX` on MSVC, `-Werror` on GCC/Clang). Enabled by default in CI. |
+| `BITFORGE_WARNINGS_AS_ERRORS` | `OFF` | Treats compiler warnings as errors (`/WX` on MSVC, `-Werror` on GCC/Clang). Enabled by default in CI preset. |
+| `BITFORGE_BUILD_GUI` | `OFF` | Opt-in build of Qt 6 desktop workbench (`bitforge_gui`) and GUI tests (`bitforge_gui_tests`). Enabled in `gui` preset. |
 | `CMAKE_CXX_COMPILER` | System default | Explicit path or binary name for C++ compiler (e.g. `cl`, `g++`, `clang++`) |
+
 
