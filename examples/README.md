@@ -29,41 +29,47 @@ examples/
 
 ## 31-Instruction Coverage Matrix
 
+The BitForge instruction set contains exactly **31 canonical instruction mnemonics** organized into four functional groups per Section 6.1 of `BitForge_Architecture_Specification_v1.7.md`. Opcodes are non-contiguous grouped byte values:
+- **Control & Data Movement (11 mnemonics):** `0x00`, `0x01`, `0x10`..`0x18`
+- **Arithmetic & Logic (9 mnemonics):** `0x20`..`0x23`, `0x30`..`0x33`, `0x40`
+- **Branch, Stack & Call (9 mnemonics):** `0x50`..`0x54`, `0x60`..`0x63`
+- **Input/Output (2 mnemonics):** `0x70`, `0x71`
+
 Every single instruction in the BitForge ISA is executed by at least one runnable example:
 
-| Opcode | Mnemonic | Name / Description | Primary Demonstrating Example |
-| :---: | :---: | :--- | :--- |
-| `0x00` | **NOP** | No Operation | `fundamentals/01_nop_halt.asm` |
-| `0x01` | **HALT** | Halt Execution | All runnable examples |
-| `0x10` | **LDI** | Load Immediate 8-bit | `fundamentals/02_registers_transfer.asm` |
-| `0x11` | **MOV** | Move Register to Register | `fundamentals/02_registers_transfer.asm` |
-| `0x12` | **LD** | Load Direct from Memory `[addr16]` | `memory/01_direct_load_store.asm` |
-| `0x13` | **ST** | Store Direct to Memory `[addr16]` | `memory/01_direct_load_store.asm` |
-| `0x14` | **LDI16**| Load Immediate 16-bit into IX | `memory/02_indexed_access_ix.asm` |
-| `0x15` | **LDX** | Load Indexed from `[IX]` | `memory/02_indexed_access_ix.asm` |
-| `0x16` | **STX** | Store Indexed to `[IX]` | `memory/02_indexed_access_ix.asm` |
-| `0x17` | **INX** | Increment Index Register IX | `memory/02_indexed_access_ix.asm` |
-| `0x18` | **DEX** | Decrement Index Register IX | `memory/02_indexed_access_ix.asm` |
-| `0x20` | **ADD** | Add Registers | `arithmetic/01_addition_subtraction.asm` |
-| `0x21` | **SUB** | Subtract Registers | `arithmetic/01_addition_subtraction.asm` |
-| `0x22` | **INC** | Increment Register | `arithmetic/02_increment_decrement.asm` |
-| `0x23` | **DEC** | Decrement Register | `arithmetic/02_increment_decrement.asm` |
-| `0x30` | **AND** | Bitwise AND | `arithmetic/03_bitwise_logic.asm` |
-| `0x31` | **OR** | Bitwise OR | `arithmetic/03_bitwise_logic.asm` |
-| `0x32` | **XOR** | Bitwise Exclusive-OR | `arithmetic/03_bitwise_logic.asm` |
-| `0x33` | **NOT** | Bitwise NOT (Invert) | `arithmetic/03_bitwise_logic.asm` |
-| `0x40` | **CMP** | Compare Registers (Sets Flags) | `arithmetic/04_comparison_flags.asm` |
-| `0x50` | **JMP** | Unconditional Jump | `control_flow/01_unconditional_jump.asm` |
-| `0x51` | **JZ** | Jump if Zero | `control_flow/02_branch_zero.asm` |
-| `0x52` | **JNZ** | Jump if Not Zero | `control_flow/02_branch_zero.asm` |
-| `0x53` | **JC** | Jump if Carry | `control_flow/03_branch_carry.asm` |
-| `0x54` | **JNC** | Jump if No Carry | `control_flow/03_branch_carry.asm` |
-| `0x60` | **CALL**| Call Subroutine | `stack_subroutines/02_subroutine_call_ret.asm` |
-| `0x61` | **RET** | Return from Subroutine | `stack_subroutines/02_subroutine_call_ret.asm` |
-| `0x70` | **PUSH**| Push Register to Stack | `stack_subroutines/01_push_pop_basic.asm` |
-| `0x71` | **POP** | Pop Register from Stack | `stack_subroutines/01_push_pop_basic.asm` |
-| `0x80` | **IN** | Input from Port | `io_devices/04_input_fifo_poll.asm` |
-| `0x81` | **OUT** | Output to Port | `io_devices/01_text_console_output.asm` |
+| Opcode | Mnemonic | Format | Length | Primary Demonstrating Example |
+| :---: | :---: | :--- | :---: | :--- |
+| `0x00` | **NOP** | Implied | 1 | `fundamentals/01_nop_halt.asm` |
+| `0x01` | **HALT** | Implied | 1 | All runnable examples |
+| `0x10` | **LDI** | `LDI Rd, imm8` | 3 | `fundamentals/02_registers_transfer.asm` |
+| `0x11` | **MOV** | `MOV Rd, Rs` | 3 | `fundamentals/02_registers_transfer.asm` |
+| `0x12` | **LD** | `LD Rd, [addr16]` | 4 | `memory/01_direct_load_store.asm` |
+| `0x13` | **ST** | `ST [addr16], Rs` | 4 | `memory/01_direct_load_store.asm` |
+| `0x14` | **LDI16**| `LDI16 IX, addr16` | 3 | `memory/02_indexed_access_ix.asm` |
+| `0x15` | **LDX** | `LDX Rd, [IX]` | 2 | `memory/02_indexed_access_ix.asm` |
+| `0x16` | **STX** | `STX [IX], Rs` | 2 | `memory/02_indexed_access_ix.asm` |
+| `0x17` | **INX** | Implied (`INX`) | 1 | `memory/02_indexed_access_ix.asm` |
+| `0x18` | **DEX** | Implied (`DEX`) | 1 | `memory/02_indexed_access_ix.asm` |
+| `0x20` | **ADD** | `ADD Rd, Rs` | 3 | `arithmetic/01_addition_subtraction.asm` |
+| `0x21` | **SUB** | `SUB Rd, Rs` | 3 | `arithmetic/01_addition_subtraction.asm` |
+| `0x22` | **INC** | `INC Rd` | 2 | `arithmetic/02_increment_decrement.asm` |
+| `0x23` | **DEC** | `DEC Rd` | 2 | `arithmetic/02_increment_decrement.asm` |
+| `0x30` | **AND** | `AND Rd, Rs` | 3 | `arithmetic/03_bitwise_logic.asm` |
+| `0x31` | **OR** | `OR Rd, Rs` | 3 | `arithmetic/03_bitwise_logic.asm` |
+| `0x32` | **XOR** | `XOR Rd, Rs` | 3 | `arithmetic/03_bitwise_logic.asm` |
+| `0x33` | **NOT** | `NOT Rd` | 2 | `arithmetic/03_bitwise_logic.asm` |
+| `0x40` | **CMP** | `CMP Ra, Rb` | 3 | `arithmetic/04_comparison_flags.asm` |
+| `0x50` | **JMP** | `JMP addr16` | 3 | `control_flow/01_unconditional_jump.asm` |
+| `0x51` | **JZ** | `JZ addr16` | 3 | `control_flow/02_branch_zero.asm` |
+| `0x52` | **JNZ** | `JNZ addr16` | 3 | `control_flow/02_branch_zero.asm` |
+| `0x53` | **JC** | `JC addr16` | 3 | `control_flow/03_branch_carry.asm` |
+| `0x54` | **JNC** | `JNC addr16` | 3 | `control_flow/03_branch_carry.asm` |
+| `0x60` | **CALL**| `CALL addr16` | 3 | `stack_subroutines/02_subroutine_call_ret.asm` |
+| `0x61` | **RET** | Implied (`RET`) | 1 | `stack_subroutines/02_subroutine_call_ret.asm` |
+| `0x62` | **PUSH**| `PUSH Rs` | 2 | `stack_subroutines/01_push_pop_basic.asm` |
+| `0x63` | **POP** | `POP Rd` | 2 | `stack_subroutines/01_push_pop_basic.asm` |
+| `0x70` | **IN** | `IN Rd, port8` | 3 | `io_devices/04_input_fifo_poll.asm` |
+| `0x71` | **OUT** | `OUT port8, Rs` | 3 | `io_devices/01_text_console_output.asm` |
 
 ---
 
@@ -139,7 +145,7 @@ From PowerShell (with MSYS2 UCRT64 in PATH):
 
 | File | Description | Termination | Visible Device Output |
 | :--- | :--- | :---: | :--- |
-| `01_text_console_output.asm` | Outputs `"BitForge\n"` to Port 0x01. | Halted | Text Console: `"BitForge\n"` |
+| `01_text_console_output.asm` | Outputs `"BitForge!"` to Port 0x01. | Halted | Text Console: `"BitForge!"` |
 | `02_numeric_console_output.asm` | Outputs 0, 42, 100, 255 to Port 0x02. | Halted | Numeric Console: `"0 42 100 255"` |
 | `03_virtual_led_patterns.asm` | Walking bit patterns, alternating, and 0xFF to Port 0x10. | Halted | LEDs: `0xFF` (all 8 illuminated) |
 | `04_input_fifo_poll.asm` | Reading Port 0x00 when FIFO is empty. | Halted | `R0 = 0x00` (non-fatal empty poll) |
@@ -160,7 +166,7 @@ From PowerShell (with MSYS2 UCRT64 in PATH):
 | :--- | :--- | :--- | :--- |
 | `01_stepping_sequential.asm` | Step-by-step instruction execution | Press <kbd>F10</kbd> repeatedly | Yellow arrow advances; registers highlight amber |
 | `02_branch_taken_not_taken.asm` | Visualizing branch jump vs. fallthrough | Step past JZ instructions | Arrow jumps forward on taken, steps to next line on not taken |
-| `03_breakpoint_target.asm` | Source line breakpoints | Click gutter on lines 25, 31, 37; press <kbd>F5</kbd> | Execution pauses cleanly BEFORE target line |
+| `03_breakpoint_target.asm` | Source line breakpoints | Click gutter on lines 34, 40, 46; press <kbd>F5</kbd> | Execution pauses cleanly BEFORE target line |
 | `04_self_loop_budget.asm` | Budget exhaustion & pause responsiveness | Set Max Steps=50000; press <kbd>F5</kbd> | Stops with `BudgetExhausted`; GUI remains responsive |
 | `05_disjoint_org_segments.asm` | Multi-segment memory image | Step through `CALL 0x0500` | PC jumps across segment boundary, source mapping tracks |
 | `06_memory_inspection_step.asm` | Live memory viewer mutation | Switch to Memory tab at 0x8000; press <kbd>F10</kbd> | Bytes update sequentially: AA, BB, CC, DD |
@@ -176,7 +182,7 @@ These programs are designed to verify CPU architectural fault detection and atom
 | `01_invalid_opcode_fault.asm` | `FaultType::InvalidOpcode` (emits raw byte 0x03) | `0x0200` | MachineState::Faulted |
 | `02_stack_underflow_fault.asm` | `FaultType::StackUnderflow` (POP from SP=0xFFFF) | `0x0200` | MachineState::Faulted |
 | `03_stack_overflow_fault.asm` | `FaultType::StackOverflow` (recursive CALL past 0xF000) | `0x0200` | MachineState::Faulted |
-| `04_invalid_port_fault.asm` | `FaultType::InvalidPort` (OUT to unmapped port 0x30) | `0x0200` | MachineState::Faulted |
+| `04_invalid_port_fault.asm` | `FaultType::InvalidPort` (OUT to unmapped port 0x30) | `0x0203` | MachineState::Faulted |
 
 ---
 
@@ -189,8 +195,8 @@ These fixtures test the two-pass assembler's diagnostic engine and are expected 
 | `01_unknown_mnemonic.asm` | Unrecognized instruction `FOOBAR R0` | `Unknown instruction mnemonic 'FOOBAR'` |
 | `02_invalid_register.asm` | Non-existent register `R9` in `LDI R9, 10` | `Invalid destination register 'R9'` |
 | `03_missing_operand.asm` | Missing comma / second operand `ADD R0` | `Expected ',' between operands in ADD` |
-| `04_extra_operand.asm` | Extraneous token on line `NOP R0` | `Unexpected token in statement: 'R0'` |
-| `05_duplicate_label.asm` | Defining symbol `loop_point:` twice | `Duplicate symbol definition: 'loop_point'` |
+| `04_extra_operand.asm` | Extraneous token on line `NOP R0` | `Unexpected trailing token: 'R0'` |
+| `05_duplicate_label.asm` | Defining symbol `loop_point:` twice | `Duplicate label definition: 'loop_point'` |
 | `06_unresolved_label.asm` | Branching to nonexistent symbol | `Unresolved label: 'nonexistent_target'` |
 | `07_literal_overflow.asm` | Immediate value 999 exceeding 8 bits | `Immediate value out of range [-128, 255]` |
 | `08_overlapping_segments.asm` | Conflicting `.ORG 0x0200` blocks | `Overlapping segment emission at address 0x0200` |

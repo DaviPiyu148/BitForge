@@ -1,5 +1,7 @@
 #include "test_harness.hpp"
 #include "bitforge/assembler/assembler.hpp"
+#include "bitforge/core/opcodes.hpp"
+#include "bitforge/core/constants.hpp"
 #include "bitforge/core/cpu.hpp"
 #include "bitforge/memory/memory.hpp"
 #include "bitforge/bus/system_bus.hpp"
@@ -612,3 +614,115 @@ TEST(ExampleLibrary, Invalid_ReservedStackEmission) {
 TEST(ExampleLibrary, Invalid_MalformedString) {
     assert_invalid_assembly("examples/invalid/10_malformed_string.asm", "Unterminated string literal");
 }
+
+// ==============================================================================
+// 11. Instruction and Device Documentation Consistency Audit
+// ==============================================================================
+
+TEST(ExampleLibrary, Audit_Canonical31InstructionEncodingsAndExamples) {
+    struct MnemonicMapping {
+        Opcode opcode;
+        byte_t opcode_byte;
+        std::string_view mnemonic;
+        std::size_t length;
+        std::string_view example_file;
+    };
+
+    const MnemonicMapping canonical_matrix[] = {
+        // Group 1: Basic Control & Data Movement (11 mnemonics)
+        {Opcode::NOP,   0x00, "NOP",   1, "examples/fundamentals/01_nop_halt.asm"},
+        {Opcode::HALT,  0x01, "HALT",  1, "examples/fundamentals/01_nop_halt.asm"},
+        {Opcode::LDI,   0x10, "LDI",   3, "examples/fundamentals/02_registers_transfer.asm"},
+        {Opcode::MOV,   0x11, "MOV",   3, "examples/fundamentals/02_registers_transfer.asm"},
+        {Opcode::LD,    0x12, "LD",    4, "examples/memory/01_direct_load_store.asm"},
+        {Opcode::ST,    0x13, "ST",    4, "examples/memory/01_direct_load_store.asm"},
+        {Opcode::LDI16, 0x14, "LDI16", 3, "examples/memory/02_indexed_access_ix.asm"},
+        {Opcode::LDX,   0x15, "LDX",   2, "examples/memory/02_indexed_access_ix.asm"},
+        {Opcode::STX,   0x16, "STX",   2, "examples/memory/02_indexed_access_ix.asm"},
+        {Opcode::INX,   0x17, "INX",   1, "examples/memory/02_indexed_access_ix.asm"},
+        {Opcode::DEX,   0x18, "DEX",   1, "examples/memory/02_indexed_access_ix.asm"},
+
+        // Group 2: Arithmetic & Logic (9 mnemonics)
+        {Opcode::ADD,   0x20, "ADD",   3, "examples/arithmetic/01_addition_subtraction.asm"},
+        {Opcode::SUB,   0x21, "SUB",   3, "examples/arithmetic/01_addition_subtraction.asm"},
+        {Opcode::INC,   0x22, "INC",   2, "examples/arithmetic/02_increment_decrement.asm"},
+        {Opcode::DEC,   0x23, "DEC",   2, "examples/arithmetic/02_increment_decrement.asm"},
+        {Opcode::AND,   0x30, "AND",   3, "examples/arithmetic/03_bitwise_logic.asm"},
+        {Opcode::OR,    0x31, "OR",    3, "examples/arithmetic/03_bitwise_logic.asm"},
+        {Opcode::XOR,   0x32, "XOR",   3, "examples/arithmetic/03_bitwise_logic.asm"},
+        {Opcode::NOT,   0x33, "NOT",   2, "examples/arithmetic/03_bitwise_logic.asm"},
+        {Opcode::CMP,   0x40, "CMP",   3, "examples/arithmetic/04_comparison_flags.asm"},
+
+        // Group 3: Branch, Stack & Call (9 mnemonics)
+        {Opcode::JMP,   0x50, "JMP",   3, "examples/control_flow/01_unconditional_jump.asm"},
+        {Opcode::JZ,    0x51, "JZ",    3, "examples/control_flow/02_branch_zero.asm"},
+        {Opcode::JNZ,   0x52, "JNZ",   3, "examples/control_flow/02_branch_zero.asm"},
+        {Opcode::JC,    0x53, "JC",    3, "examples/control_flow/03_branch_carry.asm"},
+        {Opcode::JNC,   0x54, "JNC",   3, "examples/control_flow/03_branch_carry.asm"},
+        {Opcode::CALL,  0x60, "CALL",  3, "examples/stack_subroutines/02_subroutine_call_ret.asm"},
+        {Opcode::RET,   0x61, "RET",   1, "examples/stack_subroutines/02_subroutine_call_ret.asm"},
+        {Opcode::PUSH,  0x62, "PUSH",  2, "examples/stack_subroutines/01_push_pop_basic.asm"},
+        {Opcode::POP,   0x63, "POP",   2, "examples/stack_subroutines/01_push_pop_basic.asm"},
+
+        // Group 4: Input/Output (2 mnemonics)
+        {Opcode::IN,    0x70, "IN",    3, "examples/io_devices/04_input_fifo_poll.asm"},
+        {Opcode::OUT,   0x71, "OUT",   3, "examples/io_devices/01_text_console_output.asm"}
+    };
+
+    EXPECT_EQ(sizeof(canonical_matrix) / sizeof(canonical_matrix[0]), 31);
+
+    for (const auto& entry : canonical_matrix) {
+        // 1. Verify architectural metadata matches canonical opcodes header
+        EXPECT_EQ(static_cast<byte_t>(entry.opcode), entry.opcode_byte);
+        EXPECT_TRUE(is_valid_opcode(entry.opcode_byte));
+        EXPECT_EQ(instruction_length(entry.opcode_byte), entry.length);
+        EXPECT_EQ(opcode_to_mnemonic(entry.opcode_byte), entry.mnemonic);
+
+        // 2. Assemble corresponding example file and verify presence of the opcode byte
+        std::string src = read_file(std::string(entry.example_file));
+        Assembler as;
+        auto res = as.assemble(src);
+        EXPECT_TRUE(res.success);
+
+        bool opcode_found = false;
+        for (const auto& seg : res.image.segments()) {
+            for (byte_t b : seg.data) {
+                if (b == entry.opcode_byte) {
+                    opcode_found = true;
+                    break;
+                }
+            }
+            if (opcode_found) break;
+        }
+        EXPECT_TRUE(opcode_found);
+    }
+}
+
+TEST(ExampleLibrary, Audit_VirtualPortAssignmentsAndLedDevice) {
+    // Port 0x10 is the strictly specified LED output port
+    EXPECT_EQ(kPortLeds, 0x10);
+    EXPECT_EQ(kPortInputFifo, 0x00);
+    EXPECT_EQ(kPortTextConsole, 0x01);
+    EXPECT_EQ(kPortNumericConsole, 0x02);
+
+    // Port 0x03 is UNMAPPED and must reject both reads and writes
+    Memory mem{};
+    SystemBus bus{mem};
+    EXPECT_FALSE(bus.can_read_io(0x03));
+    EXPECT_FALSE(bus.can_write_io(0x03));
+    EXPECT_FALSE(bus.read_io(0x03).has_value());
+    EXPECT_FALSE(bus.write_io(0x03, 0xFF));
+
+    // Port 0x10 is write-only for LEDs (reads are rejected)
+    EXPECT_FALSE(bus.can_read_io(kPortLeds));
+    EXPECT_TRUE(bus.can_write_io(kPortLeds));
+    EXPECT_FALSE(bus.read_io(kPortLeds).has_value());
+
+    // Writing to Port 0x10 updates LED state correctly
+    EXPECT_EQ(bus.led_state(), 0x00);
+    EXPECT_TRUE(bus.write_io(kPortLeds, 0xAA));
+    EXPECT_EQ(bus.led_state(), 0xAA);
+    EXPECT_TRUE(bus.write_io(kPortLeds, 0xFF));
+    EXPECT_EQ(bus.led_state(), 0xFF);
+}
+

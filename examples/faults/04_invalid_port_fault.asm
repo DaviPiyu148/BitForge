@@ -9,7 +9,7 @@
 ; Expected Results:
 ;   State:       Faulted
 ;   Fault Type:  InvalidPort
-;   Faulting PC: 0x0200
+;   Faulting PC: 0x0203
 ; ==============================================================================
 
 .ORG 0x0200
