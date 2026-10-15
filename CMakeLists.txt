@@ -86,6 +86,24 @@ target_link_libraries(bitforge
 
 target_compile_options(bitforge PRIVATE ${BITFORGE_WARNING_FLAGS})
 
+# Debugger static library
+add_library(bitforge_debugger STATIC
+    src/debugger/debugger_session.cpp
+)
+
+target_include_directories(bitforge_debugger
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
+
+target_link_libraries(bitforge_debugger
+    PUBLIC
+        bitforge_core
+)
+
+target_compile_options(bitforge_debugger PRIVATE ${BITFORGE_WARNING_FLAGS})
+
 # Automated testing suite
 enable_testing()
 
@@ -100,6 +118,7 @@ add_executable(bitforge_tests
     tests/unit/test_io_instructions.cpp
     tests/unit/test_assembler.cpp
     tests/unit/test_cli.cpp
+    tests/unit/test_debugger.cpp
 )
 
 target_include_directories(bitforge_tests
@@ -111,6 +130,7 @@ target_link_libraries(bitforge_tests
     PRIVATE
         bitforge_core
         bitforge_cli
+        bitforge_debugger
 )
 
 target_compile_options(bitforge_tests PRIVATE ${BITFORGE_WARNING_FLAGS})

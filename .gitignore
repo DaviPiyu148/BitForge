@@ -43,3 +43,4 @@ CMakeUserPresets.json
 Thumbs.db
 Desktop.ini
 .DS_Store
+*.winmd

@@ -59,8 +59,12 @@ AssembleResult Assembler::assemble(std::string_view source) {
     // Helper parser state
     class Parser {
     public:
-        Parser(const std::vector<Token>& tokens, AssembleResult& res, bool pass2)
-            : tokens_(tokens), res_(res), pass2_(pass2) {}
+        Parser(const std::vector<Token>& toks, AssembleResult& res, bool pass2, std::size_t total_lines = 0)
+            : tokens_(toks), res_(res), pass2_(pass2) {
+            if (pass2_ && total_lines > 0) {
+                source_map_.set_line_count(total_lines);
+            }
+        }
 
         void run() {
             while (!is_at_end()) {
@@ -76,6 +80,8 @@ AssembleResult Assembler::assemble(std::string_view source) {
         SourceLocation entry_point_location() const noexcept { return entry_point_loc_; }
         const std::vector<Segment>& segments() const noexcept { return segments_; }
         std::size_t instruction_count() const noexcept { return instruction_count_; }
+        SourceMap take_source_map() noexcept { return std::move(source_map_); }
+        const SourceMap& source_map() const noexcept { return source_map_; }
         std::size_t total_bytes() const noexcept {
             std::size_t total = 0;
             for (const auto& seg : segments_) {
@@ -98,6 +104,7 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
         std::vector<Segment> segments_{};
         std::unordered_set<word_t> written_addresses_{};
+        SourceMap source_map_{};
 
         const Token& peek() const {
             if (cursor_ >= tokens_.size()) return tokens_.back();
@@ -191,21 +198,54 @@ AssembleResult Assembler::assemble(std::string_view source) {
 
                 // If end of statement, return
                 if (peek().kind == TokenKind::Newline || peek().kind == TokenKind::EndOfFile) {
+                    if (pass2_) {
+                        source_map_.set_line_info(label_tok.location.line, SourceLineKind::LabelOnly,
+                                                  std::nullopt, "Label: " + label_tok.lexeme);
+                    }
                     return;
                 }
             }
 
             // Directives
             if (peek().kind == TokenKind::Directive) {
+                Token dir_tok = peek();
+                std::string dir = to_upper(dir_tok.lexeme);
+                bool is_data = (dir == ".BYTE" || dir == ".WORD" || dir == ".ASCII");
+
                 parse_directive();
                 expect_end_of_statement();
+
+                if (pass2_) {
+                    source_map_.set_line_info(dir_tok.location.line,
+                                              is_data ? SourceLineKind::DataOnly : SourceLineKind::DirectiveOnly,
+                                              std::nullopt, dir);
+                }
                 return;
             }
 
             // Instructions
             if (peek().kind == TokenKind::Identifier) {
+                Token mnem_tok = peek();
+                word_t inst_start_addr = location_counter_;
+                std::string mnem_upper = to_upper(mnem_tok.lexeme);
+
                 parse_instruction();
                 expect_end_of_statement();
+
+                if (pass2_) {
+                    word_t inst_end_addr = location_counter_;
+                    std::size_t inst_len = static_cast<std::size_t>((inst_end_addr - inst_start_addr) & 0xFFFF);
+                    source_map_.add_instruction(InstructionSourceMapping{
+                        inst_start_addr,
+                        mnem_tok.location,
+                        inst_len,
+                        mnem_upper
+                    });
+                    source_map_.set_line_info(mnem_tok.location.line,
+                                              SourceLineKind::Instruction,
+                                              inst_start_addr,
+                                              mnem_upper);
+                }
                 return;
             }
 
@@ -800,10 +840,26 @@ AssembleResult Assembler::assemble(std::string_view source) {
         }
     };
 
+    // Compute total line count in source
+    std::size_t total_lines = 1;
+    for (std::size_t i = 0; i < source.size(); ++i) {
+        if (source[i] == '\r') {
+            if (i + 1 < source.size() && source[i + 1] == '\n') {
+                ++i;
+            }
+            ++total_lines;
+        } else if (source[i] == '\n') {
+            ++total_lines;
+        }
+    }
+    if (!tokens.empty() && tokens.back().location.line > total_lines) {
+        total_lines = tokens.back().location.line;
+    }
+
     // -------------------------------------------------------------
     // PASS 1: Location Counter Tracking & Symbol Table Population
     // -------------------------------------------------------------
-    Parser pass1(tokens, result, false);
+    Parser pass1(tokens, result, false, total_lines);
     pass1.run();
 
     // If Pass 1 encountered errors, stop before Pass 2
@@ -817,7 +873,7 @@ AssembleResult Assembler::assemble(std::string_view source) {
     // -------------------------------------------------------------
     // PASS 2: Symbol Resolution & Machine Code Encoding
     // -------------------------------------------------------------
-    Parser pass2(tokens, result, true);
+    Parser pass2(tokens, result, true, total_lines);
     pass2.run();
 
     // Check diagnostics after Pass 2
@@ -881,6 +937,7 @@ AssembleResult Assembler::assemble(std::string_view source) {
     for (auto& seg : sorted_segments) {
         image.add_segment(std::move(seg));
     }
+    image.set_source_map(pass2.take_source_map());
 
     result.image = std::move(image);
     result.success = true;

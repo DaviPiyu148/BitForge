@@ -3,6 +3,7 @@
 
 #include "bitforge/core/types.hpp"
 #include "bitforge/memory/memory.hpp"
+#include "bitforge/assembler/source_map.hpp"
 
 #include <vector>
 #include <cstddef>
@@ -28,6 +29,9 @@ public:
     [[nodiscard]] const std::vector<Segment>& segments() const noexcept { return segments_; }
     void add_segment(Segment seg) { segments_.push_back(std::move(seg)); }
 
+    [[nodiscard]] const SourceMap& source_map() const noexcept { return source_map_; }
+    void set_source_map(SourceMap sm) { source_map_ = std::move(sm); }
+
     // Total count of assembled bytes across all segments
     [[nodiscard]] std::size_t total_bytes() const noexcept {
         std::size_t count = 0;
@@ -52,6 +56,7 @@ public:
 private:
     word_t entry_point_{0x0000};
     std::vector<Segment> segments_{};
+    SourceMap source_map_{};
 };
 
 } // namespace bitforge::assembler

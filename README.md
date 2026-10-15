@@ -6,7 +6,7 @@ BitForge is an educational software model of a fictional 8-bit microprocessor an
 
 ---
 
-## Current Status: Phase 4 Complete (CLI Assembler & Execution Runner)
+## Current Status: Phase 5 Complete (Debugger Engine & Execution Control)
 
 BitForge is developed incrementally in strict adherence to [BitForge Architecture Specification v1.7](BitForge_Architecture_Specification_v1.7.md).
 
@@ -17,9 +17,10 @@ Implemented capabilities include:
 - **Pure Functional ALU:** Stateless arithmetic and logic unit computing `ADD`, `SUB`, `CMP`, `INC`, `DEC`, `AND`, `OR`, `XOR`, and `NOT`, with exact flag calculation (`Z`, `C`, `N`, `V`).
 - **CPU Execution Engine:** Full 31-mnemonic fetch-decode-execute engine with atomic state commitment, state machine (`Ready`, `Running`, `Paused`, `Halted`, `Faulted`), and architectural fault records.
 - **Stack, Subroutines & Virtual I/O:** Downward-growing stack (`SP = 0xFFFF` empty sentinel), big-endian `CALL`/`RET` return addresses, virtual FIFO input (Port 0x00), text console (Port 0x01), numeric stream (Port 0x02), and 8-bit LED register (Port 0x10).
-- **Two-Pass Assembler:** Lexer, parser, symbol table, expression evaluation, multi-segment program image generation, explicit entry-point validation, and source diagnostics.
+- **Two-Pass Assembler & Source Mapping:** Lexer, parser, symbol table, expression evaluation, multi-segment program image generation, explicit entry-point validation, line classification, and bidirectional instruction-to-source location mapping.
 - **Headless CLI Executable (`bitforge`):** Command-line assembler and execution runner supporting `help`, `assemble`, and `run` subcommands with execution step budgeting, register dumping, virtual I/O presentation, and stable numeric exit codes.
-- **Automated Test Suite:** 136 passing tests covering units, edge cases, integration scenarios, and CLI operations in both Debug and strict CI mode (`-DBITFORGE_WARNINGS_AS_ERRORS=ON`).
+- **Debugger Engine (`bitforge_debugger`):** Platform-independent, deterministic debugging layer (`DebuggerSession`) supporting single-stepping, bounded execution, address and source-line breakpoints with one-time bypass, read-only side-effect-free memory inspection with 16-bit address wrapping, ADR-001 stack frame inspection, bounded execution tracing with fault capture, and source location resolution.
+- **Automated Test Suite:** 158 passing tests covering units, edge cases, integration scenarios, CLI operations, and debugger session workflows in both Debug and strict CI mode (`-DBITFORGE_WARNINGS_AS_ERRORS=ON`).
 
 ---
 
@@ -30,7 +31,7 @@ Implemented capabilities include:
 - **Flags:** Zero (`Z`), Carry/no-borrow (`C`), Negative (`N`), and Signed Overflow (`V`).
 - **Instruction Set:** Exactly 31 canonical instruction mnemonics across 4 functional groups.
 - **Endianness:** Strictly big-endian across 16-bit addresses and immediate words.
-- **Dependencies:** Strictly standard ISO C++17. Zero third-party library dependencies for core, assembler, CLI, and tests.
+- **Dependencies:** Strictly standard ISO C++17. Zero third-party library dependencies for core, assembler, CLI, debugger, and tests.
 
 ---
 
@@ -115,6 +116,17 @@ HI!
 42
 LED State (Port 0x10): 0x55 (0b01010101)
 ```
+
+---
+
+## Debugger Engine (`bitforge_debugger`)
+
+Phase 5 introduces a platform-independent, headless debugging engine designed for integration with future graphical workbenches, interactive CLIs, and automated test harnesses:
+
+- **Session Control (`DebuggerSession`):** Synchronous, deterministic execution control supporting single-stepping, bounded execution (`run`), and breakpoint continuation (`continue_execution`).
+- **Breakpoints:** Supports 16-bit address breakpoints and source-line breakpoints resolved via the assembler's `SourceMap`. Includes explicit one-time breakpoint bypass semantics to prevent infinite breakpoint re-triggering upon resumption.
+- **State & Memory Inspection (Side-Effect Free):** Read-only inspection of registers (`R0`–`R3`, `IX`, `SP`, `PC`), status flags (`Z`, `C`, `N`, `V`), memory bytes, memory ranges with safe modulo 65,536 address wrapping across `0xFFFF`, and ADR-001 stack frames.
+- **Execution Tracing:** Bounded ring buffer recording recent execution steps, starting instruction addresses, canonical mnemonics, raw instruction bytes, resolved source locations, and post-step CPU states (with complete fault records upon architectural exceptions).
 
 ---
 
