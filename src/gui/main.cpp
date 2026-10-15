@@ -10,13 +10,11 @@ int main(int argc, char* argv[]) {
     app.setOrganizationName("BitForge");
 
     bitforge::gui::MainWindow window;
-    window.show();
 
-    // If an initial file path argument is provided, load it
-    const QStringList args = app.arguments();
-    if (args.size() > 1 && !args[1].startsWith("-")) {
-        window.loadFile(args[1]);
-    }
+    // If an initial file path argument is provided, load it before display
+    window.loadStartupFile(app.arguments());
+
+    window.show();
 
     return app.exec();
 }

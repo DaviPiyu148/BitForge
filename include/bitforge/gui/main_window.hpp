@@ -30,6 +30,7 @@ public:
     [[nodiscard]] CodeEditor* editor() const noexcept { return editor_; }
 
     bool loadFile(const QString& filePath);
+    bool loadStartupFile(const QStringList& args);
     bool saveFile(const QString& filePath);
     bool maybeSave();
     [[nodiscard]] const QString& currentFilePath() const noexcept { return current_file_path_; }

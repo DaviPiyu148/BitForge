@@ -389,6 +389,30 @@ bool MainWindow::loadFile(const QString& filePath) {
     return true;
 }
 
+bool MainWindow::loadStartupFile(const QStringList& args) {
+    for (int i = 1; i < args.size(); ++i) {
+        const QString& arg = args[i];
+        if (arg == "--") {
+            if (i + 1 < args.size()) {
+                return loadFile(args[i + 1]);
+            }
+            break;
+        }
+        if (arg.startsWith("-")) {
+            // Skip common Qt command-line options that take a subsequent argument
+            if ((arg == "-platform" || arg == "-style" || arg == "-geometry" ||
+                 arg == "-plugin" || arg == "-session" || arg == "-display" ||
+                 arg == "-font") &&
+                i + 1 < args.size()) {
+                ++i;
+            }
+            continue;
+        }
+        return loadFile(arg);
+    }
+    return false;
+}
+
 bool MainWindow::save() {
     if (current_file_path_.isEmpty()) {
         return saveAs();

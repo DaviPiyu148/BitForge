@@ -77,6 +77,7 @@ private slots:
     void testUnsavedChangesPromptBranches();
     void testNewFileCancellationPreservesState();
     void testFileSwitchingPurgesAllState();
+    void testStartupFileLoading();
 };
 
 void GuiTest::initTestCase() {
@@ -1033,6 +1034,119 @@ void GuiTest::testFileSwitchingPurgesAllState() {
     QVERIFY(!window.controller()->isStale());
     QVERIFY(window.currentFilePath().isEmpty());
     QVERIFY(window.editor()->toPlainText().isEmpty());
+}
+
+void GuiTest::testStartupFileLoading() {
+    // 1. Empty arguments: no file passed -> empty untitled editor, clean document
+    {
+        MainWindow window;
+        const bool loaded = window.loadStartupFile({ "bitforge_gui" });
+        QVERIFY(!loaded);
+        QVERIFY(window.currentFilePath().isEmpty());
+        QVERIFY(window.editor()->toPlainText().isEmpty());
+        QVERIFY(!window.editor()->document()->isModified());
+        QVERIFY(window.windowTitle().contains("[Untitled]"));
+        QVERIFY(!window.windowTitle().endsWith("*"));
+        QVERIFY(!window.controller()->isAssembled());
+    }
+
+    // 2. Direct valid assembly file argument:
+    // e.g. launch_bitforge.bat examples/02_io_demo.asm
+    {
+        MainWindow window;
+        const QString io_path = resolveExamplePath("examples/02_io_demo.asm");
+        const bool loaded = window.loadStartupFile({ "bitforge_gui", io_path });
+        QVERIFY(loaded);
+
+        // Specified file appears in the editor
+        QVERIFY(!window.editor()->toPlainText().isEmpty());
+        QVERIFY(window.editor()->toPlainText().contains("OUT 0x01") ||
+                 window.editor()->toPlainText().contains("02_io_demo"));
+
+        // Path and dirty-state information are correct
+        QCOMPARE(window.currentFilePath(), io_path);
+        QVERIFY(!window.editor()->document()->isModified());
+        QVERIFY(window.windowTitle().contains("02_io_demo.asm"));
+        QVERIFY(!window.windowTitle().endsWith("*"));
+
+        // Controller state is reset / unloaded program ready for assemble
+        QVERIFY(!window.controller()->isAssembled());
+        QVERIFY(!window.controller()->isStale());
+        QCOMPARE(window.controller()->session().state(), MachineState::Ready);
+        QCOMPARE(window.controller()->session().total_steps_executed(), static_cast<std::uint64_t>(0));
+    }
+
+    // 3. File path with Windows-style backslashes (drag-and-drop / Windows CLI simulation)
+    {
+        MainWindow window;
+        const QString io_path = resolveExamplePath("examples/02_io_demo.asm");
+        const QString win_path = QDir::toNativeSeparators(io_path);
+        const bool loaded = window.loadStartupFile({ "bitforge_gui", win_path });
+        QVERIFY(loaded);
+        QVERIFY(!window.editor()->toPlainText().isEmpty());
+        QCOMPARE(window.currentFilePath(), win_path);
+        QVERIFY(!window.editor()->document()->isModified());
+        QVERIFY(!window.windowTitle().endsWith("*"));
+    }
+
+    // 4. Arguments preceded by Qt flags (e.g. -platform offscreen)
+    {
+        MainWindow window;
+        const QString arith_path = resolveExamplePath("examples/01_arithmetic.asm");
+        const bool loaded = window.loadStartupFile({ "bitforge_gui", "-platform", "offscreen", arith_path });
+        QVERIFY(loaded);
+        QVERIFY(window.editor()->toPlainText().contains("01_arithmetic") ||
+                 window.editor()->toPlainText().contains("ADD"));
+        QCOMPARE(window.currentFilePath(), arith_path);
+        QVERIFY(!window.editor()->document()->isModified());
+    }
+
+    // 5. Argument preceded by '--' delimiter
+    {
+        MainWindow window;
+        const QString io_path = resolveExamplePath("examples/02_io_demo.asm");
+        const bool loaded = window.loadStartupFile({ "bitforge_gui", "--", io_path });
+        QVERIFY(loaded);
+        QCOMPARE(window.currentFilePath(), io_path);
+        QVERIFY(!window.editor()->document()->isModified());
+    }
+
+    // 6. Nonexistent file argument: fails gracefully with message box dismissed
+    {
+        MainWindow window;
+        dismissModalMessageBox(QMessageBox::Ok);
+        const bool loaded = window.loadStartupFile({ "bitforge_gui", "C:/nonexistent_dir_bitforge_12345/missing.asm" });
+        QVERIFY(!loaded);
+        QVERIFY(window.currentFilePath().isEmpty());
+        QVERIFY(window.editor()->toPlainText().isEmpty());
+        QVERIFY(!window.editor()->document()->isModified());
+    }
+
+    // 7. Reset of prior execution session when loading new startup file
+    {
+        MainWindow window;
+        const QString arith_path = resolveExamplePath("examples/01_arithmetic.asm");
+        QVERIFY(window.loadFile(arith_path));
+        window.onAssemble();
+        QVERIFY(window.controller()->isAssembled());
+        window.onRun();
+        QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+        QVERIFY(window.controller()->session().total_steps_executed() > 0);
+
+        // Now load another file via startup file API
+        const QString io_path = resolveExamplePath("examples/02_io_demo.asm");
+        const bool loaded = window.loadStartupFile({ "bitforge_gui", io_path });
+        QVERIFY(loaded);
+
+        // Previous execution session must be completely reset
+        QVERIFY(!window.controller()->isAssembled());
+        QVERIFY(!window.controller()->isStale());
+        QCOMPARE(window.controller()->session().state(), MachineState::Ready);
+        QCOMPARE(window.controller()->session().total_steps_executed(), static_cast<std::uint64_t>(0));
+        QCOMPARE(window.currentFilePath(), io_path);
+        QVERIFY(!window.editor()->document()->isModified());
+        QVERIFY(!window.windowTitle().endsWith("*"));
+    }
 }
 
 QTEST_MAIN(GuiTest)
