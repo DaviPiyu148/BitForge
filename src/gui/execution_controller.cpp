@@ -33,6 +33,7 @@ bool ExecutionController::assemble(const QString& sourceCode) {
     // Retain program image and reload emulator state
     image_ = std::move(res.image);
     memory_.reset();
+    bus_.reset_devices();
     image_->load_into(memory_);
 
     // Preserve existing breakpoints if compatible or rebind to new image
@@ -45,11 +46,30 @@ bool ExecutionController::assemble(const QString& sourceCode) {
 
     is_assembled_ = true;
     is_stale_ = false;
+    last_stop_reason_ = debugger::StopReason::None;
 
     emit assemblySucceeded();
     emit staleChanged(false);
     emit stateChanged();
     return true;
+}
+
+void ExecutionController::unloadProgram() {
+    if (is_running_timer_) {
+        pause();
+    }
+    image_.reset();
+    is_assembled_ = false;
+    is_stale_ = false;
+    last_diagnostics_.clear();
+    last_stop_reason_ = debugger::StopReason::None;
+    bus_.reset_devices();
+    memory_.reset();
+    session_ = std::make_unique<debugger::DebuggerSession>(cpu_, nullptr);
+    session_->reset();
+    emit breakpointsChanged();
+    emit staleChanged(false);
+    emit stateChanged();
 }
 
 void ExecutionController::setStale(bool stale) noexcept {
@@ -63,11 +83,12 @@ void ExecutionController::step() {
     if (is_running_timer_) {
         pause();
     }
-    if (!is_assembled_ && !image_.has_value()) {
+    if ((!is_assembled_ && !image_.has_value()) || is_stale_) {
         return;
     }
 
     auto res = session_->step();
+    last_stop_reason_ = res.stop_reason;
     emit stateChanged();
     if (res.stop_reason != debugger::StopReason::StepCompleted) {
         emit executionStopped(res.stop_reason);
@@ -78,12 +99,13 @@ void ExecutionController::run(std::uint64_t max_steps) {
     if (is_running_timer_) {
         pause();
     }
-    if (!is_assembled_ && !image_.has_value()) {
+    if ((!is_assembled_ && !image_.has_value()) || is_stale_) {
         return;
     }
 
     remaining_budget_ = max_steps;
     is_continue_mode_ = false;
+    last_stop_reason_ = debugger::StopReason::None;
     is_running_timer_ = true;
     slice_timer_.start();
     emit stateChanged();
@@ -93,12 +115,13 @@ void ExecutionController::continueExecution(std::uint64_t max_steps) {
     if (is_running_timer_) {
         pause();
     }
-    if (!is_assembled_ && !image_.has_value()) {
+    if ((!is_assembled_ && !image_.has_value()) || is_stale_) {
         return;
     }
 
     remaining_budget_ = max_steps;
     is_continue_mode_ = true;
+    last_stop_reason_ = debugger::StopReason::None;
     is_running_timer_ = true;
     slice_timer_.start();
     emit stateChanged();
@@ -109,6 +132,7 @@ void ExecutionController::pause() {
         slice_timer_.stop();
         is_running_timer_ = false;
         is_continue_mode_ = false;
+        last_stop_reason_ = debugger::StopReason::None;
         emit executionStopped(debugger::StopReason::None);
         emit stateChanged();
     }
@@ -120,6 +144,9 @@ void ExecutionController::reset() {
         is_running_timer_ = false;
         is_continue_mode_ = false;
     }
+
+    bus_.reset_devices();
+    last_stop_reason_ = debugger::StopReason::None;
 
     if (image_.has_value()) {
         memory_.reset();
@@ -177,6 +204,7 @@ void ExecutionController::onSliceTimeout() {
         slice_timer_.stop();
         is_running_timer_ = false;
         is_continue_mode_ = false;
+        last_stop_reason_ = debugger::StopReason::BudgetExhausted;
         emit executionStopped(debugger::StopReason::BudgetExhausted);
         emit stateChanged();
         return;
@@ -206,6 +234,7 @@ void ExecutionController::onSliceTimeout() {
         res.stop_reason == debugger::StopReason::AlreadyFaulted) {
         slice_timer_.stop();
         is_running_timer_ = false;
+        last_stop_reason_ = res.stop_reason;
         emit executionStopped(res.stop_reason);
         emit stateChanged();
         return;
@@ -214,6 +243,7 @@ void ExecutionController::onSliceTimeout() {
     if (remaining_budget_ == 0) {
         slice_timer_.stop();
         is_running_timer_ = false;
+        last_stop_reason_ = debugger::StopReason::BudgetExhausted;
         emit executionStopped(debugger::StopReason::BudgetExhausted);
         emit stateChanged();
         return;

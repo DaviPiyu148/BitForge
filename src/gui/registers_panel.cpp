@@ -156,7 +156,7 @@ void RegistersPanel::refresh() {
     const auto& regs = controller_->session().registers();
     const auto& flg = controller_->session().flags();
     const auto st = controller_->session().state();
-    const auto stop_reason = controller_->session().last_stop_reason();
+    const auto stop_reason = controller_->lastStopReason();
     const auto total_steps = controller_->session().total_steps_executed();
 
     // 16-bit register values and diffs

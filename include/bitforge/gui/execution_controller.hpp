@@ -31,6 +31,7 @@ public:
 
     // Assembly lifecycle
     bool assemble(const QString& sourceCode);
+    void unloadProgram();
     [[nodiscard]] bool isAssembled() const noexcept { return is_assembled_; }
     [[nodiscard]] bool isStale() const noexcept { return is_stale_; }
     void setStale(bool stale) noexcept;
@@ -44,6 +45,7 @@ public:
     void reset();
 
     [[nodiscard]] bool isExecuting() const noexcept { return is_running_timer_; }
+    [[nodiscard]] debugger::StopReason lastStopReason() const noexcept { return last_stop_reason_; }
 
     // Breakpoint management
     debugger::BreakpointResult toggleBreakpoint(std::size_t line);
@@ -87,6 +89,7 @@ private:
     bool is_running_timer_{false};
     bool is_continue_mode_{false};
     std::uint64_t remaining_budget_{0};
+    debugger::StopReason last_stop_reason_{debugger::StopReason::None};
 
     QTimer slice_timer_;
 };

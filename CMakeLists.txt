@@ -235,6 +235,7 @@ if (BITFORGE_BUILD_GUI)
     add_test(
         NAME BitForgeGuiTests
         COMMAND bitforge_gui_tests -platform offscreen
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endif()
 

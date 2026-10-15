@@ -267,7 +267,7 @@ void MainWindow::updateUiState() {
         step_act_->setEnabled(false);
         reset_act_->setEnabled(false);
     } else {
-        const bool can_execute = (st != MachineState::Halted && st != MachineState::Faulted);
+        const bool can_execute = !is_stale && (st != MachineState::Halted && st != MachineState::Faulted);
         run_act_->setEnabled(can_execute);
         step_act_->setEnabled(can_execute);
         continue_act_->setEnabled(can_execute);
@@ -355,7 +355,7 @@ void MainWindow::newFile() {
     if (maybeSave()) {
         editor_->clear();
         setCurrentFile(QString());
-        controller_->reset();
+        controller_->unloadProgram();
     }
 }
 
@@ -384,6 +384,7 @@ bool MainWindow::loadFile(const QString& filePath) {
     QTextStream in(&file);
     editor_->setPlainText(in.readAll());
     setCurrentFile(filePath);
+    controller_->unloadProgram();
     statusBar()->showMessage(QString("Loaded %1").arg(filePath), 3000);
     return true;
 }
@@ -459,16 +460,28 @@ void MainWindow::onAssemble() {
 }
 
 void MainWindow::onRun() {
+    if (controller_->isStale()) {
+        statusBar()->showMessage("Source modified since last assembly. Please reassemble (F7) before running.", 5000);
+        return;
+    }
     const std::uint64_t budget = static_cast<std::uint64_t>(budget_spinbox_->value());
     controller_->run(budget);
 }
 
 void MainWindow::onContinue() {
+    if (controller_->isStale()) {
+        statusBar()->showMessage("Source modified since last assembly. Please reassemble (F7) before continuing.", 5000);
+        return;
+    }
     const std::uint64_t budget = static_cast<std::uint64_t>(budget_spinbox_->value());
     controller_->continueExecution(budget);
 }
 
 void MainWindow::onStep() {
+    if (controller_->isStale()) {
+        statusBar()->showMessage("Source modified since last assembly. Please reassemble (F7) before stepping.", 5000);
+        return;
+    }
     controller_->step();
 }
 

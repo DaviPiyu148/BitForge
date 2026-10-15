@@ -112,6 +112,7 @@ void DevicesPanel::setController(ExecutionController* controller) {
     controller_ = controller;
     if (controller_ != nullptr) {
         connect(controller_, &ExecutionController::stateChanged, this, &DevicesPanel::refresh);
+        connect(controller_, &ExecutionController::stateChanged, this, &DevicesPanel::showDiagnostics);
         connect(controller_, &ExecutionController::assemblySucceeded, this, &DevicesPanel::showDiagnostics);
         connect(controller_, &ExecutionController::assemblyFailed, this, &DevicesPanel::showDiagnostics);
     }
