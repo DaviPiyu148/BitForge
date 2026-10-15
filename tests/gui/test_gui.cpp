@@ -2,6 +2,11 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <QTemporaryDir>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QCloseEvent>
+#include <QTimer>
 
 using namespace bitforge;
 using namespace bitforge::gui;
@@ -13,6 +18,27 @@ QString resolveExamplePath(const QString& relPath) {
     if (QFile::exists("../" + relPath)) return "../" + relPath;
     if (QFile::exists("../../" + relPath)) return "../../" + relPath;
     return relPath;
+}
+
+void dismissModalMessageBox(QMessageBox::StandardButton button, int delay_ms = 25) {
+    QTimer::singleShot(delay_ms, [button]() {
+        auto* modal = QApplication::activeModalWidget();
+        auto* mb = qobject_cast<QMessageBox*>(modal);
+        if (!mb) {
+            for (auto* top : QApplication::topLevelWidgets()) {
+                mb = qobject_cast<QMessageBox*>(top);
+                if (mb && mb->isVisible()) break;
+            }
+        }
+        if (mb) {
+            auto* btn = mb->button(button);
+            if (btn) {
+                btn->click();
+            } else {
+                mb->accept();
+            }
+        }
+    });
 }
 
 } // namespace
@@ -45,6 +71,12 @@ private slots:
     void testRealExample02IoDemoAndNoRunDuplication();
     void testMemoryAndStackViewersRefresh();
     void testOffscreenScreenshotCapture();
+    void testDirtyStateTracking();
+    void testFileSaveAndReloadCycle();
+    void testUnwritableSavePreservesEditorContent();
+    void testUnsavedChangesPromptBranches();
+    void testNewFileCancellationPreservesState();
+    void testFileSwitchingPurgesAllState();
 };
 
 void GuiTest::initTestCase() {
@@ -682,6 +714,325 @@ void GuiTest::testOffscreenScreenshotCapture() {
     QPixmap pixmap3 = window.grab();
     bool saved3 = pixmap3.save(artifact_dir + "/gui_smoke_devices.png");
     QVERIFY(saved3);
+}
+
+void GuiTest::testDirtyStateTracking() {
+    MainWindow window;
+    QVERIFY(window.currentFilePath().isEmpty());
+    QVERIFY(!window.editor()->document()->isModified());
+    QVERIFY(window.windowTitle().contains("[Untitled]"));
+    QVERIFY(!window.windowTitle().contains("*"));
+
+    // 1. Text edit marks document modified and adds asterisk to title
+    window.editor()->insertPlainText("; Comment\n");
+    QVERIFY(window.editor()->document()->isModified());
+    QVERIFY(window.windowTitle().endsWith("*"));
+
+    // 2. Assembling code
+    window.editor()->setPlainText(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    NOP\n"
+        "    HALT\n"
+    );
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+    QVERIFY(!window.controller()->isStale());
+
+    // 3. Modifying source code after assembly marks document modified and controller stale
+    window.editor()->insertPlainText("    NOP\n");
+    QVERIFY(window.editor()->document()->isModified());
+    QVERIFY(window.controller()->isStale());
+    QVERIFY(window.windowTitle().endsWith("*"));
+
+    // 4. Setting modified(false) clears asterisk on save
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString temp_file = temp_dir.filePath("dirty_test.asm");
+    QVERIFY(window.saveFile(temp_file));
+    QVERIFY(!window.editor()->document()->isModified());
+    QVERIFY(!window.windowTitle().endsWith("*"));
+    QCOMPARE(window.currentFilePath(), temp_file);
+}
+
+void GuiTest::testFileSaveAndReloadCycle() {
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+
+    const QString path_a = temp_dir.filePath("program_a.asm");
+    const QString path_b = temp_dir.filePath("program_b.asm");
+
+    MainWindow window;
+    const QString code_a =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 42\n"
+        "    HALT\n";
+
+    window.editor()->insertPlainText(code_a);
+    QVERIFY(window.editor()->document()->isModified());
+
+    // Save to path_a
+    QVERIFY(window.saveFile(path_a));
+    QCOMPARE(window.currentFilePath(), path_a);
+    QVERIFY(!window.editor()->document()->isModified());
+    QVERIFY(window.windowTitle().contains("program_a.asm"));
+    QVERIFY(!window.windowTitle().endsWith("*"));
+
+    // Verify file content on disk
+    QFile file_a(path_a);
+    QVERIFY(file_a.open(QFile::ReadOnly | QFile::Text));
+    QCOMPARE(QString::fromUtf8(file_a.readAll()), code_a);
+    file_a.close();
+
+    // Now edit and save under path_b (Save As simulation)
+    window.editor()->appendPlainText("    ; additional comment\n");
+    const QString code_b = window.editor()->toPlainText();
+    QVERIFY(window.editor()->document()->isModified());
+    QVERIFY(window.windowTitle().endsWith("*"));
+
+    QVERIFY(window.saveFile(path_b));
+    QCOMPARE(window.currentFilePath(), path_b);
+    QVERIFY(!window.editor()->document()->isModified());
+    QVERIFY(window.windowTitle().contains("program_b.asm"));
+    QVERIFY(!window.windowTitle().endsWith("*"));
+
+    // Verify path_b has code_b on disk
+    QFile file_b(path_b);
+    QVERIFY(file_b.open(QFile::ReadOnly | QFile::Text));
+    QCOMPARE(QString::fromUtf8(file_b.readAll()), code_b);
+    file_b.close();
+
+    // Now reload path_a and verify editor restores code_a and sets path_a
+    QVERIFY(window.loadFile(path_a));
+    QCOMPARE(window.currentFilePath(), path_a);
+    QCOMPARE(window.editor()->toPlainText(), code_a);
+    QVERIFY(!window.editor()->document()->isModified());
+    QVERIFY(window.windowTitle().contains("program_a.asm"));
+    QVERIFY(!window.windowTitle().endsWith("*"));
+
+    // Now test save() directly when currentFilePath() is already set
+    window.editor()->appendPlainText("    ; quick edit\n");
+    QVERIFY(window.editor()->document()->isModified());
+    QVERIFY(window.save());
+    QVERIFY(!window.editor()->document()->isModified());
+    QCOMPARE(window.currentFilePath(), path_a);
+
+    QFile file_a_updated(path_a);
+    QVERIFY(file_a_updated.open(QFile::ReadOnly | QFile::Text));
+    QVERIFY(QString::fromUtf8(file_a_updated.readAll()).contains("; quick edit"));
+    file_a_updated.close();
+}
+
+void GuiTest::testUnwritableSavePreservesEditorContent() {
+    MainWindow window;
+    const QString code =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 99\n"
+        "    HALT\n";
+
+    window.editor()->setPlainText(code);
+    window.editor()->document()->setModified(true);
+
+    // Save to an impossible / unwritable directory path
+    dismissModalMessageBox(QMessageBox::Ok);
+    const QString invalid_path = "C:/nonexistent_dir_bitforge_12345/impossible_sub/file.asm";
+    const bool save_res = window.saveFile(invalid_path);
+    QVERIFY(!save_res);
+
+    // Verify editor contents, dirty state, and current file path are completely preserved
+    QCOMPARE(window.editor()->toPlainText(), code);
+    QVERIFY(window.currentFilePath().isEmpty());
+    QVERIFY(window.editor()->document()->isModified());
+
+    // Similarly, loading from a nonexistent file must fail gracefully and preserve contents
+    dismissModalMessageBox(QMessageBox::Ok);
+    const bool load_res = window.loadFile("C:/nonexistent_dir_bitforge_12345/missing.asm");
+    QVERIFY(!load_res);
+    QCOMPARE(window.editor()->toPlainText(), code);
+    QVERIFY(window.currentFilePath().isEmpty());
+}
+
+void GuiTest::testUnsavedChangesPromptBranches() {
+    MainWindow window;
+
+    // 1. Clean document -> maybeSave() immediately returns true
+    window.editor()->document()->setModified(false);
+    QVERIFY(window.maybeSave());
+
+    // 2. Modified document + Discard -> returns true without saving
+    window.editor()->insertPlainText("; unsaved changes\n");
+    QVERIFY(window.editor()->document()->isModified());
+
+    dismissModalMessageBox(QMessageBox::Discard);
+    bool proceed_discard = window.maybeSave();
+    QVERIFY(proceed_discard);
+    QVERIFY(window.editor()->document()->isModified()); // Contents not saved, still dirty
+
+    // 3. Modified document + Cancel -> returns false
+    dismissModalMessageBox(QMessageBox::Cancel);
+    bool proceed_cancel = window.maybeSave();
+    QVERIFY(!proceed_cancel);
+
+    // 4. Modified document with known file path + Save -> saves file and returns true
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString temp_file = temp_dir.filePath("save_branch.asm");
+    QVERIFY(window.saveFile(temp_file));
+    QVERIFY(!window.editor()->document()->isModified());
+
+    window.editor()->appendPlainText("; added line\n");
+    QVERIFY(window.editor()->document()->isModified());
+
+    dismissModalMessageBox(QMessageBox::Save);
+    bool proceed_save = window.maybeSave();
+    QVERIFY(proceed_save);
+    QVERIFY(!window.editor()->document()->isModified()); // Successfully saved to disk!
+
+    // Verify saved file on disk contains added line
+    QFile f(temp_file);
+    QVERIFY(f.open(QFile::ReadOnly | QFile::Text));
+    QVERIFY(QString::fromUtf8(f.readAll()).contains("; added line"));
+    f.close();
+
+    // 5. Close event rejection on Cancel vs acceptance on clean
+    window.editor()->appendPlainText("; new dirty line\n");
+    QVERIFY(window.editor()->document()->isModified());
+
+    dismissModalMessageBox(QMessageBox::Cancel);
+    bool closed_cancel = window.close();
+    QVERIFY(!closed_cancel); // Window rejected close event
+
+    dismissModalMessageBox(QMessageBox::Discard);
+    bool closed_discard = window.close();
+    QVERIFY(closed_discard); // Window accepted close event on Discard
+}
+
+void GuiTest::testNewFileCancellationPreservesState() {
+    MainWindow window;
+    const QString initial_code =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 77\n"
+        "    HALT\n";
+    window.editor()->setPlainText(initial_code);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+
+    // Make editor modified
+    window.editor()->insertPlainText("    ; new comment\n");
+    QVERIFY(window.editor()->document()->isModified());
+
+    // Calling newFile() and selecting Cancel in the prompt must preserve editor and assembled state
+    dismissModalMessageBox(QMessageBox::Cancel);
+    window.newFile();
+
+    QVERIFY(window.editor()->toPlainText().contains("LDI R0, 77"));
+    QVERIFY(window.editor()->document()->isModified());
+    QVERIFY(window.controller()->isAssembled());
+
+    // Calling newFile() and selecting Discard clears editor and unloads program
+    dismissModalMessageBox(QMessageBox::Discard);
+    window.newFile();
+
+    QVERIFY(window.editor()->toPlainText().isEmpty());
+    QVERIFY(!window.editor()->document()->isModified());
+    QVERIFY(!window.controller()->isAssembled());
+    QVERIFY(window.currentFilePath().isEmpty());
+}
+
+void GuiTest::testFileSwitchingPurgesAllState() {
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+
+    const QString path_a = temp_dir.filePath("file_a.asm");
+    const QString path_b = temp_dir.filePath("file_b.asm");
+
+    // Write file_a
+    {
+        QFile fa(path_a);
+        QVERIFY(fa.open(QFile::WriteOnly | QFile::Text));
+        QTextStream out(&fa);
+        out << ".ORG 0x0200\n"
+            << ".ENTRY start\n"
+            << "start:\n"
+            << "    LDI R0, 15\n"
+            << "    HALT\n";
+    }
+
+    // Write file_b
+    {
+        QFile fb(path_b);
+        QVERIFY(fb.open(QFile::WriteOnly | QFile::Text));
+        QTextStream out(&fb);
+        out << ".ORG 0x0300\n"
+            << ".ENTRY start_b\n"
+            << "start_b:\n"
+            << "    LDI R1, 30\n"
+            << "    HALT\n";
+    }
+
+    MainWindow window;
+    QVERIFY(window.loadFile(path_a));
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+    QVERIFY(window.controller()->programImage() != nullptr);
+
+    // Set breakpoint on Line 4 (LDI R0, 15)
+    auto bp_res = window.controller()->toggleBreakpoint(4);
+    QVERIFY(bp_res.success);
+    QVERIFY(window.controller()->hasLineBreakpoint(4));
+    QCOMPARE(window.controller()->session().breakpoints().size(), static_cast<std::size_t>(1));
+
+    // Single step to execute LDI R0, 15 and change machine state
+    window.onStep();
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(15));
+    QVERIFY(window.controller()->session().total_steps_executed() > 0);
+
+    // Mark stale by typing
+    window.editor()->insertPlainText("    ; modification\n");
+    QVERIFY(window.controller()->isStale());
+
+    // Switch to file_b: clean document first to prevent save prompt
+    window.editor()->document()->setModified(false);
+    QVERIFY(window.loadFile(path_b));
+
+    // VERIFY ALL STATE FROM FILE A IS COMPLETELY PURGED:
+    // 1. New file is not assembled yet
+    QVERIFY(!window.controller()->isAssembled());
+    // 2. Program image and source mappings are gone
+    QVERIFY(window.controller()->programImage() == nullptr);
+    // 3. Breakpoints from file A are purged
+    QCOMPARE(window.controller()->session().breakpoints().size(), static_cast<std::size_t>(0));
+    QVERIFY(!window.controller()->hasLineBreakpoint(4));
+    // 4. Stale flag is reset to false
+    QVERIFY(!window.controller()->isStale());
+    // 5. Diagnostics are empty
+    QVERIFY(window.controller()->diagnostics().empty());
+    // 6. CPU state and registers are reset
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(0));
+    QCOMPARE(window.controller()->session().pc(), static_cast<word_t>(0x0000));
+    QCOMPARE(window.controller()->session().total_steps_executed(), static_cast<std::uint64_t>(0));
+    QCOMPARE(window.controller()->session().trace().size(), static_cast<std::size_t>(0));
+
+    // 7. Verify diagnostic purging: assemble invalid source in file_b
+    window.editor()->setPlainText("INVALID_DIRECTIVE 123\n");
+    window.onAssemble();
+    QVERIFY(!window.controller()->diagnostics().empty());
+
+    // Call newFile() to verify diagnostics table and controller diagnostics are cleared
+    window.editor()->document()->setModified(false);
+    window.newFile();
+    QVERIFY(window.controller()->diagnostics().empty());
+    QVERIFY(!window.controller()->isAssembled());
+    QVERIFY(!window.controller()->isStale());
+    QVERIFY(window.currentFilePath().isEmpty());
+    QVERIFY(window.editor()->toPlainText().isEmpty());
 }
 
 QTEST_MAIN(GuiTest)

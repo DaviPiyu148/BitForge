@@ -30,7 +30,9 @@ public:
     [[nodiscard]] CodeEditor* editor() const noexcept { return editor_; }
 
     bool loadFile(const QString& filePath);
+    bool saveFile(const QString& filePath);
     bool maybeSave();
+    [[nodiscard]] const QString& currentFilePath() const noexcept { return current_file_path_; }
 
 public slots:
     void newFile();
@@ -56,7 +58,6 @@ private:
     void setupUi();
     void setupMenusAndToolbars();
     void setupStatusBar();
-    bool saveFile(const QString& filePath);
     void setCurrentFile(const QString& filePath);
 
     ExecutionController* controller_;
