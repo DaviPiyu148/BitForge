@@ -119,6 +119,7 @@ add_executable(bitforge_tests
     tests/unit/test_assembler.cpp
     tests/unit/test_cli.cpp
     tests/unit/test_debugger.cpp
+    tests/unit/test_example_library.cpp
 )
 
 target_include_directories(bitforge_tests
