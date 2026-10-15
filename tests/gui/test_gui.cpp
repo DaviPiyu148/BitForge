@@ -7,6 +7,8 @@
 #include <QPushButton>
 #include <QCloseEvent>
 #include <QTimer>
+#include <QDockWidget>
+#include <QTabWidget>
 
 using namespace bitforge;
 using namespace bitforge::gui;
@@ -78,6 +80,14 @@ private slots:
     void testNewFileCancellationPreservesState();
     void testFileSwitchingPurgesAllState();
     void testStartupFileLoading();
+    void testSevenSegmentDisplayVectorRendering();
+    void testSevenSegmentDisplayInDevicesPanel();
+    void testBitViewWidgetVisualization();
+    void testInstructionInspectorDecoding();
+    void testExecutionSpeedModesAndBatching();
+    void testRunFromEntryVsContinueSemantics();
+    void testBreakpointErgonomicsAndGutterF9();
+    void testVirtualDevicesTabTitleNoScrollClipping();
 };
 
 void GuiTest::initTestCase() {
@@ -715,6 +725,23 @@ void GuiTest::testOffscreenScreenshotCapture() {
     QPixmap pixmap3 = window.grab();
     bool saved3 = pixmap3.save(artifact_dir + "/gui_smoke_devices.png");
     QVERIFY(saved3);
+
+    // Switch tabs to show Bit Visualization and Instruction Inspector
+    for (auto* tw : tab_widgets) {
+        for (int i = 0; i < tw->count(); ++i) {
+            if (tw->tabText(i).contains("CPU Registers")) {
+                tw->setCurrentIndex(i);
+            } else if (tw->tabText(i).contains("Bit Visualization")) {
+                tw->setCurrentIndex(i);
+            } else if (tw->tabText(i).contains("Instruction Inspector")) {
+                tw->setCurrentIndex(i);
+            }
+        }
+    }
+
+    QPixmap pixmap4 = window.grab();
+    bool saved4 = pixmap4.save(artifact_dir + "/gui_smoke_visualization.png");
+    QVERIFY(saved4);
 }
 
 void GuiTest::testDirtyStateTracking() {
@@ -1147,6 +1174,325 @@ void GuiTest::testStartupFileLoading() {
         QVERIFY(!window.editor()->document()->isModified());
         QVERIFY(!window.windowTitle().endsWith("*"));
     }
+}
+
+void GuiTest::testSevenSegmentDisplayVectorRendering() {
+    SevenSegmentDisplay display;
+    QVERIFY(!display.hasValue());
+    QCOMPARE(display.value(), static_cast<byte_t>(0));
+
+    // Off-state rendering
+    QPixmap pixmap(200, 80);
+    pixmap.fill(Qt::black);
+    display.resize(200, 80);
+    display.render(&pixmap);
+    QVERIFY(!pixmap.isNull());
+
+    // Genuine zero
+    display.setValue(0);
+    QVERIFY(display.hasValue());
+    QCOMPARE(display.value(), static_cast<byte_t>(0));
+    display.render(&pixmap);
+
+    // Single digit 7
+    display.setValue(7);
+    QVERIFY(display.hasValue());
+    QCOMPARE(display.value(), static_cast<byte_t>(7));
+
+    // Two digits 42
+    display.setValue(42);
+    QVERIFY(display.hasValue());
+    QCOMPARE(display.value(), static_cast<byte_t>(42));
+
+    // Three digits 255
+    display.setValue(255);
+    QVERIFY(display.hasValue());
+    QCOMPARE(display.value(), static_cast<byte_t>(255));
+
+    // Clear value
+    display.clearValue();
+    QVERIFY(!display.hasValue());
+}
+
+void GuiTest::testSevenSegmentDisplayInDevicesPanel() {
+    MainWindow window;
+    auto* dev_panel = window.devicesPanel();
+    QVERIFY(dev_panel != nullptr);
+    auto* seg_display = dev_panel->sevenSegmentDisplay();
+    QVERIFY(seg_display != nullptr);
+    QVERIFY(!seg_display->hasValue());
+
+    // Assemble program that outputs 123 to Port 0x02
+    const QString code =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 123\n"
+        "    OUT 0x02, R0\n"
+        "    HALT\n";
+    window.editor()->setPlainText(code);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+
+    // Step 1: LDI
+    window.onStep();
+    QVERIFY(!seg_display->hasValue());
+
+    // Step 2: OUT 0x02, R0
+    window.onStep();
+    QVERIFY(seg_display->hasValue());
+    QCOMPARE(seg_display->value(), static_cast<byte_t>(123));
+
+    // Input FIFO status check
+    QVERIFY(dev_panel->fifoStatusLabel() != nullptr);
+    QVERIFY(dev_panel->fifoStatusLabel()->text().contains("Empty"));
+
+    // Reset CPU
+    window.onReset();
+    QVERIFY(!seg_display->hasValue());
+}
+
+void GuiTest::testBitViewWidgetVisualization() {
+    MainWindow window;
+    auto* bit_view = window.registersPanel()->bitView();
+    QVERIFY(bit_view != nullptr);
+
+    // Offscreen render check
+    QPixmap pixmap(300, 400);
+    pixmap.fill(Qt::black);
+    bit_view->resize(300, 400);
+    bit_view->render(&pixmap);
+    QVERIFY(!pixmap.isNull());
+
+    // Assemble and run
+    const QString code =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 0xAA\n"
+        "    LDI R1, 0x55\n"
+        "    HALT\n";
+    window.editor()->setPlainText(code);
+    window.onAssemble();
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 1000);
+
+    // Refresh and check values match registers
+    QCOMPARE(window.controller()->session().r(0), static_cast<byte_t>(0xAA));
+    QCOMPARE(window.controller()->session().r(1), static_cast<byte_t>(0x55));
+    bit_view->render(&pixmap);
+}
+
+void GuiTest::testInstructionInspectorDecoding() {
+    MainWindow window;
+    auto* inspector = window.instructionInspector();
+    QVERIFY(inspector != nullptr);
+
+    const QString code =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 42\n"
+        "    ADD R0, R1\n"
+        "    JZ start\n"
+        "    HALT\n";
+    window.editor()->setPlainText(code);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+
+    // Inspector decoding at initial PC (0x0200)
+    inspector->refresh();
+    auto info = inspector->decodedInfo();
+    QCOMPARE(info.mnemonic, QString("LDI"));
+    QCOMPARE(info.instruction_size, static_cast<std::size_t>(3));
+    QVERIFY(info.full_disassembly.contains("LDI"));
+
+    // Step once
+    window.onStep();
+    inspector->refresh();
+    info = inspector->decodedInfo();
+    QCOMPARE(info.mnemonic, QString("ADD"));
+
+    // Check last executed step trace summary
+    auto last_step = inspector->lastExecutedStep();
+    QVERIFY(last_step.has_value());
+    QCOMPARE(last_step->mnemonic, QString("LDI"));
+    QCOMPARE(last_step->step_number, static_cast<std::uint64_t>(1));
+
+    // Step again to ADD
+    window.onStep();
+    inspector->refresh();
+    info = inspector->decodedInfo();
+    QCOMPARE(info.mnemonic, QString("JZ"));
+    QVERIFY(info.branch_evaluation.toLower().contains("taken"));
+}
+
+void GuiTest::testExecutionSpeedModesAndBatching() {
+    MainWindow window;
+    auto* combo = window.speedComboBox();
+    QVERIFY(combo != nullptr);
+    QCOMPARE(combo->count(), 4);
+    QCOMPARE(combo->currentIndex(), 3); // Turbo by default
+
+    QSignalSpy speedSpy(window.controller(), &ExecutionController::speedChanged);
+
+    // Change to Slow
+    combo->setCurrentIndex(0);
+    QCOMPARE(window.controller()->speed(), ExecutionSpeed::Slow);
+    QCOMPARE(speedSpy.count(), 1);
+
+    // Change to Normal
+    combo->setCurrentIndex(1);
+    QCOMPARE(window.controller()->speed(), ExecutionSpeed::Normal);
+    QCOMPARE(speedSpy.count(), 2);
+
+    // Change to Fast
+    combo->setCurrentIndex(2);
+    QCOMPARE(window.controller()->speed(), ExecutionSpeed::Fast);
+    QCOMPARE(speedSpy.count(), 3);
+
+    // Change to Turbo
+    combo->setCurrentIndex(3);
+    QCOMPARE(window.controller()->speed(), ExecutionSpeed::Turbo);
+    QCOMPARE(speedSpy.count(), 4);
+
+    // Fast program run under Fast speed with cumulative budget
+    const QString code =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 10\n"
+        "loop:\n"
+        "    DEC R0\n"
+        "    JNZ loop\n"
+        "    HALT\n";
+    window.editor()->setPlainText(code);
+    window.onAssemble();
+    window.controller()->setSpeed(ExecutionSpeed::Fast);
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 3000);
+    QCOMPARE(window.controller()->session().r(0), static_cast<byte_t>(0));
+
+    // Reset back to Turbo
+    window.controller()->setSpeed(ExecutionSpeed::Turbo);
+}
+
+void GuiTest::testRunFromEntryVsContinueSemantics() {
+    MainWindow window;
+    const QString code =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 10\n"
+        "    LDI R1, 20\n"
+        "    ADD R0, R1\n"
+        "    HALT\n";
+    window.editor()->setPlainText(code);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+
+    // Place breakpoint on line 5 (LDI R1, 20)
+    auto bp_res = window.controller()->toggleBreakpoint(5);
+    QVERIFY(bp_res.success);
+
+    // Run from Entry (F5): should execute line 4 (LDI R0, 10) and stop before line 5
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->lastStopReason(), debugger::StopReason::BreakpointHit, 1000);
+    QVERIFY(!window.controller()->isExecuting());
+    QCOMPARE(window.controller()->session().r(0), static_cast<byte_t>(10));
+    QCOMPARE(window.controller()->session().r(1), static_cast<byte_t>(0));
+
+    // Continue (F8): strictly resumes from current PC without resetting
+    window.onContinue();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->lastStopReason(), debugger::StopReason::Halted, 1000);
+    QCOMPARE(window.controller()->session().state(), MachineState::Halted);
+    QCOMPARE(window.controller()->session().r(0), static_cast<byte_t>(30));
+    QCOMPARE(window.controller()->session().r(1), static_cast<byte_t>(20));
+
+    // Continue while halted: must not advance
+    const auto steps_halted = window.controller()->session().total_steps_executed();
+    window.onContinue();
+    QCOMPARE(window.controller()->session().total_steps_executed(), steps_halted);
+    QCOMPARE(window.controller()->session().state(), MachineState::Halted);
+
+    // Run from Entry again (F5): resets CPU to entry point and runs up to the breakpoint again!
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->lastStopReason(), debugger::StopReason::BreakpointHit, 1000);
+    QVERIFY(!window.controller()->isExecuting());
+    QCOMPARE(window.controller()->session().r(0), static_cast<byte_t>(10));
+}
+
+void GuiTest::testBreakpointErgonomicsAndGutterF9() {
+    MainWindow window;
+    const QString code =
+        "; Comment line 1\n"
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 42\n"
+        "    HALT\n";
+    window.editor()->setPlainText(code);
+    window.onAssemble();
+
+    // 1. Line 1 is a comment -> reject breakpoint
+    auto res_comment = window.controller()->toggleBreakpoint(1);
+    QVERIFY(!res_comment.success);
+
+    // 2. Line 2 is .ORG directive -> reject breakpoint
+    auto res_org = window.controller()->toggleBreakpoint(2);
+    QVERIFY(!res_org.success);
+
+    // 3. Line 5 is instruction -> accept breakpoint
+    window.editor()->gotoLine(5);
+    window.toggleBreakpointAction()->trigger();
+    QVERIFY(window.controller()->hasLineBreakpoint(5));
+
+    // Check BreakpointsPanel has the row with 4 columns
+    auto* bp_panel = window.breakpointsPanel();
+    QVERIFY(bp_panel != nullptr);
+    QCOMPARE(bp_panel->table()->rowCount(), 1);
+    QCOMPARE(bp_panel->table()->item(0, 0)->text(), QString("5"));
+    QCOMPARE(bp_panel->table()->item(0, 1)->text().toUpper(), QString("0X0200"));
+    QVERIFY(bp_panel->table()->item(0, 2)->text().contains("LDI"));
+    QCOMPARE(bp_panel->table()->item(0, 3)->text(), QString("Active"));
+
+    // Double-click breakpoint jumps editor to line 5
+    QSignalSpy jumpSpy(bp_panel, &BreakpointsPanel::breakpointDoubleClicked);
+    emit bp_panel->table()->cellDoubleClicked(0, 0);
+    QCOMPARE(jumpSpy.count(), 1);
+    QCOMPARE(jumpSpy.takeFirst().at(0).toULongLong(), static_cast<unsigned long long>(5));
+
+    // 4. Clear all breakpoints action
+    window.clearBreakpointsAction()->trigger();
+    QVERIFY(!window.controller()->hasLineBreakpoint(5));
+    QCOMPARE(bp_panel->table()->rowCount(), 0);
+}
+
+void GuiTest::testVirtualDevicesTabTitleNoScrollClipping() {
+    MainWindow window;
+
+    // Verify dock title escaping
+    auto* right_dock = window.findChild<QDockWidget*>("RightDock");
+    QVERIFY(right_dock != nullptr);
+    QCOMPARE(right_dock->windowTitle(), QString("Registers && Virtual Devices"));
+
+    auto* bottom_dock = window.findChild<QDockWidget*>("BottomDock");
+    QVERIFY(bottom_dock != nullptr);
+    QCOMPARE(bottom_dock->windowTitle(), QString("Memory, Stack && Debug Inspection"));
+
+    // Verify DevicesPanel tab titles do not include & accelerator or long text
+    auto* dev_panel = window.devicesPanel();
+    QVERIFY(dev_panel != nullptr);
+    auto* tabs = dev_panel->findChild<QTabWidget*>();
+    QVERIFY(tabs != nullptr);
+    QCOMPARE(tabs->count(), 3);
+    QCOMPARE(tabs->tabText(0), QString("Text Console"));
+    QCOMPARE(tabs->tabText(1), QString("Numeric Console"));
+    QCOMPARE(tabs->tabText(2), QString("Diagnostics"));
+
+    // Verify shortcuts dialog action exists and works
+    dismissModalMessageBox(QMessageBox::Ok);
+    window.showKeyboardShortcuts();
 }
 
 QTEST_MAIN(GuiTest)

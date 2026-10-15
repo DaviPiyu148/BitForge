@@ -107,6 +107,13 @@ std::size_t SystemBus::input_fifo_size() const noexcept {
     return input_fifo_.size();
 }
 
+std::optional<byte_t> SystemBus::peek_input_fifo() const noexcept {
+    if (input_fifo_.empty()) {
+        return std::nullopt;
+    }
+    return input_fifo_.front();
+}
+
 bool SystemBus::has_input_underflow() const noexcept {
     return input_underflow_count_ > 0;
 }

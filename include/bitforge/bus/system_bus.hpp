@@ -53,6 +53,7 @@ public:
     void push_input_fifo(const std::vector<byte_t>& bytes);
     void push_input_fifo(std::string_view str);
     [[nodiscard]] std::size_t input_fifo_size() const noexcept;
+    [[nodiscard]] std::optional<byte_t> peek_input_fifo() const noexcept;
     [[nodiscard]] bool has_input_underflow() const noexcept;
     [[nodiscard]] std::size_t input_underflow_count() const noexcept;
     void clear_input_fifo() noexcept;

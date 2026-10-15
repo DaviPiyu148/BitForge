@@ -8,6 +8,8 @@
 #include <QMouseEvent>
 #include <QPolygon>
 #include <QPoint>
+#include <QMenu>
+#include <QContextMenuEvent>
 
 namespace bitforge::gui {
 
@@ -238,7 +240,7 @@ void CodeEditor::lineNumberAreaMousePressEvent(QMouseEvent* event) {
         int top = static_cast<int>(blockBoundingGeometry(block).translated(contentOffset()).top());
         int bottom = top + static_cast<int>(blockBoundingRect(block).height());
 
-        while (block.isValid() && top <= event->pos().y()) {
+                while (block.isValid() && top <= event->pos().y()) {
             if (event->pos().y() >= top && event->pos().y() <= bottom) {
                 const std::size_t line = static_cast<std::size_t>(block.blockNumber() + 1);
                 if (controller_ != nullptr) {
@@ -256,6 +258,64 @@ void CodeEditor::lineNumberAreaMousePressEvent(QMouseEvent* event) {
             bottom = top + static_cast<int>(blockBoundingRect(block).height());
         }
     }
+}
+
+std::size_t CodeEditor::currentCursorLine() const noexcept {
+    return static_cast<std::size_t>(textCursor().blockNumber() + 1);
+}
+
+void CodeEditor::toggleBreakpointAtCursor() {
+    const std::size_t line = currentCursorLine();
+    if (controller_ != nullptr) {
+        auto res = controller_->toggleBreakpoint(line);
+        if (!res.success) {
+            const QPoint pos = mapToGlobal(cursorRect().bottomRight());
+            QToolTip::showText(pos, QString::fromStdString(res.message), this);
+        }
+    }
+}
+
+void CodeEditor::contextMenuEvent(QContextMenuEvent* event) {
+    auto* menu = createStandardContextMenu();
+    menu->addSeparator();
+
+    auto* toggle_bp = menu->addAction(tr("Toggle Breakpoint (F9)"));
+    connect(toggle_bp, &QAction::triggered, this, &CodeEditor::toggleBreakpointAtCursor);
+
+    menu->exec(event->globalPos());
+    delete menu;
+}
+
+void CodeEditor::lineNumberAreaContextMenuEvent(QContextMenuEvent* event) {
+    QTextBlock block = firstVisibleBlock();
+    int top = static_cast<int>(blockBoundingGeometry(block).translated(contentOffset()).top());
+    int bottom = top + static_cast<int>(blockBoundingRect(block).height());
+
+    std::size_t target_line = 0;
+    while (block.isValid() && top <= event->pos().y()) {
+        if (event->pos().y() >= top && event->pos().y() <= bottom) {
+            target_line = static_cast<std::size_t>(block.blockNumber() + 1);
+            break;
+        }
+        block = block.next();
+        top = bottom;
+        bottom = top + static_cast<int>(blockBoundingRect(block).height());
+    }
+
+    if (target_line == 0) return;
+
+    QMenu menu(this);
+    auto* toggle_bp = menu.addAction(tr("Toggle Breakpoint on Line %1 (F9)").arg(target_line));
+    connect(toggle_bp, &QAction::triggered, this, [this, target_line]() {
+        if (controller_ != nullptr) {
+            auto res = controller_->toggleBreakpoint(target_line);
+            if (!res.success) {
+                QToolTip::showText(QCursor::pos(), QString::fromStdString(res.message), line_number_area_);
+            }
+        }
+    });
+
+    menu.exec(event->globalPos());
 }
 
 } // namespace bitforge::gui

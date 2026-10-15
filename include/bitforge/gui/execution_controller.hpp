@@ -21,6 +21,13 @@
 
 namespace bitforge::gui {
 
+enum class ExecutionSpeed {
+    Slow,    // ~2 inst/sec (500 ms delay, 1 step/tick)
+    Normal,  // ~10 inst/sec (100 ms delay, 1 step/tick)
+    Fast,    // ~100 inst/sec (50 ms delay, 5 steps/tick)
+    Turbo    // Maximum throughput (0 ms delay, up to 10,000 steps/tick)
+};
+
 // Manages emulator hardware, debugger session, assembly lifecycle, and timed execution slices
 class ExecutionController : public QObject {
     Q_OBJECT
@@ -40,9 +47,14 @@ public:
     // Execution control
     void step();
     void run(std::uint64_t max_steps);
+    void runFromEntry(std::uint64_t max_steps);
     void continueExecution(std::uint64_t max_steps);
     void pause();
     void reset();
+
+    // Speed control
+    void setSpeed(ExecutionSpeed speed);
+    [[nodiscard]] ExecutionSpeed speed() const noexcept { return speed_; }
 
     [[nodiscard]] bool isExecuting() const noexcept { return is_running_timer_; }
     [[nodiscard]] debugger::StopReason lastStopReason() const noexcept { return last_stop_reason_; }
@@ -51,6 +63,7 @@ public:
     debugger::BreakpointResult toggleBreakpoint(std::size_t line);
     debugger::BreakpointResult removeBreakpoint(word_t address);
     void clearAllBreakpoints();
+    void clearTrace() noexcept;
     [[nodiscard]] bool hasLineBreakpoint(std::size_t line) const;
 
     // Component inspection accessors
@@ -70,6 +83,7 @@ signals:
     void assemblyFailed(const std::vector<assembler::Diagnostic>& diagnostics);
     void staleChanged(bool is_stale);
     void breakpointsChanged();
+    void speedChanged(ExecutionSpeed speed);
 
 private slots:
     void onSliceTimeout();
@@ -92,6 +106,7 @@ private:
     debugger::StopReason last_stop_reason_{debugger::StopReason::None};
 
     QTimer slice_timer_;
+    ExecutionSpeed speed_{ExecutionSpeed::Turbo};
 };
 
 } // namespace bitforge::gui

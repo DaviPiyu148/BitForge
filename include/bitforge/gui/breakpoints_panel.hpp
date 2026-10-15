@@ -18,9 +18,15 @@ public:
     ~BreakpointsPanel() override = default;
 
     void setController(ExecutionController* controller);
+    [[nodiscard]] QTableWidget* table() const noexcept { return table_; }
+    [[nodiscard]] QPushButton* removeButton() const noexcept { return remove_btn_; }
+    [[nodiscard]] QPushButton* clearAllButton() const noexcept { return clear_all_btn_; }
 
 public slots:
     void refresh();
+
+signals:
+    void breakpointDoubleClicked(std::size_t line);
 
 private slots:
     void onRemoveSelected();

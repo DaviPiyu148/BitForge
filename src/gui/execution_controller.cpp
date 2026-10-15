@@ -4,14 +4,89 @@
 
 namespace bitforge::gui {
 
+namespace {
+
+int timerIntervalForSpeed(ExecutionSpeed speed) {
+    switch (speed) {
+        case ExecutionSpeed::Slow:   return 500; // 500 ms (~2 inst/sec)
+        case ExecutionSpeed::Normal: return 100; // 100 ms (~10 inst/sec)
+        case ExecutionSpeed::Fast:   return 50;  // 50 ms (~100 inst/sec with 5 steps/tick)
+        case ExecutionSpeed::Turbo:  return 0;   // 0 ms (max throughput)
+    }
+    return 0;
+}
+
+std::uint64_t sliceBatchForSpeed(ExecutionSpeed speed) {
+    switch (speed) {
+        case ExecutionSpeed::Slow:   return 1;
+        case ExecutionSpeed::Normal: return 1;
+        case ExecutionSpeed::Fast:   return 5;
+        case ExecutionSpeed::Turbo:  return 10000;
+    }
+    return 10000;
+}
+
+} // namespace
+
 ExecutionController::ExecutionController(QObject* parent)
     : QObject(parent),
       session_(std::make_unique<debugger::DebuggerSession>(cpu_, nullptr)) {
     session_->reset();
 
     slice_timer_.setSingleShot(false);
-    slice_timer_.setInterval(0); // Run slices as fast as Qt event loop yields
+    slice_timer_.setInterval(0); // Default Turbo
     connect(&slice_timer_, &QTimer::timeout, this, &ExecutionController::onSliceTimeout);
+}
+
+void ExecutionController::setSpeed(ExecutionSpeed speed) {
+    if (speed_ != speed) {
+        speed_ = speed;
+        slice_timer_.setInterval(timerIntervalForSpeed(speed_));
+        emit speedChanged(speed_);
+    }
+}
+
+void ExecutionController::runFromEntry(std::uint64_t max_steps) {
+    reset();
+    run(max_steps);
+}
+
+void ExecutionController::run(std::uint64_t max_steps) {
+    if (is_running_timer_) {
+        pause();
+    }
+    if ((!is_assembled_ && !image_.has_value()) || is_stale_) {
+        return;
+    }
+
+    if (session_->state() == MachineState::Halted || session_->state() == MachineState::Faulted) {
+        reset();
+    }
+
+    remaining_budget_ = max_steps;
+    is_continue_mode_ = false;
+    last_stop_reason_ = debugger::StopReason::None;
+    is_running_timer_ = true;
+    slice_timer_.setInterval(timerIntervalForSpeed(speed_));
+    slice_timer_.start();
+    emit stateChanged();
+}
+
+void ExecutionController::continueExecution(std::uint64_t max_steps) {
+    if (is_running_timer_) {
+        pause();
+    }
+    if ((!is_assembled_ && !image_.has_value()) || is_stale_) {
+        return;
+    }
+
+    remaining_budget_ = max_steps;
+    is_continue_mode_ = true;
+    last_stop_reason_ = debugger::StopReason::None;
+    is_running_timer_ = true;
+    slice_timer_.setInterval(timerIntervalForSpeed(speed_));
+    slice_timer_.start();
+    emit stateChanged();
 }
 
 bool ExecutionController::assemble(const QString& sourceCode) {
@@ -95,38 +170,6 @@ void ExecutionController::step() {
     }
 }
 
-void ExecutionController::run(std::uint64_t max_steps) {
-    if (is_running_timer_) {
-        pause();
-    }
-    if ((!is_assembled_ && !image_.has_value()) || is_stale_) {
-        return;
-    }
-
-    remaining_budget_ = max_steps;
-    is_continue_mode_ = false;
-    last_stop_reason_ = debugger::StopReason::None;
-    is_running_timer_ = true;
-    slice_timer_.start();
-    emit stateChanged();
-}
-
-void ExecutionController::continueExecution(std::uint64_t max_steps) {
-    if (is_running_timer_) {
-        pause();
-    }
-    if ((!is_assembled_ && !image_.has_value()) || is_stale_) {
-        return;
-    }
-
-    remaining_budget_ = max_steps;
-    is_continue_mode_ = true;
-    last_stop_reason_ = debugger::StopReason::None;
-    is_running_timer_ = true;
-    slice_timer_.start();
-    emit stateChanged();
-}
-
 void ExecutionController::pause() {
     if (is_running_timer_) {
         slice_timer_.stop();
@@ -188,6 +231,13 @@ void ExecutionController::clearAllBreakpoints() {
     emit breakpointsChanged();
 }
 
+void ExecutionController::clearTrace() noexcept {
+    if (session_ != nullptr) {
+        session_->clear_trace();
+        emit stateChanged();
+    }
+}
+
 bool ExecutionController::hasLineBreakpoint(std::size_t line) const {
     if (!image_.has_value()) return false;
     auto resolution = image_->source_map().resolve_line_breakpoint(line);
@@ -210,7 +260,8 @@ void ExecutionController::onSliceTimeout() {
         return;
     }
 
-    const std::uint64_t slice_steps = std::min(remaining_budget_, kSliceStepSize);
+    const std::uint64_t max_batch = sliceBatchForSpeed(speed_);
+    const std::uint64_t slice_steps = std::min(remaining_budget_, max_batch);
     debugger::ExecutionResult res;
 
     if (is_continue_mode_) {

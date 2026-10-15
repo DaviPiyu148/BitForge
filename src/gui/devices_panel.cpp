@@ -47,7 +47,27 @@ DevicesPanel::DevicesPanel(QWidget* parent)
 
     main_layout->addWidget(led_group);
 
-    // 2. Tab Widget for Consoles and Diagnostics
+    // 2. Group: 7-Segment Numeric Display (Port 0x02)
+    auto* seg_group = new QGroupBox("Numeric Display (Port 0x02)", this);
+    auto* seg_layout = new QVBoxLayout(seg_group);
+    seg_layout->setContentsMargins(8, 8, 8, 8);
+    seven_seg_display_ = new SevenSegmentDisplay(seg_group);
+    seven_seg_display_->setMinimumHeight(65);
+    seg_layout->addWidget(seven_seg_display_);
+
+    main_layout->addWidget(seg_group);
+
+    // 3. Group: Input FIFO (Port 0x00)
+    auto* fifo_group = new QGroupBox("Input FIFO (Port 0x00)", this);
+    auto* fifo_layout = new QHBoxLayout(fifo_group);
+    fifo_layout->setContentsMargins(8, 8, 8, 8);
+    fifo_status_label_ = new QLabel("Buffer: Empty (0 bytes queued)", fifo_group);
+    fifo_status_label_->setFont(mono_font);
+    fifo_layout->addWidget(fifo_status_label_);
+
+    main_layout->addWidget(fifo_group);
+
+    // 4. Tab Widget for Consoles and Diagnostics
     auto* tabs = new QTabWidget(this);
 
     // Tab A: Text Console (Port 0x01)
@@ -64,7 +84,7 @@ DevicesPanel::DevicesPanel(QWidget* parent)
     connect(btn_clear_text, &QPushButton::clicked, text_console_, &QPlainTextEdit::clear);
     text_layout->addWidget(btn_clear_text, 0, Qt::AlignRight);
 
-    tabs->addTab(text_tab, "Text Console (0x01)");
+    tabs->addTab(text_tab, "Text Console");
 
     // Tab B: Numeric Console (Port 0x02)
     auto* num_tab = new QWidget(tabs);
@@ -80,9 +100,9 @@ DevicesPanel::DevicesPanel(QWidget* parent)
     connect(btn_clear_num, &QPushButton::clicked, numeric_console_, &QPlainTextEdit::clear);
     num_layout->addWidget(btn_clear_num, 0, Qt::AlignRight);
 
-    tabs->addTab(num_tab, "Numeric Console (0x02)");
+    tabs->addTab(num_tab, "Numeric Console");
 
-    // Tab C: Diagnostics & Faults
+    // Tab C: Diagnostics
     auto* diag_tab = new QWidget(tabs);
     auto* diag_layout = new QVBoxLayout(diag_tab);
     diag_layout->setContentsMargins(4, 4, 4, 4);
@@ -100,7 +120,7 @@ DevicesPanel::DevicesPanel(QWidget* parent)
     diag_table_->horizontalHeader()->setStretchLastSection(true);
 
     diag_layout->addWidget(diag_table_);
-    tabs->addTab(diag_tab, "Diagnostics & Faults");
+    tabs->addTab(diag_tab, "Diagnostics");
 
     connect(diag_table_, &QTableWidget::cellDoubleClicked, this, &DevicesPanel::onDiagnosticTableClicked);
     connect(diag_table_, &QTableWidget::cellClicked, this, &DevicesPanel::onDiagnosticTableClicked);
@@ -145,15 +165,43 @@ void DevicesPanel::refresh() {
         QString("0x%1 (0b%2)").arg(led_val, 2, 16, QLatin1Char('0')).toUpper().arg(bin_str)
     );
 
-    // 2. Update Text Console
+    // 2. Update 7-Segment Display
+    if (seven_seg_display_ != nullptr) {
+        const auto& num_vals = controller_->bus().numeric_values();
+        if (num_vals.empty()) {
+            seven_seg_display_->clearValue();
+        } else {
+            seven_seg_display_->setValue(num_vals.back());
+        }
+    }
+
+    // 3. Update Input FIFO status
+    if (fifo_status_label_ != nullptr) {
+        const std::size_t fifo_sz = controller_->bus().input_fifo_size();
+        const auto next_b = controller_->bus().peek_input_fifo();
+        if (fifo_sz == 0) {
+            fifo_status_label_->setText("Buffer: Empty (0 bytes queued)");
+        } else if (next_b.has_value()) {
+            fifo_status_label_->setText(
+                QString("Buffer: %1 bytes queued | Next: 0x%2 (%3)")
+                    .arg(fifo_sz)
+                    .arg(*next_b, 2, 16, QLatin1Char('0')).toUpper()
+                    .arg(*next_b)
+            );
+        } else {
+            fifo_status_label_->setText(QString("Buffer: %1 bytes queued").arg(fifo_sz));
+        }
+    }
+
+    // 4. Update Text Console
     text_console_->setPlainText(QString::fromStdString(controller_->bus().text_output()));
     text_console_->moveCursor(QTextCursor::End);
 
-    // 3. Update Numeric Console
+    // 5. Update Numeric Console
     numeric_console_->setPlainText(QString::fromStdString(controller_->bus().numeric_output()));
     numeric_console_->moveCursor(QTextCursor::End);
 
-    // 4. Update Faults in Diagnostics if CPU is faulted
+    // 6. Update Faults in Diagnostics if CPU is faulted
     if (controller_->session().state() == MachineState::Faulted &&
         controller_->cpu().last_fault().has_fault()) {
         showDiagnostics();

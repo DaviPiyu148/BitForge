@@ -1,5 +1,6 @@
 #include "bitforge/gui/breakpoints_panel.hpp"
 #include "bitforge/gui/execution_controller.hpp"
+#include "bitforge/gui/instruction_inspector.hpp"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -16,7 +17,7 @@ BreakpointsPanel::BreakpointsPanel(QWidget* parent)
 
     const QFont mono_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
 
-    table_ = new QTableWidget(0, 3, this);
+    table_ = new QTableWidget(0, 4, this);
     table_->setFont(mono_font);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -24,7 +25,7 @@ BreakpointsPanel::BreakpointsPanel(QWidget* parent)
     table_->verticalHeader()->setVisible(false);
 
     QStringList headers;
-    headers << "Address" << "Source Location" << "Instruction";
+    headers << "Line" << "Address" << "Instruction" << "Status";
     table_->setHorizontalHeaderLabels(headers);
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setStretchLastSection(true);
@@ -43,6 +44,17 @@ BreakpointsPanel::BreakpointsPanel(QWidget* parent)
 
     connect(remove_btn_, &QPushButton::clicked, this, &BreakpointsPanel::onRemoveSelected);
     connect(clear_all_btn_, &QPushButton::clicked, this, &BreakpointsPanel::onClearAll);
+
+    connect(table_, &QTableWidget::cellDoubleClicked, this, [this](int row, int /*col*/) {
+        if (row < 0 || row >= table_->rowCount()) return;
+        auto* line_item = table_->item(row, 0);
+        if (line_item == nullptr) return;
+        bool ok = false;
+        std::size_t line = line_item->text().toULongLong(&ok);
+        if (ok && line > 0) {
+            emit breakpointDoubleClicked(line);
+        }
+    });
 }
 
 void BreakpointsPanel::setController(ExecutionController* controller) {
@@ -66,31 +78,39 @@ void BreakpointsPanel::refresh() {
         const int row = table_->rowCount();
         table_->insertRow(row);
 
-        auto* item_addr = new QTableWidgetItem(
-            QString("0x%1").arg(addr, 4, 16, QLatin1Char('0')).toUpper()
-        );
-        item_addr->setTextAlignment(Qt::AlignCenter);
-        table_->setItem(row, 0, item_addr);
-
-        QString loc_str = "-";
+        QString line_str = "-";
         QString mnem_str = "-";
 
         if (img != nullptr) {
             const auto* mapping = img->source_map().find_instruction_by_address(addr);
             if (mapping != nullptr) {
-                loc_str = QString("Line %1, Col %2")
-                              .arg(mapping->location.line)
-                              .arg(mapping->location.column);
+                line_str = QString::number(mapping->location.line);
                 mnem_str = QString::fromStdString(mapping->mnemonic);
             }
         }
 
-        auto* item_loc = new QTableWidgetItem(loc_str);
-        item_loc->setTextAlignment(Qt::AlignCenter);
-        table_->setItem(row, 1, item_loc);
+        auto decoded = InstructionInspector::decodeInstruction(addr, *controller_);
+        if (!decoded.full_disassembly.isEmpty()) {
+            mnem_str = decoded.full_disassembly;
+        }
+
+        auto* item_line = new QTableWidgetItem(line_str);
+        item_line->setTextAlignment(Qt::AlignCenter);
+        table_->setItem(row, 0, item_line);
+
+        auto* item_addr = new QTableWidgetItem(
+            QString("0x%1").arg(addr, 4, 16, QLatin1Char('0')).toUpper()
+        );
+        item_addr->setTextAlignment(Qt::AlignCenter);
+        table_->setItem(row, 1, item_addr);
 
         auto* item_mnem = new QTableWidgetItem(mnem_str);
         table_->setItem(row, 2, item_mnem);
+
+        auto* item_status = new QTableWidgetItem("Active");
+        item_status->setTextAlignment(Qt::AlignCenter);
+        item_status->setForeground(QColor(40, 167, 69));
+        table_->setItem(row, 3, item_status);
     }
 }
 
@@ -100,7 +120,7 @@ void BreakpointsPanel::onRemoveSelected() {
     if (selected_items.empty()) return;
 
     int row = selected_items.first()->row();
-    auto* addr_item = table_->item(row, 0);
+    auto* addr_item = table_->item(row, 1);
     if (addr_item == nullptr) return;
 
     bool ok = false;

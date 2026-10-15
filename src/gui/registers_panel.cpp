@@ -1,10 +1,12 @@
 #include "bitforge/gui/registers_panel.hpp"
 #include "bitforge/gui/execution_controller.hpp"
+#include "bitforge/gui/bit_view_widget.hpp"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
 #include <QGroupBox>
+#include <QTabWidget>
 #include <QFontDatabase>
 
 namespace bitforge::gui {
@@ -52,13 +54,21 @@ void applyValueStyle(QLabel* label, bool changed) {
 RegistersPanel::RegistersPanel(QWidget* parent)
     : QWidget(parent) {
     auto* main_layout = new QVBoxLayout(this);
-    main_layout->setContentsMargins(6, 6, 6, 6);
-    main_layout->setSpacing(6);
+    main_layout->setContentsMargins(4, 4, 4, 4);
+    main_layout->setSpacing(4);
 
     const QFont mono_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
 
+    auto* tabs = new QTabWidget(this);
+
+    // Tab 1: Hex && Dec
+    auto* hex_tab = new QWidget(tabs);
+    auto* hex_layout = new QVBoxLayout(hex_tab);
+    hex_layout->setContentsMargins(4, 4, 4, 4);
+    hex_layout->setSpacing(6);
+
     // 1. Group: 16-Bit Registers
-    auto* group16 = new QGroupBox("16-Bit Registers", this);
+    auto* group16 = new QGroupBox("16-Bit Registers", hex_tab);
     auto* layout16 = new QGridLayout(group16);
     layout16->setContentsMargins(8, 8, 8, 8);
 
@@ -75,10 +85,10 @@ RegistersPanel::RegistersPanel(QWidget* parent)
     addReg16(0, 1, "SP", sp_label_);
     addReg16(1, 0, "IX", ix_label_);
 
-    main_layout->addWidget(group16);
+    hex_layout->addWidget(group16);
 
     // 2. Group: 8-Bit General Purpose Registers
-    auto* group8 = new QGroupBox("8-Bit Registers", this);
+    auto* group8 = new QGroupBox("8-Bit Registers", hex_tab);
     auto* layout8 = new QGridLayout(group8);
     layout8->setContentsMargins(8, 8, 8, 8);
 
@@ -93,10 +103,10 @@ RegistersPanel::RegistersPanel(QWidget* parent)
         layout8->addWidget(r_labels_[static_cast<std::size_t>(i)], row, col * 2 + 1);
     }
 
-    main_layout->addWidget(group8);
+    hex_layout->addWidget(group8);
 
     // 3. Group: Flags
-    auto* flags_group = new QGroupBox("ALU Flags", this);
+    auto* flags_group = new QGroupBox("ALU Flags", hex_tab);
     auto* flags_layout = new QHBoxLayout(flags_group);
     flags_layout->setContentsMargins(8, 8, 8, 8);
 
@@ -116,10 +126,10 @@ RegistersPanel::RegistersPanel(QWidget* parent)
     flags_layout->addWidget(flag_v_label_);
     flags_layout->addStretch();
 
-    main_layout->addWidget(flags_group);
+    hex_layout->addWidget(flags_group);
 
     // 4. Group: Execution Status
-    auto* status_group = new QGroupBox("Engine Status", this);
+    auto* status_group = new QGroupBox("Engine Status", hex_tab);
     auto* status_layout = new QGridLayout(status_group);
     status_layout->setContentsMargins(8, 8, 8, 8);
 
@@ -137,12 +147,23 @@ RegistersPanel::RegistersPanel(QWidget* parent)
     steps_label_->setFont(mono_font);
     status_layout->addWidget(steps_label_, 2, 1);
 
-    main_layout->addWidget(status_group);
-    main_layout->addStretch();
+    hex_layout->addWidget(status_group);
+    hex_layout->addStretch();
+
+    tabs->addTab(hex_tab, "Hex && Dec");
+
+    // Tab 2: Bit Visualization
+    bit_view_ = new BitViewWidget(tabs);
+    tabs->addTab(bit_view_, "Bit Visualization");
+
+    main_layout->addWidget(tabs);
 }
 
 void RegistersPanel::setController(ExecutionController* controller) {
     controller_ = controller;
+    if (bit_view_ != nullptr) {
+        bit_view_->setController(controller);
+    }
     if (controller_ != nullptr) {
         connect(controller_, &ExecutionController::stateChanged, this, &RegistersPanel::refresh);
         connect(controller_, &ExecutionController::assemblySucceeded, this, &RegistersPanel::refresh);

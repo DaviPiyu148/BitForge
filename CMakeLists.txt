@@ -159,11 +159,14 @@ if (BITFORGE_BUILD_GUI)
         include/bitforge/gui/line_number_area.hpp
         include/bitforge/gui/asm_highlighter.hpp
         include/bitforge/gui/registers_panel.hpp
+        include/bitforge/gui/bit_view_widget.hpp
         include/bitforge/gui/memory_viewer.hpp
         include/bitforge/gui/stack_viewer.hpp
         include/bitforge/gui/devices_panel.hpp
+        include/bitforge/gui/seven_segment_display.hpp
         include/bitforge/gui/breakpoints_panel.hpp
         include/bitforge/gui/trace_panel.hpp
+        include/bitforge/gui/instruction_inspector.hpp
         include/bitforge/gui/main_window.hpp
     )
 
@@ -173,11 +176,14 @@ if (BITFORGE_BUILD_GUI)
         src/gui/line_number_area.cpp
         src/gui/asm_highlighter.cpp
         src/gui/registers_panel.cpp
+        src/gui/bit_view_widget.cpp
         src/gui/memory_viewer.cpp
         src/gui/stack_viewer.cpp
         src/gui/devices_panel.cpp
+        src/gui/seven_segment_display.cpp
         src/gui/breakpoints_panel.cpp
         src/gui/trace_panel.cpp
+        src/gui/instruction_inspector.cpp
         src/gui/execution_controller.cpp
         ${BITFORGE_GUI_HEADERS}
     )

@@ -24,6 +24,7 @@ public:
 
     void lineNumberAreaPaintEvent(QPaintEvent* event);
     void lineNumberAreaMousePressEvent(QMouseEvent* event);
+    void lineNumberAreaContextMenuEvent(QContextMenuEvent* event);
     [[nodiscard]] int lineNumberAreaWidth() const;
 
     void setCurrentPcLine(std::size_t line);
@@ -31,12 +32,15 @@ public:
     [[nodiscard]] std::size_t currentPcLine() const noexcept { return current_pc_line_; }
 
     void gotoLine(std::size_t line, std::size_t column = 1);
+    void toggleBreakpointAtCursor();
+    [[nodiscard]] std::size_t currentCursorLine() const noexcept;
 
 public slots:
     void updateBreakpoints();
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
 
 private slots:
     void updateLineNumberAreaWidth(int newBlockCount);

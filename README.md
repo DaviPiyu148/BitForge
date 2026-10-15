@@ -6,7 +6,7 @@ BitForge is an educational software model of a fictional 8-bit microprocessor an
 
 ---
 
-## Current Status: Phase 7 Complete (Comprehensive Assembly Example Library & Desktop Workbench)
+## Current Status: Phase 8 Complete (GUI Usability and Digital Computer Visualization)
 
 BitForge is developed incrementally in strict adherence to [BitForge Architecture Specification v1.7](BitForge_Architecture_Specification_v1.7.md).
 
@@ -20,9 +20,9 @@ Implemented capabilities include:
 - **Two-Pass Assembler & Source Mapping:** Lexer, parser, symbol table, expression evaluation, multi-segment program image generation, explicit entry-point validation, line classification, and bidirectional instruction-to-source location mapping.
 - **Headless CLI Executable (`bitforge`):** Command-line assembler and execution runner supporting `help`, `assemble`, and `run` subcommands with execution step budgeting, register dumping, virtual I/O presentation, and stable numeric exit codes.
 - **Debugger Engine (`bitforge_debugger`):** Platform-independent, deterministic debugging layer (`DebuggerSession`) supporting single-stepping, bounded execution, address and source-line breakpoints with one-time bypass, read-only side-effect-free memory inspection with 16-bit address wrapping, ADR-001 stack frame inspection, bounded execution tracing with fault capture, and source location resolution.
-- **Qt 6 Desktop GUI Workbench (`bitforge_gui`):** Professional desktop IDE featuring an assembly code editor with line numbers, clickable breakpoint gutter, current PC execution indicator, syntax highlighting, execution toolbar (`Assemble`, `Run`, `Continue`, `Step`, `Pause`, `Reset`), configurable step budget, CPU register/flag panel with diff highlighting, side-effect-free 64 KiB memory viewer, ADR-001 stack viewer, virtual devices (Text console, Numeric console, 8-bit LEDs), breakpoint table, bounded chronological trace, and clickable diagnostics.
+- **Qt 6 Desktop GUI Workbench (`bitforge_gui`):** Professional desktop IDE featuring an assembly code editor with line numbers, clickable breakpoint gutter with tooltips, current PC execution indicator, context menu toggling, syntax highlighting, streamlined non-redundant execution toolbar (`Assemble`, `Run from Entry`, `Continue`, `Step`, `Pause`, `Reset`), execution speed throttling (`Slow 2 Hz`, `Normal 10 Hz`, `Fast 100 Hz`, `Turbo Full Speed`), configurable step budget, CPU register/flag panel with diff highlighting and bit-level LED visualization (`BitViewWidget`), side-effect-free 64 KiB memory viewer, ADR-001 stack viewer, virtual devices (Text console, vector 3-digit Seven-Segment display, Port 0x00 input FIFO status, 8-bit LEDs), 4-column Breakpoints table with double-click line navigation, instruction inspector decoding upcoming instruction and last executed step, bounded chronological trace, and clickable diagnostics.
 - **Comprehensive Assembly Example Library (`examples/`):** 51 fully tested and verified assembly programs organized across 10 functional categories (Fundamentals, Arithmetic & Logic, Control Flow, Memory & Pointers, Stack & Subroutines, Virtual I/O Devices, Algorithms & ADS Benchmarks, Comprehensive Demonstrations, Edge Cases & Boundary Conditions, and Architectural Fault Demonstrations), achieving 100% ISA mnemonic coverage (all 31 canonical instructions) and validating all architectural invariants.
-- **Automated Test Suites:** 220 unit and regression tests (`BitForgeTests`) across 11 test suites plus 30 automated headless GUI integration test methods (32 QTest execution slots in `BitForgeGuiTests`), delivering 252 passing tests in the GUI preset covering core CPU/ALU execution, stack/memory invariants, 31-mnemonic ISA coverage, debugger sessions, file lifecycle, startup argument loading, and all 51 assembly example programs.
+- **Automated Test Suites:** 220 unit and regression tests (`BitForgeTests`) across 11 test suites plus 40 automated GUI integration test methods in `BitForgeGuiTests`, delivering 260 passing tests in the GUI preset covering core CPU/ALU execution, stack/memory invariants, 31-mnemonic ISA coverage, debugger sessions, file lifecycle, startup argument loading, seven-segment display vector rendering, bit visualization, instruction inspector, execution speed throttling, and all 51 assembly example programs.
 
 ---
 
@@ -136,16 +136,33 @@ Phase 5 introduces a platform-independent, headless debugging engine designed fo
 
 ## Qt 6 Desktop GUI Workbench (`bitforge_gui`)
 
-Phase 6 provides a native, responsive Qt 6 desktop application integrating the full BitForge development and debugging stack into a compact, IDE-style interface:
+The BitForge desktop application (expanded in Phase 8) integrates the full development, debugging, and visualization stack into a responsive, educational IDE:
 
-- **Source Editor:** `QPlainTextEdit` with line numbers, adjacent clickable breakpoint gutter, visual execution line indicator (`▶`), distinct composite markers when a breakpoint coincides with the current PC, syntax highlighting for all 31 mnemonics, registers, directives, labels, literals, and comments.
-- **Execution Toolbar:** One-click controls for `Assemble` (F7), `Run` (F5), `Continue` (F8), `Step` (F10), `Pause`, and `Reset` (F6). Includes a configurable execution step budget (default 1,000,000) and color-coded status badges (`READY`, `RUNNING`, `PAUSED`, `HALTED`, `FAULTED`, and `STALE`).
-- **CPU Registers & Flags:** Fixed-width hexadecimal displays for 16-bit registers (`PC`, `SP`, `IX`), 8-bit registers (`R0`–`R3`), and individual ALU flag indicators (`Z`, `C`, `N`, `V`). Values that change across execution steps are temporarily highlighted with an amber background.
-- **Side-Effect-Free Memory Viewer:** Read-only 16-column hexadecimal memory grid with printable ASCII representation. Supports quick jumps (`PC`, `SP`, `0x0200`, `0x8000`) and arbitrary 16-bit hex address navigation with safe modulo-65536 wrapping across `0xFFFF`.
-- **ADR-001 Stack Viewer:** Visualizes the occupied stack starting from Top-of-Stack (`SP`) down to `0xFFFE`. Correctly identifies empty stack (`SP = 0xFFFF`) and corrupt/out-of-bounds stack pointers (`SP < 0xF000`).
-- **Virtual Devices & Consoles:** Dedicated text output console (Port 0x01), numeric integer console (Port 0x02), and an 8-bit virtual LED indicator (Port 0x10) displaying individual bit states, hex value, and binary representation.
+- **Source Editor & Breakpoint Ergonomics:** `QPlainTextEdit` with line numbers, interactive gutter tooltips, context menu toggling (`Toggle Breakpoint (F9)`), F9 shortcut at cursor, visual execution line indicator (`▶`), composite markers when breakpoints coincide with the current PC, syntax highlighting, and unmappable line rejection.
+- **Execution Controls & Semantics:** Streamlined toolbar with unambiguous semantics:
+  - `Assemble` (F7): Compiles the active source buffer and prepares execution.
+  - `Run from Entry` (F5): Resets CPU and device state to the configured `.ENTRY` point and begins execution.
+  - `Continue` (F8): Resumes execution from the current stopped PC without resetting CPU or device state.
+  - `Step` (F10): Executes a single instruction and updates all viewers.
+  - `Pause`: Pauses active running execution cleanly.
+  - `Reset` (F6): Resets the virtual CPU, registers, stack, and I/O devices to their initial state.
+- **Configurable Execution Speed:** Dynamic execution speed selector offering:
+  - `Slow (2 Hz)`: 500 ms per step (educational clock visualization).
+  - `Normal (10 Hz)`: 100 ms per step (step-by-step observation).
+  - `Fast (100 Hz)`: 50 ms per 5 steps (rapid simulation).
+  - `Turbo (Full Speed)`: 0 ms delay, up to 10,000 steps per batch (maximum throughput up to the configured global budget).
+- **Bit-Level Register Visualization (`BitViewWidget`):** Dedicated `Bit Visualization` tab presenting:
+  - 16-bit register bit displays (`PC`, `SP`, `IX`) with color-coded high and low bytes.
+  - 8-bit general-purpose register bit displays (`R0`–`R3`).
+  - ALU flag bit indicators (`Z`, `C`, `N`, `V`).
+  - Real-time amber diff highlighting on registers whose values changed in the last execution step.
+- **Dedicated 3-Digit Seven-Segment Display (Port 0x02):** Vector-rendered display for numeric console output featuring active bright-red segments, dimmed inactive segment outlines, leading-zero blanking, and clear distinction between uninitialized off-state and zero (`0`).
+- **Current-Instruction Inspector (`InstructionInspector`):** Decodes the upcoming instruction at the Program Counter prior to execution (mnemonic, operands, raw hex bytes, and conditional branch target / condition evaluation) alongside a summary of the most recently executed step.
+- **Side-Effect-Free Memory & Stack Viewers:** Read-only 16-column hexadecimal memory grid with printable ASCII representation and safe modulo-65536 wrapping; ADR-001 stack viewer visualizing occupied stack frames from Top-of-Stack (`SP`) down to `0xFFFE`.
+- **Virtual Devices & Consoles:** Dedicated text output console (Port 0x01), numeric integer display (Port 0x02), 8-bit virtual LED indicators (Port 0x10), and Port 0x00 input FIFO status monitor (`Buffer: Empty (0 bytes queued)`).
+- **Breakpoints Panel:** 4-column table (`Line`, `Address`, `Instruction`, `Status`) with disassembly preview, double-click line navigation in the editor, and one-click removal and clearing controls.
 - **Diagnostics & Clickable Navigation:** Displays assembler warnings/errors and CPU faults in a dedicated table. Clicking any diagnostic instantly navigates the source editor to the relevant line and column.
-- **Breakpoints & Trace History:** Chronological execution trace table showing step number, PC, instruction mnemonic, raw bytes, source line, and post-step state, with distinct visual highlights for `HALT` and CPU faults.
+- **Keyboard Shortcuts Reference:** Dialog accessible via `Help -> Keyboard Shortcuts` (F1) summarizing all navigation and execution keybindings.
 
 ### Configuring and Launching the GUI
 

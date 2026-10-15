@@ -9,11 +9,14 @@
 #include "bitforge/gui/devices_panel.hpp"
 #include "bitforge/gui/breakpoints_panel.hpp"
 #include "bitforge/gui/trace_panel.hpp"
+#include "bitforge/gui/instruction_inspector.hpp"
 
 #include <QMainWindow>
 #include <QSpinBox>
+#include <QComboBox>
 #include <QLabel>
 #include <QAction>
+#include <QActionGroup>
 #include <QString>
 
 namespace bitforge::gui {
@@ -28,6 +31,22 @@ public:
 
     [[nodiscard]] ExecutionController* controller() const noexcept { return controller_; }
     [[nodiscard]] CodeEditor* editor() const noexcept { return editor_; }
+    [[nodiscard]] RegistersPanel* registersPanel() const noexcept { return registers_panel_; }
+    [[nodiscard]] DevicesPanel* devicesPanel() const noexcept { return devices_panel_; }
+    [[nodiscard]] InstructionInspector* instructionInspector() const noexcept { return instruction_inspector_; }
+    [[nodiscard]] BreakpointsPanel* breakpointsPanel() const noexcept { return breakpoints_panel_; }
+    [[nodiscard]] TracePanel* tracePanel() const noexcept { return trace_panel_; }
+    [[nodiscard]] MemoryViewer* memoryViewer() const noexcept { return memory_viewer_; }
+    [[nodiscard]] StackViewer* stackViewer() const noexcept { return stack_viewer_; }
+
+    [[nodiscard]] QComboBox* speedComboBox() const noexcept { return speed_combo_; }
+    [[nodiscard]] QSpinBox* budgetSpinBox() const noexcept { return budget_spinbox_; }
+    [[nodiscard]] QAction* runAction() const noexcept { return run_act_; }
+    [[nodiscard]] QAction* continueAction() const noexcept { return continue_act_; }
+    [[nodiscard]] QAction* stepAction() const noexcept { return step_act_; }
+    [[nodiscard]] QAction* toggleBreakpointAction() const noexcept { return toggle_bp_act_; }
+    [[nodiscard]] QAction* clearBreakpointsAction() const noexcept { return clear_bps_act_; }
+    [[nodiscard]] QAction* clearTraceAction() const noexcept { return clear_trace_act_; }
 
     bool loadFile(const QString& filePath);
     bool loadStartupFile(const QStringList& args);
@@ -47,6 +66,12 @@ public slots:
     void onStep();
     void onReset();
     void onPause();
+
+    void onSpeedComboChanged(int index);
+    void onToggleBreakpoint();
+    void onClearBreakpoints();
+    void onClearTrace();
+    void showKeyboardShortcuts();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -73,6 +98,7 @@ private:
     StackViewer* stack_viewer_;
     BreakpointsPanel* breakpoints_panel_;
     TracePanel* trace_panel_;
+    InstructionInspector* instruction_inspector_;
 
     // Actions
     QAction* new_act_;
@@ -88,6 +114,18 @@ private:
     QAction* reset_act_;
     QAction* pause_act_;
 
+    QAction* toggle_bp_act_{nullptr};
+    QAction* clear_bps_act_{nullptr};
+    QAction* clear_trace_act_{nullptr};
+    QAction* shortcuts_act_{nullptr};
+
+    QActionGroup* speed_action_group_{nullptr};
+    QAction* speed_slow_act_{nullptr};
+    QAction* speed_normal_act_{nullptr};
+    QAction* speed_fast_act_{nullptr};
+    QAction* speed_turbo_act_{nullptr};
+
+    QComboBox* speed_combo_{nullptr};
     QSpinBox* budget_spinbox_;
     QLabel* state_badge_;
 

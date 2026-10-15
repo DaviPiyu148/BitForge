@@ -4,6 +4,7 @@
 #include "bitforge/core/registers.hpp"
 #include "bitforge/core/flags.hpp"
 #include "bitforge/core/cpu_state.hpp"
+#include "bitforge/gui/bit_view_widget.hpp"
 
 #include <QWidget>
 #include <QLabel>
@@ -22,6 +23,7 @@ public:
     ~RegistersPanel() override = default;
 
     void setController(ExecutionController* controller);
+    [[nodiscard]] BitViewWidget* bitView() const noexcept { return bit_view_; }
 
 public slots:
     void refresh();
@@ -52,6 +54,8 @@ private:
     Registers prev_registers_{};
     Flags prev_flags_{};
     bool has_prev_state_{false};
+
+    BitViewWidget* bit_view_{nullptr};
 };
 
 } // namespace bitforge::gui

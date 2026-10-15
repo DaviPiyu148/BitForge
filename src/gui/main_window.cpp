@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QTextStream>
 #include <QFileInfo>
+#include <QSignalBlocker>
 
 namespace bitforge::gui {
 
@@ -34,24 +35,24 @@ void MainWindow::setupUi() {
     setCentralWidget(editor_);
 
     // Right Dock: CPU Registers & Status + Virtual Devices
-    auto* right_dock = new QDockWidget("Registers & Virtual Devices", this);
+    auto* right_dock = new QDockWidget("Registers && Virtual Devices", this);
     right_dock->setObjectName("RightDock");
     right_dock->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
 
     auto* right_tabs = new QTabWidget(right_dock);
     registers_panel_ = new RegistersPanel(right_tabs);
     registers_panel_->setController(controller_);
-    right_tabs->addTab(registers_panel_, "CPU Registers & Flags");
+    right_tabs->addTab(registers_panel_, "CPU Registers && Flags");
 
     devices_panel_ = new DevicesPanel(right_tabs);
     devices_panel_->setController(controller_);
-    right_tabs->addTab(devices_panel_, "Virtual Devices & Consoles");
+    right_tabs->addTab(devices_panel_, "Virtual Devices");
 
     right_dock->setWidget(right_tabs);
     addDockWidget(Qt::RightDockWidgetArea, right_dock);
 
-    // Bottom Dock: Memory Viewer, Stack Viewer, Breakpoints, and Trace
-    auto* bottom_dock = new QDockWidget("Memory, Stack & Debug Inspection", this);
+    // Bottom Dock: Memory Viewer, Stack Viewer, Breakpoints, Trace, and Instruction Inspector
+    auto* bottom_dock = new QDockWidget("Memory, Stack && Debug Inspection", this);
     bottom_dock->setObjectName("BottomDock");
     bottom_dock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
 
@@ -71,6 +72,10 @@ void MainWindow::setupUi() {
     trace_panel_ = new TracePanel(bottom_tabs);
     trace_panel_->setController(controller_);
     bottom_tabs->addTab(trace_panel_, "Execution Trace");
+
+    instruction_inspector_ = new InstructionInspector(bottom_tabs);
+    instruction_inspector_->setController(controller_);
+    bottom_tabs->addTab(instruction_inspector_, "Instruction Inspector");
 
     bottom_dock->setWidget(bottom_tabs);
     addDockWidget(Qt::BottomDockWidgetArea, bottom_dock);
@@ -103,6 +108,11 @@ void MainWindow::setupUi() {
 
     // Wire diagnostic click to navigate editor
     connect(devices_panel_, &DevicesPanel::diagnosticClicked, editor_, &CodeEditor::gotoLine);
+
+    // Wire breakpoint double-click to navigate editor
+    connect(breakpoints_panel_, &BreakpointsPanel::breakpointDoubleClicked, editor_, [this](std::size_t line) {
+        editor_->gotoLine(line, 1);
+    });
 }
 
 void MainWindow::setupMenusAndToolbars() {
@@ -111,22 +121,22 @@ void MainWindow::setupMenusAndToolbars() {
     // -----------------------------------------------------------------
     new_act_ = new QAction("&New File", this);
     new_act_->setShortcut(QKeySequence::New);
-    new_act_->setStatusTip("Create a new BitForge assembly source file");
+    new_act_->setStatusTip("Create a new BitForge assembly source file (Ctrl+N)");
     connect(new_act_, &QAction::triggered, this, &MainWindow::newFile);
 
     open_act_ = new QAction("&Open File...", this);
     open_act_->setShortcut(QKeySequence::Open);
-    open_act_->setStatusTip("Open an existing .asm file");
+    open_act_->setStatusTip("Open an existing .asm file (Ctrl+O)");
     connect(open_act_, &QAction::triggered, this, &MainWindow::openFile);
 
     save_act_ = new QAction("&Save", this);
     save_act_->setShortcut(QKeySequence::Save);
-    save_act_->setStatusTip("Save current source file to disk");
+    save_act_->setStatusTip("Save current source file to disk (Ctrl+S)");
     connect(save_act_, &QAction::triggered, this, &MainWindow::save);
 
     save_as_act_ = new QAction("Save &As...", this);
     save_as_act_->setShortcut(QKeySequence::SaveAs);
-    save_as_act_->setStatusTip("Save current source file under a new name");
+    save_as_act_->setStatusTip("Save current source file under a new name (Ctrl+Shift+S)");
     connect(save_as_act_, &QAction::triggered, this, &MainWindow::saveAs);
 
     exit_act_ = new QAction("E&xit", this);
@@ -139,32 +149,81 @@ void MainWindow::setupMenusAndToolbars() {
     // -----------------------------------------------------------------
     assemble_act_ = new QAction("&Assemble", this);
     assemble_act_->setShortcut(QKeySequence(Qt::Key_F7));
-    assemble_act_->setStatusTip("Assemble the current source text into executable program memory");
+    assemble_act_->setStatusTip("Assemble the current source text into executable program memory (F7)");
     connect(assemble_act_, &QAction::triggered, this, &MainWindow::onAssemble);
 
-    run_act_ = new QAction("&Run", this);
+    run_act_ = new QAction("&Run from Entry", this);
     run_act_->setShortcut(QKeySequence(Qt::Key_F5));
-    run_act_->setStatusTip("Run emulated execution until breakpoint, HALT, fault, or budget");
+    run_act_->setStatusTip("Reset CPU and devices to entry point and run (F5)");
     connect(run_act_, &QAction::triggered, this, &MainWindow::onRun);
 
     continue_act_ = new QAction("&Continue", this);
     continue_act_->setShortcut(QKeySequence(Qt::Key_F8));
-    continue_act_->setStatusTip("Resume execution past the active breakpoint");
+    continue_act_->setStatusTip("Resume execution from current stopped PC without resetting CPU or devices (F8)");
     connect(continue_act_, &QAction::triggered, this, &MainWindow::onContinue);
 
     step_act_ = new QAction("&Step", this);
     step_act_->setShortcut(QKeySequence(Qt::Key_F10));
-    step_act_->setStatusTip("Single-step execute at most one instruction");
+    step_act_->setStatusTip("Single-step execute at most one instruction from current PC (F10)");
     connect(step_act_, &QAction::triggered, this, &MainWindow::onStep);
 
     reset_act_ = new QAction("&Reset", this);
     reset_act_->setShortcut(QKeySequence(Qt::Key_F6));
-    reset_act_->setStatusTip("Reset CPU registers and execution state back to entry point");
+    reset_act_->setStatusTip("Reset CPU registers, memory, and devices back to initial assembled state (F6)");
     connect(reset_act_, &QAction::triggered, this, &MainWindow::onReset);
 
     pause_act_ = new QAction("&Pause", this);
-    pause_act_->setStatusTip("Pause active execution slice");
+    pause_act_->setStatusTip("Pause active execution slice at next instruction boundary");
     connect(pause_act_, &QAction::triggered, this, &MainWindow::onPause);
+
+    toggle_bp_act_ = new QAction("Toggle &Breakpoint", this);
+    toggle_bp_act_->setShortcut(QKeySequence(Qt::Key_F9));
+    toggle_bp_act_->setStatusTip("Toggle breakpoint on current cursor line (F9)");
+    connect(toggle_bp_act_, &QAction::triggered, this, &MainWindow::onToggleBreakpoint);
+
+    clear_bps_act_ = new QAction("Clear All Break&points", this);
+    clear_bps_act_->setStatusTip("Remove all configured breakpoints");
+    connect(clear_bps_act_, &QAction::triggered, this, &MainWindow::onClearBreakpoints);
+
+    clear_trace_act_ = new QAction("Clear Execution &Trace", this);
+    clear_trace_act_->setStatusTip("Clear chronological execution trace history");
+    connect(clear_trace_act_, &QAction::triggered, this, &MainWindow::onClearTrace);
+
+    shortcuts_act_ = new QAction("&Keyboard Shortcuts...", this);
+    shortcuts_act_->setStatusTip("Show all BitForge keyboard shortcuts and workbench controls");
+    connect(shortcuts_act_, &QAction::triggered, this, &MainWindow::showKeyboardShortcuts);
+
+    // Speed submenu actions
+    speed_action_group_ = new QActionGroup(this);
+
+    speed_slow_act_ = new QAction("&Slow (500 ms / step)", this);
+    speed_slow_act_->setCheckable(true);
+    speed_action_group_->addAction(speed_slow_act_);
+    connect(speed_slow_act_, &QAction::triggered, this, [this]() {
+        controller_->setSpeed(ExecutionSpeed::Slow);
+    });
+
+    speed_normal_act_ = new QAction("&Normal (100 ms / step)", this);
+    speed_normal_act_->setCheckable(true);
+    speed_action_group_->addAction(speed_normal_act_);
+    connect(speed_normal_act_, &QAction::triggered, this, [this]() {
+        controller_->setSpeed(ExecutionSpeed::Normal);
+    });
+
+    speed_fast_act_ = new QAction("&Fast (50 ms / 5 steps)", this);
+    speed_fast_act_->setCheckable(true);
+    speed_action_group_->addAction(speed_fast_act_);
+    connect(speed_fast_act_, &QAction::triggered, this, [this]() {
+        controller_->setSpeed(ExecutionSpeed::Fast);
+    });
+
+    speed_turbo_act_ = new QAction("&Turbo (Full Speed)", this);
+    speed_turbo_act_->setCheckable(true);
+    speed_turbo_act_->setChecked(true);
+    speed_action_group_->addAction(speed_turbo_act_);
+    connect(speed_turbo_act_, &QAction::triggered, this, [this]() {
+        controller_->setSpeed(ExecutionSpeed::Turbo);
+    });
 
     // -----------------------------------------------------------------
     // Menus
@@ -185,8 +244,25 @@ void MainWindow::setupMenusAndToolbars() {
     exec_menu->addAction(step_act_);
     exec_menu->addAction(pause_act_);
     exec_menu->addAction(reset_act_);
+    exec_menu->addSeparator();
+    exec_menu->addAction(toggle_bp_act_);
+    exec_menu->addAction(clear_bps_act_);
+    exec_menu->addSeparator();
+    exec_menu->addAction(clear_trace_act_);
+    exec_menu->addSeparator();
+
+    auto* speed_submenu = exec_menu->addMenu("Execution &Speed");
+    speed_submenu->addAction(speed_slow_act_);
+    speed_submenu->addAction(speed_normal_act_);
+    speed_submenu->addAction(speed_fast_act_);
+    speed_submenu->addAction(speed_turbo_act_);
+
+    exec_menu->addSeparator();
+    exec_menu->addAction(shortcuts_act_);
 
     auto* help_menu = menuBar()->addMenu("&Help");
+    help_menu->addAction(shortcuts_act_);
+    help_menu->addSeparator();
     help_menu->addAction("&About BitForge", this, [this]() {
         QMessageBox::about(this, "About BitForge",
                            "<b>BitForge</b> — Educational 8-Bit Computer Workbench<br>"
@@ -196,7 +272,7 @@ void MainWindow::setupMenusAndToolbars() {
     });
 
     // -----------------------------------------------------------------
-    // Toolbar
+    // Toolbar: Primary Execution Controls
     // -----------------------------------------------------------------
     auto* toolbar = addToolBar("Execution Toolbar");
     toolbar->setObjectName("MainToolBar");
@@ -209,6 +285,35 @@ void MainWindow::setupMenusAndToolbars() {
     toolbar->addAction(step_act_);
     toolbar->addAction(pause_act_);
     toolbar->addAction(reset_act_);
+    toolbar->addSeparator();
+
+    auto* speed_label = new QLabel(" Speed: ", toolbar);
+    toolbar->addWidget(speed_label);
+
+    speed_combo_ = new QComboBox(toolbar);
+    speed_combo_->addItem("Slow (500 ms)");
+    speed_combo_->addItem("Normal (100 ms)");
+    speed_combo_->addItem("Fast (50 ms)");
+    speed_combo_->addItem("Turbo (Full Speed)");
+    speed_combo_->setCurrentIndex(3); // Default Turbo
+    toolbar->addWidget(speed_combo_);
+    connect(speed_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onSpeedComboChanged);
+
+    connect(controller_, &ExecutionController::speedChanged, this, [this](ExecutionSpeed spd) {
+        int idx = 3;
+        switch (spd) {
+            case ExecutionSpeed::Slow: idx = 0; speed_slow_act_->setChecked(true); break;
+            case ExecutionSpeed::Normal: idx = 1; speed_normal_act_->setChecked(true); break;
+            case ExecutionSpeed::Fast: idx = 2; speed_fast_act_->setChecked(true); break;
+            case ExecutionSpeed::Turbo: idx = 3; speed_turbo_act_->setChecked(true); break;
+        }
+        if (speed_combo_->currentIndex() != idx) {
+            const QSignalBlocker blocker(speed_combo_);
+            speed_combo_->setCurrentIndex(idx);
+        }
+    });
+
     toolbar->addSeparator();
 
     auto* budget_label = new QLabel(" Max Steps: ", toolbar);
@@ -268,7 +373,7 @@ void MainWindow::updateUiState() {
         reset_act_->setEnabled(false);
     } else {
         const bool can_execute = !is_stale && (st != MachineState::Halted && st != MachineState::Faulted);
-        run_act_->setEnabled(can_execute);
+        run_act_->setEnabled(!is_stale);
         step_act_->setEnabled(can_execute);
         continue_act_->setEnabled(can_execute);
         reset_act_->setEnabled(true);
@@ -489,12 +594,17 @@ void MainWindow::onRun() {
         return;
     }
     const std::uint64_t budget = static_cast<std::uint64_t>(budget_spinbox_->value());
-    controller_->run(budget);
+    controller_->runFromEntry(budget);
 }
 
 void MainWindow::onContinue() {
     if (controller_->isStale()) {
         statusBar()->showMessage("Source modified since last assembly. Please reassemble (F7) before continuing.", 5000);
+        return;
+    }
+    const auto st = controller_->session().state();
+    if (st == MachineState::Halted || st == MachineState::Faulted) {
+        statusBar()->showMessage("Cannot continue: CPU is halted or faulted. Use Reset (F6) or Run from Entry (F5).", 4000);
         return;
     }
     const std::uint64_t budget = static_cast<std::uint64_t>(budget_spinbox_->value());
@@ -517,6 +627,50 @@ void MainWindow::onReset() {
 void MainWindow::onPause() {
     controller_->pause();
     statusBar()->showMessage("Execution paused by user.", 3000);
+}
+
+void MainWindow::onSpeedComboChanged(int index) {
+    switch (index) {
+        case 0: controller_->setSpeed(ExecutionSpeed::Slow); break;
+        case 1: controller_->setSpeed(ExecutionSpeed::Normal); break;
+        case 2: controller_->setSpeed(ExecutionSpeed::Fast); break;
+        case 3: controller_->setSpeed(ExecutionSpeed::Turbo); break;
+        default: break;
+    }
+}
+
+void MainWindow::onToggleBreakpoint() {
+    editor_->toggleBreakpointAtCursor();
+}
+
+void MainWindow::onClearBreakpoints() {
+    controller_->clearAllBreakpoints();
+    statusBar()->showMessage("All breakpoints cleared.", 3000);
+}
+
+void MainWindow::onClearTrace() {
+    controller_->clearTrace();
+    statusBar()->showMessage("Execution trace cleared.", 3000);
+}
+
+void MainWindow::showKeyboardShortcuts() {
+    QMessageBox::information(
+        this, "BitForge Keyboard Shortcuts",
+        "<h3>BitForge Workbench Shortcuts</h3>"
+        "<table cellpadding='4' cellspacing='0' border='1'>"
+        "<tr><th>Key</th><th>Action</th><th>Description</th></tr>"
+        "<tr><td><b>F5</b></td><td>Run from Entry</td><td>Resets CPU to entry point and runs until breakpoint/halt</td></tr>"
+        "<tr><td><b>F6</b></td><td>Reset</td><td>Resets registers, memory, and devices to initial state</td></tr>"
+        "<tr><td><b>F7</b></td><td>Assemble</td><td>Assembles current source editor text into memory</td></tr>"
+        "<tr><td><b>F8</b></td><td>Continue</td><td>Resumes execution from current PC without resetting</td></tr>"
+        "<tr><td><b>F9</b></td><td>Toggle Breakpoint</td><td>Toggles breakpoint on line at cursor / gutter</td></tr>"
+        "<tr><td><b>F10</b></td><td>Step</td><td>Single-steps exactly one instruction from current PC</td></tr>"
+        "<tr><td><b>Ctrl+N</b></td><td>New File</td><td>Creates a new empty assembly file</td></tr>"
+        "<tr><td><b>Ctrl+O</b></td><td>Open File</td><td>Opens an existing assembly file</td></tr>"
+        "<tr><td><b>Ctrl+S</b></td><td>Save</td><td>Saves the current file to disk</td></tr>"
+        "<tr><td><b>Ctrl+Shift+S</b></td><td>Save As</td><td>Saves current file to a new path</td></tr>"
+        "</table>"
+    );
 }
 
 } // namespace bitforge::gui
