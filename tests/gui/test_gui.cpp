@@ -1750,8 +1750,40 @@ void GuiTest::testTutorialGuideWalkthrough() {
 
 void GuiTest::testExamplesCatalogBrowser() {
     ExamplesDialog dialog;
-    // Dialog should populate categories without crashing
     QVERIFY(dialog.layout() != nullptr);
+    QVERIFY(dialog.categoryList() != nullptr);
+    QVERIFY(dialog.exampleList() != nullptr);
+    QVERIFY(dialog.searchInput() != nullptr);
+    QVERIFY(dialog.detailsBanner() != nullptr);
+
+    // Initial category "All Categories (51)" must show all 51 programs
+    QCOMPARE(dialog.exampleList()->count(), 51);
+
+    // Filter by search query "fibonacci"
+    dialog.searchInput()->setText("fibonacci");
+    QCOMPARE(dialog.exampleList()->count(), 1);
+    QVERIFY(dialog.exampleList()->item(0)->text().toLower().contains("fibonacci"));
+
+    // Check metadata banner
+    QVERIFY(dialog.detailsBanner()->text().contains("F(0)..F(8)"));
+    QVERIFY(dialog.infoLabel()->text().contains("Algorithms"));
+
+    // Filter by search query "invalid" -> shows invalid syntax programs
+    dialog.searchInput()->setText("invalid");
+    QVERIFY(dialog.exampleList()->count() >= 10);
+
+    // Clear search filter -> restores all 51 programs
+    dialog.searchInput()->clear();
+    QCOMPARE(dialog.exampleList()->count(), 51);
+
+    // Filter by Category "Fundamentals"
+    for (int i = 0; i < dialog.categoryList()->count(); ++i) {
+        if (dialog.categoryList()->item(i)->text() == "Fundamentals") {
+            dialog.categoryList()->setCurrentRow(i);
+            break;
+        }
+    }
+    QCOMPARE(dialog.exampleList()->count(), 2);
 }
 
 void GuiTest::testLayoutPersistenceAndRestoration() {

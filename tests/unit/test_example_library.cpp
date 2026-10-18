@@ -6,8 +6,10 @@
 #include "bitforge/memory/memory.hpp"
 #include "bitforge/bus/system_bus.hpp"
 #include "bitforge/debugger/debugger_session.hpp"
+#include "bitforge/core/example_catalog.hpp"
 
 #include <fstream>
+#include <iostream>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -724,5 +726,117 @@ TEST(ExampleLibrary, Audit_VirtualPortAssignmentsAndLedDevice) {
     EXPECT_EQ(bus.led_state(), 0xAA);
     EXPECT_TRUE(bus.write_io(kPortLeds, 0xFF));
     EXPECT_EQ(bus.led_state(), 0xFF);
+}
+
+TEST(ExampleLibrary, ComprehensiveCatalogRegression51) {
+    EXPECT_EQ(kExampleCatalog.size(), 51u);
+
+    std::size_t passed_count = 0;
+    std::vector<std::string> report_lines;
+
+    for (const auto& entry : kExampleCatalog) {
+        std::string path_str(entry.relative_path);
+        std::string resolved = resolve_path(path_str);
+        ASSERT_TRUE(std::filesystem::exists(resolved));
+
+        std::string source = read_file(path_str);
+        Assembler as;
+
+        if (entry.kind == ExampleKind::InvalidAssembly) {
+            auto res = as.assemble(source);
+            EXPECT_FALSE(res.success);
+            EXPECT_FALSE(res.diagnostics.empty());
+            if (!res.success && !res.diagnostics.empty()) {
+                passed_count++;
+                report_lines.push_back(std::string("[InvalidAssembly] ") + std::string(entry.title) + " -> rejected as expected: " + res.diagnostics.front().message);
+            }
+        } else if (entry.kind == ExampleKind::RuntimeFault) {
+            auto res = as.assemble(source);
+            ASSERT_TRUE(res.success);
+
+            Memory mem{};
+            SystemBus bus{mem};
+            Cpu cpu{bus};
+            ASSERT_TRUE(res.image.load_into(mem));
+            DebuggerSession session(cpu, &res.image);
+            session.reset(res.image.entry_point());
+
+            auto exec_res = session.run(100000);
+            EXPECT_EQ(exec_res.stop_reason, StopReason::Faulted);
+            EXPECT_EQ(session.state(), MachineState::Faulted);
+            EXPECT_TRUE(cpu.last_fault().has_fault());
+
+            if (exec_res.stop_reason == StopReason::Faulted && session.state() == MachineState::Faulted) {
+                passed_count++;
+                report_lines.push_back(std::string("[RuntimeFault] ") + std::string(entry.title) + " -> triggered fault: " + std::string(to_string(cpu.last_fault().type)));
+            }
+        } else if (entry.kind == ExampleKind::DebuggerDemo) {
+            auto res = as.assemble(source);
+            ASSERT_TRUE(res.success);
+
+            Memory mem{};
+            SystemBus bus{mem};
+            Cpu cpu{bus};
+            ASSERT_TRUE(res.image.load_into(mem));
+            DebuggerSession session(cpu, &res.image);
+            session.reset(res.image.entry_point());
+
+            if (entry.expected_stop == "BudgetExhausted") {
+                auto exec_res = session.run(250);
+                EXPECT_EQ(exec_res.stop_reason, StopReason::BudgetExhausted);
+                if (exec_res.stop_reason == StopReason::BudgetExhausted) {
+                    passed_count++;
+                    report_lines.push_back(std::string("[DebuggerDemo] ") + std::string(entry.title) + " -> BudgetExhausted as expected");
+                }
+            } else if (entry.expected_stop == "BreakpointHit") {
+                session.add_breakpoint(res.image.entry_point());
+                auto exec_res = session.run(10000);
+                EXPECT_EQ(exec_res.stop_reason, StopReason::BreakpointHit);
+                if (exec_res.stop_reason == StopReason::BreakpointHit) {
+                    passed_count++;
+                    report_lines.push_back(std::string("[DebuggerDemo] ") + std::string(entry.title) + " -> BreakpointHit as expected");
+                }
+            } else {
+                auto exec_res = session.run(100000);
+                EXPECT_EQ(exec_res.stop_reason, StopReason::Halted);
+                if (exec_res.stop_reason == StopReason::Halted) {
+                    passed_count++;
+                    report_lines.push_back(std::string("[DebuggerDemo] ") + std::string(entry.title) + " -> Halted as expected");
+                }
+            }
+        } else {
+            // Runnable
+            auto res = as.assemble(source);
+            ASSERT_TRUE(res.success);
+
+            Memory mem{};
+            SystemBus bus{mem};
+            Cpu cpu{bus};
+            ASSERT_TRUE(res.image.load_into(mem));
+            DebuggerSession session(cpu, &res.image);
+            session.reset(res.image.entry_point());
+
+            auto exec_res = session.run(100000);
+            EXPECT_EQ(exec_res.stop_reason, StopReason::Halted);
+            EXPECT_EQ(session.state(), MachineState::Halted);
+
+            if (exec_res.stop_reason == StopReason::Halted && session.state() == MachineState::Halted) {
+                passed_count++;
+                report_lines.push_back(std::string("[Runnable] ") + std::string(entry.title) + " -> Halted successfully");
+            }
+        }
+    }
+
+    std::cout << "\n======================================================================\n";
+    std::cout << " BitForge 51-Example Comprehensive Regression Test Report\n";
+    std::cout << "======================================================================\n";
+    for (std::size_t i = 0; i < report_lines.size(); ++i) {
+        std::cout << "[" << (i + 1) << "/51] " << report_lines[i] << "\n";
+    }
+    std::cout << "======================================================================\n";
+    std::cout << " Total Passed: " << passed_count << " / 51 (100% catalog coverage)\n";
+    std::cout << "======================================================================\n";
+
+    EXPECT_EQ(passed_count, 51u);
 }
 
