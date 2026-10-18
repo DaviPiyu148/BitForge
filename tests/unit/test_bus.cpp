@@ -88,3 +88,61 @@ TEST(BusTest, Phase1AOutputPortStubsValidatePermissionsWhileDiscardingPayload) {
     EXPECT_FALSE(bus.write_io(0x05, 0x34));
     EXPECT_FALSE(bus.write_io(0xFF, 0x56));
 }
+
+TEST(BusTest, InputFifoContentsAndInspection) {
+    bitforge::Memory memory;
+    bitforge::SystemBus bus(memory);
+
+    EXPECT_TRUE(bus.input_fifo_contents().empty());
+    bus.push_input_fifo(0x42);
+    bus.push_input_fifo(0x55);
+    bus.push_input_fifo(0xAA);
+
+    auto contents = bus.input_fifo_contents();
+    ASSERT_EQ(contents.size(), 3);
+    EXPECT_EQ(contents[0], 0x42);
+    EXPECT_EQ(contents[1], 0x55);
+    EXPECT_EQ(contents[2], 0xAA);
+
+    // Reading pops from FIFO
+    EXPECT_EQ(bus.read_io(bitforge::kPortInputFifo).value_or(0), 0x42);
+    EXPECT_EQ(bus.input_fifo_size(), 2);
+
+    bus.clear_input_fifo();
+    EXPECT_EQ(bus.input_fifo_size(), 0);
+    EXPECT_TRUE(bus.input_fifo_contents().empty());
+}
+
+TEST(BusTest, MemoryAndIoEventJournaling) {
+    bitforge::Memory memory;
+    bitforge::SystemBus bus(memory);
+
+    // Memory write byte
+    bus.write_byte(0x8000, 0x12);
+    auto mw = bus.take_memory_write_events();
+    ASSERT_EQ(mw.size(), 1);
+    EXPECT_EQ(mw[0].address, 0x8000);
+    EXPECT_EQ(mw[0].old_value, 0x00);
+    EXPECT_EQ(mw[0].new_value, 0x12);
+    EXPECT_TRUE(bus.memory_write_events().empty());
+
+    // Memory write word
+    bus.write_word(0x8010, 0xABCD);
+    auto mw_word = bus.take_memory_write_events();
+    ASSERT_EQ(mw_word.size(), 2);
+    EXPECT_EQ(mw_word[0].address, 0x8010);
+    EXPECT_EQ(mw_word[0].new_value, 0xAB);
+    EXPECT_EQ(mw_word[1].address, 0x8011);
+    EXPECT_EQ(mw_word[1].new_value, 0xCD);
+
+    // IO events
+    bus.write_io(bitforge::kPortLeds, 0xFF);
+    bus.write_io(bitforge::kPortNumericConsole, 42);
+    auto io_events = bus.take_io_events();
+    ASSERT_EQ(io_events.size(), 2);
+    EXPECT_EQ(io_events[0].port, bitforge::kPortLeds);
+    EXPECT_EQ(io_events[0].value, 0xFF);
+    EXPECT_EQ(io_events[1].port, bitforge::kPortNumericConsole);
+    EXPECT_EQ(io_events[1].value, 42);
+}
+

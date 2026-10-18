@@ -5,6 +5,8 @@
 
 #include <QWidget>
 #include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
 #include <QPlainTextEdit>
 #include <QTableWidget>
 #include <array>
@@ -26,6 +28,11 @@ public:
     [[nodiscard]] SevenSegmentDisplay* sevenSegmentDisplay() const noexcept { return seven_seg_display_; }
     [[nodiscard]] QLabel* fifoStatusLabel() const noexcept { return fifo_status_label_; }
     [[nodiscard]] QLabel* diagnosticsEmptyLabel() const noexcept { return diag_empty_label_; }
+    [[nodiscard]] QLineEdit* fifoInputField() const noexcept { return fifo_input_edit_; }
+    [[nodiscard]] QPushButton* fifoEnqueueButton() const noexcept { return fifo_enqueue_btn_; }
+    [[nodiscard]] QPushButton* fifoClearButton() const noexcept { return fifo_clear_btn_; }
+    [[nodiscard]] QLabel* fifoUnderflowLabel() const noexcept { return fifo_underflow_label_; }
+    [[nodiscard]] QLabel* fifoContentsLabel() const noexcept { return fifo_contents_label_; }
 
 public slots:
     void refresh();
@@ -36,6 +43,8 @@ signals:
 
 private slots:
     void onDiagnosticTableClicked(int row, int column);
+    void onEnqueueInput();
+    void onClearFifo();
 
 private:
     ExecutionController* controller_{nullptr};
@@ -49,6 +58,11 @@ private:
 
     // Input FIFO (Port 0x00)
     QLabel* fifo_status_label_{nullptr};
+    QLineEdit* fifo_input_edit_{nullptr};
+    QPushButton* fifo_enqueue_btn_{nullptr};
+    QPushButton* fifo_clear_btn_{nullptr};
+    QLabel* fifo_contents_label_{nullptr};
+    QLabel* fifo_underflow_label_{nullptr};
 
     // Consoles
     QPlainTextEdit* text_console_{nullptr};

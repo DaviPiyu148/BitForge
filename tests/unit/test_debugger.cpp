@@ -1098,3 +1098,57 @@ TEST(Debugger, Audit_MemoryInspectionModulo65536Wrapping) {
     EXPECT_TRUE(range0.data.empty());
 }
 
+// 12. Reliable execution deltas capturing register, flag, memory, and IO mutations
+TEST(Debugger, ExecutionDeltaCapture) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 42\n"         // Mutates R0 and PC
+        "    ST [0x8000], R0\n"    // Mutates Memory[0x8000] and PC
+        "    OUT 0x10, R0\n"       // Mutates Port 0x10 and PC
+        "    HALT\n"
+    );
+
+    // Step 1: LDI R0, 42
+    auto res1 = ctx.session->step();
+    EXPECT_EQ(res1.stop_reason, StopReason::StepCompleted);
+    auto delta1 = ctx.session->last_delta();
+    ASSERT_TRUE(delta1.has_value());
+    EXPECT_TRUE(delta1->has_changes());
+
+    bool found_r0 = false;
+    for (const auto& rc : delta1->register_changes) {
+        if (rc.name == "R0") {
+            found_r0 = true;
+            EXPECT_EQ(rc.old_value, 0);
+            EXPECT_EQ(rc.new_value, 42);
+        }
+    }
+    EXPECT_TRUE(found_r0);
+
+    // Step 2: ST [0x8000], R0
+    auto res2 = ctx.session->step();
+    EXPECT_EQ(res2.stop_reason, StopReason::StepCompleted);
+    auto delta2 = ctx.session->last_delta();
+    ASSERT_TRUE(delta2.has_value());
+    ASSERT_EQ(delta2->memory_writes.size(), 1);
+    EXPECT_EQ(delta2->memory_writes[0].address, 0x8000);
+    EXPECT_EQ(delta2->memory_writes[0].new_value, 42);
+
+    // Step 3: OUT 0x10, R0
+    auto res3 = ctx.session->step();
+    EXPECT_EQ(res3.stop_reason, StopReason::StepCompleted);
+    auto delta3 = ctx.session->last_delta();
+    ASSERT_TRUE(delta3.has_value());
+    ASSERT_EQ(delta3->io_events.size(), 1);
+    EXPECT_EQ(delta3->io_events[0].port, 0x10);
+    EXPECT_EQ(delta3->io_events[0].value, 42);
+
+    // Formatted delta string contains expected tokens
+    std::string str3 = delta3->to_string();
+    EXPECT_NE(str3.find("Port 0x10: output 0x2A"), std::string::npos);
+}
+
+

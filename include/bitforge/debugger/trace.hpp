@@ -7,6 +7,7 @@
 #include "bitforge/core/cpu_state.hpp"
 #include "bitforge/core/faults.hpp"
 #include "bitforge/assembler/source_location.hpp"
+#include "bitforge/debugger/execution_delta.hpp"
 
 #include <vector>
 #include <string>
@@ -31,6 +32,7 @@ struct TraceEntry {
     std::optional<Fault> fault{std::nullopt};              // Populated if step faulted
     Registers registers_after{};                           // Register values after step
     Flags flags_after{};                                   // Flag values after step
+    std::optional<ExecutionDelta> delta{std::nullopt};      // Structured state mutation delta
 };
 
 } // namespace bitforge::debugger

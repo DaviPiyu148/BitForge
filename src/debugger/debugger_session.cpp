@@ -1,5 +1,6 @@
 #include "bitforge/debugger/debugger_session.hpp"
 #include "bitforge/core/opcodes.hpp"
+#include "bitforge/bus/system_bus.hpp"
 
 #include <algorithm>
 #include <sstream>
@@ -39,6 +40,7 @@ void DebuggerSession::reset(std::optional<word_t> entry_point) {
     cpu_.reset(ep);
     last_breakpoint_hit_.reset();
     last_stop_reason_ = StopReason::None;
+    last_delta_.reset();
     clear_trace();
     total_steps_executed_ = 0;
 }
@@ -80,9 +82,35 @@ StepResult DebuggerSession::execute_single_step() {
         raw_bytes.push_back(read_memory_byte(static_cast<word_t>((start_pc + i) & 0xFFFF)));
     }
 
+    // Snapshot pre-execution state for reliable delta computation
+    const Registers regs_before = cpu_.registers();
+    const Flags flags_before = cpu_.flags();
+    auto* sys_bus = dynamic_cast<SystemBus*>(&cpu_.bus());
+    if (sys_bus != nullptr) {
+        sys_bus->clear_write_events();
+    }
+
     // Perform instruction step on CPU
     StepResult res = cpu_.step();
     ++total_steps_executed_;
+
+    // Snapshot post-execution state
+    const Registers regs_after = cpu_.registers();
+    const Flags flags_after = cpu_.flags();
+    std::vector<MemoryWriteEvent> mem_writes;
+    std::vector<IoEvent> io_events;
+    if (sys_bus != nullptr) {
+        mem_writes = sys_bus->take_memory_write_events();
+        io_events = sys_bus->take_io_events();
+    }
+
+    ExecutionDelta delta = compute_execution_delta(
+        regs_before, regs_after,
+        flags_before, flags_after,
+        std::move(mem_writes),
+        std::move(io_events)
+    );
+    last_delta_ = delta;
 
     // Construct trace entry
     TraceEntry entry;
@@ -97,8 +125,9 @@ StepResult DebuggerSession::execute_single_step() {
     if (entry.faulted && cpu_.last_fault().has_fault()) {
         entry.fault = cpu_.last_fault();
     }
-    entry.registers_after = cpu_.registers();
-    entry.flags_after = cpu_.flags();
+    entry.registers_after = regs_after;
+    entry.flags_after = flags_after;
+    entry.delta = delta;
 
     // Store into bounded trace ring buffer
     if (trace_capacity_ > 0) {

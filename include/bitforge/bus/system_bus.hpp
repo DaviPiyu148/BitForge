@@ -14,6 +14,26 @@
 
 namespace bitforge {
 
+// Memory write journal event
+struct MemoryWriteEvent {
+    word_t address{0};
+    byte_t old_value{0};
+    byte_t new_value{0};
+};
+
+// I/O event direction
+enum class IoDirection {
+    Read,
+    Write
+};
+
+// Virtual device I/O event
+struct IoEvent {
+    IoDirection direction{IoDirection::Read};
+    port_t port{0};
+    byte_t value{0};
+};
+
 // Concrete system bus connecting processor to memory and virtual I/O devices
 class SystemBus : public IBus {
 public:
@@ -54,6 +74,7 @@ public:
     void push_input_fifo(std::string_view str);
     [[nodiscard]] std::size_t input_fifo_size() const noexcept;
     [[nodiscard]] std::optional<byte_t> peek_input_fifo() const noexcept;
+    [[nodiscard]] std::vector<byte_t> input_fifo_contents() const;
     [[nodiscard]] bool has_input_underflow() const noexcept;
     [[nodiscard]] std::size_t input_underflow_count() const noexcept;
     void clear_input_fifo() noexcept;
@@ -72,6 +93,13 @@ public:
     [[nodiscard]] byte_t led_state() const noexcept;
     void set_led_state(byte_t val) noexcept;
 
+    // Bus event journaling (for instruction execution deltas)
+    [[nodiscard]] const std::vector<MemoryWriteEvent>& memory_write_events() const noexcept { return memory_write_events_; }
+    [[nodiscard]] const std::vector<IoEvent>& io_events() const noexcept { return io_events_; }
+    void clear_write_events() noexcept;
+    std::vector<MemoryWriteEvent> take_memory_write_events() noexcept;
+    std::vector<IoEvent> take_io_events() noexcept;
+
     // Reset all device buffers and states
     void reset_devices() noexcept;
 
@@ -89,6 +117,10 @@ private:
     std::string numeric_output_{};
 
     byte_t led_state_{0x00};
+
+    // Instruction write events
+    std::vector<MemoryWriteEvent> memory_write_events_{};
+    std::vector<IoEvent> io_events_{};
 };
 
 } // namespace bitforge

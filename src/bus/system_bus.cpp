@@ -13,7 +13,9 @@ byte_t SystemBus::read_byte(word_t address) const {
 }
 
 void SystemBus::write_byte(word_t address, byte_t value) {
+    const byte_t old_val = memory_.read_byte(address);
     memory_.write_byte(address, value);
+    memory_write_events_.push_back(MemoryWriteEvent{address, old_val, value});
 }
 
 word_t SystemBus::read_word(word_t address) const {
@@ -21,7 +23,14 @@ word_t SystemBus::read_word(word_t address) const {
 }
 
 void SystemBus::write_word(word_t address, word_t value) {
+    const word_t next_addr = static_cast<word_t>((address + 1) & 0xFFFF);
+    const byte_t hi_old = memory_.read_byte(address);
+    const byte_t lo_old = memory_.read_byte(next_addr);
+    const byte_t hi_new = static_cast<byte_t>((value >> 8) & 0xFF);
+    const byte_t lo_new = static_cast<byte_t>(value & 0xFF);
     memory_.write_word(address, value);
+    memory_write_events_.push_back(MemoryWriteEvent{address, hi_old, hi_new});
+    memory_write_events_.push_back(MemoryWriteEvent{next_addr, lo_old, lo_new});
 }
 
 std::optional<byte_t> SystemBus::read_io(port_t port) {
@@ -32,10 +41,12 @@ std::optional<byte_t> SystemBus::read_io(port_t port) {
     if (port == kPortInputFifo) {
         if (input_fifo_.empty()) {
             ++input_underflow_count_;
+            io_events_.push_back(IoEvent{IoDirection::Read, port, static_cast<byte_t>(0x00)});
             return static_cast<byte_t>(0x00);
         }
         const byte_t val = input_fifo_.front();
         input_fifo_.pop_front();
+        io_events_.push_back(IoEvent{IoDirection::Read, port, val});
         return val;
     }
 
@@ -46,6 +57,8 @@ bool SystemBus::write_io(port_t port, byte_t value) {
     if (!can_write_io(port)) {
         return false;
     }
+
+    io_events_.push_back(IoEvent{IoDirection::Write, port, value});
 
     if (port == kPortTextConsole) {
         text_raw_bytes_.push_back(value);
@@ -114,6 +127,10 @@ std::optional<byte_t> SystemBus::peek_input_fifo() const noexcept {
     return input_fifo_.front();
 }
 
+std::vector<byte_t> SystemBus::input_fifo_contents() const {
+    return std::vector<byte_t>(input_fifo_.begin(), input_fifo_.end());
+}
+
 bool SystemBus::has_input_underflow() const noexcept {
     return input_underflow_count_ > 0;
 }
@@ -160,6 +177,23 @@ void SystemBus::set_led_state(byte_t val) noexcept {
     led_state_ = val;
 }
 
+void SystemBus::clear_write_events() noexcept {
+    memory_write_events_.clear();
+    io_events_.clear();
+}
+
+std::vector<MemoryWriteEvent> SystemBus::take_memory_write_events() noexcept {
+    auto res = std::move(memory_write_events_);
+    memory_write_events_.clear();
+    return res;
+}
+
+std::vector<IoEvent> SystemBus::take_io_events() noexcept {
+    auto res = std::move(io_events_);
+    io_events_.clear();
+    return res;
+}
+
 void SystemBus::reset_devices() noexcept {
     input_fifo_.clear();
     input_underflow_count_ = 0;
@@ -168,6 +202,7 @@ void SystemBus::reset_devices() noexcept {
     numeric_values_.clear();
     numeric_output_.clear();
     led_state_ = 0x00;
+    clear_write_events();
 }
 
 } // namespace bitforge

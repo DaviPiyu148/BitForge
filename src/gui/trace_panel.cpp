@@ -16,14 +16,14 @@ TracePanel::TracePanel(QWidget* parent)
 
     const QFont mono_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
 
-    table_ = new QTableWidget(0, 6, this);
+    table_ = new QTableWidget(0, 7, this);
     table_->setFont(mono_font);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->verticalHeader()->setVisible(false);
 
     QStringList headers;
-    headers << "Step #" << "PC" << "Mnemonic" << "Raw Bytes" << "Source" << "State After";
+    headers << "Step #" << "PC" << "Mnemonic" << "Raw Bytes" << "Source" << "State After" << "Execution Delta";
     table_->setHorizontalHeaderLabels(headers);
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setStretchLastSection(true);
@@ -109,21 +109,29 @@ void TracePanel::refresh() {
         }
         auto* item_state = new QTableWidgetItem(state_str);
         item_state->setTextAlignment(Qt::AlignCenter);
+        table_->setItem(i, 5, item_state);
+
+        // 6: Execution Delta
+        QString delta_str = "-";
+        if (entry.delta.has_value()) {
+            delta_str = QString::fromStdString(entry.delta->to_string());
+        }
+        auto* item_delta = new QTableWidgetItem(delta_str);
+        item_delta->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        table_->setItem(i, 6, item_delta);
 
         // Highlight HALT or Fault
         if (entry.state_after == MachineState::Halted) {
-            for (int col = 0; col < 6; ++col) {
+            for (int col = 0; col < 7; ++col) {
                 auto* it = table_->item(i, col);
                 if (it != nullptr) it->setBackground(QColor(230, 244, 234)); // Soft green
             }
         } else if (entry.faulted || entry.state_after == MachineState::Faulted) {
-            for (int col = 0; col < 6; ++col) {
+            for (int col = 0; col < 7; ++col) {
                 auto* it = table_->item(i, col);
                 if (it != nullptr) it->setBackground(QColor(252, 232, 230)); // Soft red
             }
         }
-
-        table_->setItem(i, 5, item_state);
     }
 
     if (!trace.empty()) {

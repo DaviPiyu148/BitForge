@@ -8,8 +8,35 @@
 #include <QPushButton>
 #include <QHeaderView>
 #include <QFontDatabase>
+#include <QRegularExpression>
 
 namespace bitforge::gui {
+
+namespace {
+
+std::vector<byte_t> parseHexByteSequence(const QString& input) {
+    std::vector<byte_t> bytes;
+    QString clean = input;
+    clean.replace(',', ' ').replace(';', ' ');
+    const QStringList tokens = clean.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    for (const QString& tok : tokens) {
+        QString s = tok.trimmed();
+        if (s.startsWith("0x", Qt::CaseInsensitive)) {
+            s = s.mid(2);
+        } else if (s.startsWith("$")) {
+            s = s.mid(1);
+        }
+        if (s.isEmpty()) continue;
+        bool ok = false;
+        uint val = s.toUInt(&ok, 16);
+        if (ok && val <= 0xFF) {
+            bytes.push_back(static_cast<byte_t>(val));
+        }
+    }
+    return bytes;
+}
+
+} // namespace
 
 DevicesPanel::DevicesPanel(QWidget* parent)
     : QWidget(parent) {
@@ -59,11 +86,47 @@ DevicesPanel::DevicesPanel(QWidget* parent)
 
     // 3. Group: Input FIFO (Port 0x00)
     auto* fifo_group = new QGroupBox("Input FIFO (Port 0x00)", this);
-    auto* fifo_layout = new QHBoxLayout(fifo_group);
+    auto* fifo_layout = new QVBoxLayout(fifo_group);
     fifo_layout->setContentsMargins(8, 8, 8, 8);
+    fifo_layout->setSpacing(6);
+
+    // Row 1: Hex Input + Enqueue Button + Clear Button
+    auto* input_row = new QHBoxLayout();
+    fifo_input_edit_ = new QLineEdit(fifo_group);
+    fifo_input_edit_->setFont(mono_font);
+    fifo_input_edit_->setPlaceholderText("Hex byte(s) (e.g. A5, 0x12 0xFF, 42)...");
+    input_row->addWidget(fifo_input_edit_, 1);
+
+    fifo_enqueue_btn_ = new QPushButton("Enqueue", fifo_group);
+    fifo_enqueue_btn_->setStyleSheet("QPushButton { font-weight: bold; }");
+    input_row->addWidget(fifo_enqueue_btn_);
+
+    fifo_clear_btn_ = new QPushButton("Clear FIFO", fifo_group);
+    input_row->addWidget(fifo_clear_btn_);
+    fifo_layout->addLayout(input_row);
+
+    // Row 2: Status (Depth & Next) + Underflow Indicator
+    auto* status_row = new QHBoxLayout();
     fifo_status_label_ = new QLabel("Buffer: Empty (0 bytes queued)", fifo_group);
     fifo_status_label_->setFont(mono_font);
-    fifo_layout->addWidget(fifo_status_label_);
+    status_row->addWidget(fifo_status_label_, 1);
+
+    fifo_underflow_label_ = new QLabel("Underflows: 0 (OK)", fifo_group);
+    fifo_underflow_label_->setFont(mono_font);
+    fifo_underflow_label_->setStyleSheet("QLabel { color: #8a93a0; font-size: 11px; }");
+    status_row->addWidget(fifo_underflow_label_);
+    fifo_layout->addLayout(status_row);
+
+    // Row 3: Queued Bytes Display
+    fifo_contents_label_ = new QLabel("Queue: [ Empty ]", fifo_group);
+    fifo_contents_label_->setFont(mono_font);
+    fifo_contents_label_->setStyleSheet("QLabel { color: #98c379; background-color: #21252b; padding: 4px 6px; border-radius: 4px; }");
+    fifo_contents_label_->setWordWrap(true);
+    fifo_layout->addWidget(fifo_contents_label_);
+
+    connect(fifo_enqueue_btn_, &QPushButton::clicked, this, &DevicesPanel::onEnqueueInput);
+    connect(fifo_input_edit_, &QLineEdit::returnPressed, this, &DevicesPanel::onEnqueueInput);
+    connect(fifo_clear_btn_, &QPushButton::clicked, this, &DevicesPanel::onClearFifo);
 
     main_layout->addWidget(fifo_group);
 
@@ -184,6 +247,9 @@ void DevicesPanel::refresh() {
     if (fifo_status_label_ != nullptr) {
         const std::size_t fifo_sz = controller_->bus().input_fifo_size();
         const auto next_b = controller_->bus().peek_input_fifo();
+        const std::size_t underflows = controller_->bus().input_underflow_count();
+        const auto bytes = controller_->bus().input_fifo_contents();
+
         if (fifo_sz == 0) {
             fifo_status_label_->setText("Buffer: Empty (0 bytes queued)");
         } else if (next_b.has_value()) {
@@ -195,6 +261,34 @@ void DevicesPanel::refresh() {
             );
         } else {
             fifo_status_label_->setText(QString("Buffer: %1 bytes queued").arg(fifo_sz));
+        }
+
+        if (fifo_underflow_label_ != nullptr) {
+            if (underflows == 0) {
+                fifo_underflow_label_->setText("Underflows: 0 (OK)");
+                fifo_underflow_label_->setStyleSheet("QLabel { color: #8a93a0; font-size: 11px; }");
+            } else {
+                fifo_underflow_label_->setText(QString("Underflows: %1 (Read Empty)").arg(underflows));
+                fifo_underflow_label_->setStyleSheet("QLabel { color: #e06c75; font-weight: bold; font-size: 11px; }");
+            }
+        }
+
+        if (fifo_contents_label_ != nullptr) {
+            if (bytes.empty()) {
+                fifo_contents_label_->setText("Queue: [ Empty ]");
+            } else {
+                QString qstr = "Queue: [ ";
+                const std::size_t max_disp = std::min(bytes.size(), static_cast<std::size_t>(16));
+                for (std::size_t i = 0; i < max_disp; ++i) {
+                    if (i > 0) qstr += " ";
+                    qstr += QString("0x%1").arg(bytes[i], 2, 16, QLatin1Char('0')).toUpper();
+                }
+                if (bytes.size() > max_disp) {
+                    qstr += QString(" ... (+%1 more)").arg(bytes.size() - max_disp);
+                }
+                qstr += " ]";
+                fifo_contents_label_->setText(qstr);
+            }
         }
     }
 
@@ -302,6 +396,23 @@ void DevicesPanel::onDiagnosticTableClicked(int row, int /* column */) {
     }
 
     emit diagnosticClicked(line, col);
+}
+
+void DevicesPanel::onEnqueueInput() {
+    if (controller_ == nullptr || fifo_input_edit_ == nullptr) return;
+    const QString text = fifo_input_edit_->text().trimmed();
+    if (text.isEmpty()) return;
+
+    const auto bytes = parseHexByteSequence(text);
+    if (!bytes.empty()) {
+        controller_->pushInputFifo(bytes);
+        fifo_input_edit_->clear();
+    }
+}
+
+void DevicesPanel::onClearFifo() {
+    if (controller_ == nullptr) return;
+    controller_->clearInputFifo();
 }
 
 } // namespace bitforge::gui

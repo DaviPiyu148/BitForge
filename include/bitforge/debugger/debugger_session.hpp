@@ -117,6 +117,9 @@ public:
     // Total steps executed across session lifetime
     [[nodiscard]] std::uint64_t total_steps_executed() const noexcept;
 
+    // Structured delta for the most recently executed instruction
+    [[nodiscard]] const std::optional<ExecutionDelta>& last_delta() const noexcept { return last_delta_; }
+
 private:
     Cpu& cpu_;
     const assembler::ProgramImage* image_{nullptr};
@@ -131,6 +134,7 @@ private:
     mutable bool trace_cache_dirty_{false};
 
     std::uint64_t total_steps_executed_{0};
+    std::optional<ExecutionDelta> last_delta_{std::nullopt};
 
     // Internal helper to step CPU once, update trace, and return StepResult
     StepResult execute_single_step();

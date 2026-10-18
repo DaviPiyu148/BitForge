@@ -71,9 +71,28 @@ public:
     [[nodiscard]] debugger::DebuggerSession& session() noexcept { return *session_; }
     [[nodiscard]] const Cpu& cpu() const noexcept { return cpu_; }
     [[nodiscard]] const SystemBus& bus() const noexcept { return bus_; }
+    [[nodiscard]] SystemBus& bus() noexcept { return bus_; }
     [[nodiscard]] const Memory& memory() const noexcept { return memory_; }
+    [[nodiscard]] Memory& memory() noexcept { return memory_; }
     [[nodiscard]] const assembler::ProgramImage* programImage() const noexcept {
         return image_.has_value() ? &(*image_) : nullptr;
+    }
+    [[nodiscard]] const std::optional<debugger::ExecutionDelta>& lastDelta() const noexcept {
+        return session_->last_delta();
+    }
+
+    // Input FIFO management (Port 0x00)
+    void pushInputFifo(byte_t byte) {
+        bus_.push_input_fifo(byte);
+        emit stateChanged();
+    }
+    void pushInputFifo(const std::vector<byte_t>& bytes) {
+        bus_.push_input_fifo(bytes);
+        emit stateChanged();
+    }
+    void clearInputFifo() {
+        bus_.clear_input_fifo();
+        emit stateChanged();
     }
 
 signals:

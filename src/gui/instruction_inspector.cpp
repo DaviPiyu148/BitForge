@@ -377,15 +377,24 @@ void InstructionInspector::refresh() {
                                             .arg(last.fault->message.c_str()));
             last_effect_label_->setStyleSheet("QLabel { color: #dc3545; }");
         } else if (last.state_after == MachineState::Halted) {
-            last_effect_label_->setText("HALT executed. Execution complete.");
+            QString note = "HALT executed. Execution complete.";
+            if (last.delta.has_value() && last.delta->has_changes()) {
+                note += " (" + QString::fromStdString(last.delta->to_string()) + ")";
+            }
+            last_effect_label_->setText(note);
             last_effect_label_->setStyleSheet("QLabel { color: #6c757d; }");
         } else {
-            last_effect_label_->setText(QString("Flags: [Z=%1, C=%2, N=%3, V=%4]")
-                                            .arg(last.flags_after.z ? 1 : 0)
-                                            .arg(last.flags_after.c ? 1 : 0)
-                                            .arg(last.flags_after.n ? 1 : 0)
-                                            .arg(last.flags_after.v ? 1 : 0));
-            last_effect_label_->setStyleSheet("QLabel { color: inherit; }");
+            if (last.delta.has_value() && last.delta->has_changes()) {
+                last_effect_label_->setText(QString::fromStdString(last.delta->to_string()));
+                last_effect_label_->setStyleSheet("QLabel { color: #61afef; font-weight: bold; }");
+            } else {
+                last_effect_label_->setText(QString("No state changes. Flags: [Z=%1, C=%2, N=%3, V=%4]")
+                                                .arg(last.flags_after.z ? 1 : 0)
+                                                .arg(last.flags_after.c ? 1 : 0)
+                                                .arg(last.flags_after.n ? 1 : 0)
+                                                .arg(last.flags_after.v ? 1 : 0));
+                last_effect_label_->setStyleSheet("QLabel { color: inherit; }");
+            }
         }
 
         LastExecutedStepInfo step_info;
