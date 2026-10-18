@@ -1,4 +1,5 @@
 #include "bitforge/gui/welcome_widget.hpp"
+#include "bitforge/gui/main_window.hpp"
 #include "bitforge/gui/theme.hpp"
 
 #include <QVBoxLayout>
@@ -661,7 +662,7 @@ void WelcomeWidget::onRecentItemDoubleClicked(QListWidgetItem* item) {
 void WelcomeWidget::onClearRecentClicked() {
     recent_paths_.clear();
     setRecentFiles(recent_paths_);
-    QSettings settings("BitForge", "BitForge");
+    QSettings settings(MainWindow::settingsOrganization(), MainWindow::settingsApplication());
     settings.remove("recentFiles");
 }
 

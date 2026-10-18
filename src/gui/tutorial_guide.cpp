@@ -4,6 +4,7 @@
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 
 namespace bitforge::gui {
 
@@ -98,10 +99,16 @@ TutorialGuide::TutorialGuide(QWidget* parent)
     layout->setContentsMargins(20, 20, 20, 20);
     layout->setSpacing(12);
 
-    // Header: Stage Title
+    // Header: Stage Title & Step Badge
+    auto* header_layout = new QHBoxLayout();
     stage_title_label_ = new QLabel(this);
     stage_title_label_->setStyleSheet("QLabel { font-size: 16px; font-weight: bold; color: #4ec9b0; }");
-    layout->addWidget(stage_title_label_);
+    header_layout->addWidget(stage_title_label_, 1);
+
+    step_badge_label_ = new QLabel("Step 1 of 9", this);
+    step_badge_label_->setStyleSheet("QLabel { font-size: 11px; font-weight: bold; color: #61afef; background: #282c34; border: 1px solid #3b4048; border-radius: 4px; padding: 2px 8px; }");
+    header_layout->addWidget(step_badge_label_);
+    layout->addLayout(header_layout);
 
     // Progress Bar
     progress_bar_ = new QProgressBar(this);
@@ -188,12 +195,18 @@ void TutorialGuide::updateStageUi() {
     back_btn_->setEnabled(current_stage_ > 0);
     next_btn_->setEnabled(current_stage_ < 8);
 
+    if (step_badge_label_ != nullptr) {
+        step_badge_label_->setText(QString("Step %1 of %2").arg(current_stage_ + 1).arg(9));
+    }
+
     if (!s.actionButtonText.isEmpty()) {
         action_btn_->setText(s.actionButtonText);
         action_btn_->show();
     } else {
         action_btn_->hide();
     }
+
+    emit stageChanged(current_stage_);
 }
 
 void TutorialGuide::checkEmulatorState() {
@@ -277,6 +290,36 @@ void TutorialGuide::onBackClicked() {
 
 void TutorialGuide::onRestartClicked() {
     setStage(0);
+}
+
+void TutorialGuide::nextStage() {
+    onNextClicked();
+}
+
+void TutorialGuide::previousStage() {
+    onBackClicked();
+}
+
+void TutorialGuide::restartTour() {
+    onRestartClicked();
+}
+
+void TutorialGuide::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Right || event->key() == Qt::Key_N) {
+        onNextClicked();
+        event->accept();
+    } else if (event->key() == Qt::Key_Left || event->key() == Qt::Key_B) {
+        onBackClicked();
+        event->accept();
+    } else if (event->key() == Qt::Key_R) {
+        onRestartClicked();
+        event->accept();
+    } else if (event->key() == Qt::Key_Escape) {
+        accept();
+        event->accept();
+    } else {
+        QDialog::keyPressEvent(event);
+    }
 }
 
 } // namespace bitforge::gui

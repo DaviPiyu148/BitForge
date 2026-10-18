@@ -49,8 +49,14 @@ public:
     [[nodiscard]] ExecutionController* controller() const noexcept { return controller_; }
     [[nodiscard]] CodeEditor* editor() const noexcept;
     [[nodiscard]] CodeEditor* currentEditor() const noexcept;
+    [[nodiscard]] CodeEditor* executingEditor() const noexcept { return executing_editor_; }
+    [[nodiscard]] TutorialGuide* activeTutorial() const noexcept { return active_tutorial_; }
     [[nodiscard]] int openDocumentCount() const noexcept { return editor_tabs_.size(); }
     [[nodiscard]] const QList<EditorDocumentInfo>& openDocuments() const noexcept { return editor_tabs_; }
+
+    static void setSettingsProfile(const QString& organization, const QString& application);
+    static QString settingsOrganization();
+    static QString settingsApplication();
 
     [[nodiscard]] RegistersPanel* registersPanel() const noexcept { return registers_panel_; }
     [[nodiscard]] DevicesPanel* devicesPanel() const noexcept { return devices_panel_; }

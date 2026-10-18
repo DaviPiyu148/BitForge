@@ -41,25 +41,6 @@ CodeEditor::CodeEditor(QWidget* parent)
 
 void CodeEditor::setController(ExecutionController* controller) {
     controller_ = controller;
-    if (controller_ != nullptr) {
-        connect(controller_, &ExecutionController::breakpointsChanged, this, &CodeEditor::updateBreakpoints);
-        connect(controller_, &ExecutionController::assemblySucceeded, this, &CodeEditor::updateBreakpoints);
-        connect(controller_, &ExecutionController::stateChanged, this, [this]() {
-            if (controller_->session().state() != MachineState::Ready &&
-                controller_->session().state() != MachineState::Running &&
-                controller_->session().state() != MachineState::Paused &&
-                controller_->session().state() != MachineState::Halted &&
-                controller_->session().state() != MachineState::Faulted) {
-                return;
-            }
-            auto loc = controller_->session().resolve_source_location();
-            if (loc.has_value()) {
-                setCurrentPcLine(loc->line);
-            } else {
-                clearCurrentPcLine();
-            }
-        });
-    }
 }
 
 int CodeEditor::lineNumberAreaWidth() const {
@@ -178,6 +159,11 @@ void CodeEditor::updateBreakpoints() {
             }
         }
     }
+    line_number_area_->update();
+}
+
+void CodeEditor::clearBreakpoints() {
+    active_breakpoint_lines_.clear();
     line_number_area_->update();
 }
 

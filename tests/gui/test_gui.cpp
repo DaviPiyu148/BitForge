@@ -117,17 +117,26 @@ private slots:
     void testFirstProgramTutorialNonDestructive();
     void testWelcomeTabOpenCloseAndSettingsPersistence();
     void testTabKeyboardShortcutsNavigation();
+    void testExecutionSessionLifetimeDocumentClosedStepping();
+    void testExecutionSessionLifetimeBreakpointAndHalt();
+    void testExecutionSessionLifetimeAllTabsClosedInspection();
+    void testExecutionSessionDeliberateReplacementFromDocB();
+    void testSaveAndCloseFailureMatrix();
+    void testGuidedTourNavigationKeyboardAndControls();
+    void testIsolatedSettingsProfileRegistrySafety();
     void cleanupTestCase();
 };
 
 void GuiTest::initTestCase() {
-    QSettings settings("BitForge", "BitForge");
+    MainWindow::setSettingsProfile("BitForgeTest", "BitForgeTest");
+    QSettings settings("BitForgeTest", "BitForgeTest");
     settings.clear();
 }
 
 void GuiTest::cleanupTestCase() {
-    QSettings settings("BitForge", "BitForge");
+    QSettings settings("BitForgeTest", "BitForgeTest");
     settings.clear();
+    MainWindow::setSettingsProfile("BitForge", "BitForge");
 }
 
 void GuiTest::testApplicationStarts() {
@@ -2026,7 +2035,7 @@ void GuiTest::testPreferencesPersistenceAcrossSessions() {
         QCOMPARE(window2.watchPanel()->watchCount(), static_cast<std::size_t>(2));
 
         // Clean up settings
-        QSettings settings("BitForge", "BitForge");
+        QSettings settings(MainWindow::settingsOrganization(), MainWindow::settingsApplication());
         settings.remove("editorFontSize");
         settings.remove("executionSpeed");
         settings.remove("watchList");
@@ -2330,7 +2339,7 @@ void GuiTest::testDocksAndCorruptPreferencesRecovery() {
     QCOMPARE(window.documentTabs()->currentIndex(), 1); // Editor visible
 
     // 4. Corrupted preferences and off-screen geometry recovery
-    QSettings settings("BitForge", "BitForge");
+    QSettings settings(MainWindow::settingsOrganization(), MainWindow::settingsApplication());
     settings.setValue("geometry", QByteArray("CORRUPTED_GARBAGE_PAYLOAD_XYZ_999"));
     settings.setValue("windowState", QByteArray("CORRUPTED_WINDOW_STATE_XYZ_888"));
     settings.setValue("editorFontSize", -100);
@@ -2671,7 +2680,7 @@ void GuiTest::testWelcomeTabOpenCloseAndSettingsPersistence() {
     ww->setShowOnStartup(false);
     QVERIFY(!ww->showOnStartup());
 
-    QSettings settings("BitForge", "BitForge");
+    QSettings settings(MainWindow::settingsOrganization(), MainWindow::settingsApplication());
     QCOMPARE(settings.value("showWelcomeOnStartup").toBool(), false);
 
     int welcome_idx = window.documentTabs()->indexOf(ww);
@@ -2702,6 +2711,314 @@ void GuiTest::testTabKeyboardShortcutsNavigation() {
     QCOMPARE(window.documentTabs()->currentIndex(), t2);
     window.previousTab();
     QCOMPARE(window.documentTabs()->currentIndex(), t1);
+}
+
+void GuiTest::testExecutionSessionLifetimeDocumentClosedStepping() {
+    MainWindow window;
+    const QString code_a =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 10\n"
+        "    INC R0\n"
+        "    INC R0\n"
+        "    HALT\n";
+    const QString code_b =
+        ".ORG 0x0300\n"
+        ".ENTRY start_b\n"
+        "start_b:\n"
+        "    LDI R1, 55\n"
+        "    HALT\n";
+
+    int tab_a = window.createEditorTab("program_a.asm", code_a);
+    int tab_b = window.createEditorTab("program_b.asm", code_b);
+
+    // Assemble and run from Document A
+    window.documentTabs()->setCurrentIndex(tab_a);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+    QCOMPARE(window.controller()->session().pc(), static_cast<word_t>(0x0200));
+
+    // Switch to Document B
+    window.documentTabs()->setCurrentIndex(tab_b);
+    QCOMPARE(window.currentEditor()->toPlainText(), code_b);
+
+    // Close Document A while session A is loaded
+    int tab_a_idx = window.findTabByPath("program_a.asm");
+    QVERIFY(tab_a_idx >= 0);
+    bool closed = window.closeTab(tab_a_idx);
+    QVERIFY(closed);
+
+    // Verify executing_editor is null, but session remains intact and status shows Closed
+    QVERIFY(window.executingEditor() == nullptr);
+    QVERIFY(window.controller()->isAssembled());
+    QVERIFY(window.statusStateLabel()->text().contains("(Closed)"));
+
+    // Step 1: LDI R0, 10
+    window.onStep();
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(10));
+    QCOMPARE(window.controller()->session().total_steps_executed(), static_cast<std::uint64_t>(1));
+
+    // Step 2: INC R0 -> 11
+    window.onStep();
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(11));
+    QCOMPARE(window.controller()->session().total_steps_executed(), static_cast<std::uint64_t>(2));
+
+    // Continue to HALT
+    window.onContinue();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(12));
+
+    // Registers, memory, stack, devices, and trace remain fully accessible and intact
+    QVERIFY(window.registersPanel() != nullptr);
+    QVERIFY(window.memoryViewer() != nullptr);
+    QVERIFY(window.devicesPanel() != nullptr);
+    QVERIFY(window.stackViewer() != nullptr);
+    QVERIFY(window.tracePanel() != nullptr);
+    QVERIFY(window.controller()->session().trace().size() > 0);
+}
+
+void GuiTest::testExecutionSessionLifetimeBreakpointAndHalt() {
+    MainWindow window;
+    const QString code_a =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 5\n"
+        "    LDI R1, 7\n"
+        "    ADD R0, R1\n"
+        "    HALT\n";
+    const QString code_b =
+        ".ORG 0x0400\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    NOP\n"
+        "    HALT\n";
+
+    int tab_a = window.createEditorTab("bp_test.asm", code_a);
+    int tab_b = window.createEditorTab("other_doc.asm", code_b);
+
+    // Assemble Document A
+    window.documentTabs()->setCurrentIndex(tab_a);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+
+    // Set breakpoint on Line 6 (ADD R0, R1)
+    auto bp_res = window.controller()->toggleBreakpoint(6);
+    QVERIFY(bp_res.success);
+    QVERIFY(window.controller()->hasLineBreakpoint(6));
+
+    // Switch to Document B and close Document A
+    window.documentTabs()->setCurrentIndex(tab_b);
+    int tab_a_idx = window.findTabByPath("bp_test.asm");
+    QVERIFY(tab_a_idx >= 0);
+    QVERIFY(window.closeTab(tab_a_idx));
+
+    // Run session A to breakpoint
+    window.onContinue();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().last_stop_reason(), debugger::StopReason::BreakpointHit, 2000);
+    QCOMPARE(window.controller()->lastStopReason(), debugger::StopReason::BreakpointHit);
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(5));
+    QCOMPARE(window.controller()->session().registers().r[1], static_cast<byte_t>(7));
+
+    // Double-clicking breakpoint in panel when source document is closed must not navigate or move Tab B cursor
+    int cur_line_b = window.currentEditor()->textCursor().blockNumber() + 1;
+    emit window.breakpointsPanel()->breakpointDoubleClicked(6);
+    QCOMPARE(window.currentEditor()->textCursor().blockNumber() + 1, cur_line_b);
+
+    // Step through the breakpoint instruction (ADD R0, R1)
+    window.onStep();
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(12));
+
+    // Continue to HALT
+    window.onContinue();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(12));
+}
+
+void GuiTest::testExecutionSessionLifetimeAllTabsClosedInspection() {
+    MainWindow window;
+    const QString code =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 42\n"
+        "    HALT\n";
+
+    window.createEditorTab("all_closed.asm", code);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+
+    window.onStep();
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(42));
+
+    // Close all editor tabs while session is active
+    window.closeAllTabs();
+    QCOMPARE(window.openDocumentCount(), 0);
+    QVERIFY(window.executingEditor() == nullptr);
+
+    // CPU session state remains completely intact and inspectable in all dock panels
+    QVERIFY(window.controller()->isAssembled());
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(42));
+    QVERIFY(window.statusStateLabel()->text().contains("(Closed)"));
+
+    // Reset works cleanly even with all tabs closed
+    window.onReset();
+    QCOMPARE(window.controller()->session().pc(), static_cast<word_t>(0x0200));
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(0));
+}
+
+void GuiTest::testExecutionSessionDeliberateReplacementFromDocB() {
+    MainWindow window;
+    const QString code_a =
+        ".ORG 0x0200\n"
+        ".ENTRY start_a\n"
+        "start_a:\n"
+        "    LDI R0, 11\n"
+        "    HALT\n";
+    const QString code_b =
+        ".ORG 0x0300\n"
+        ".ENTRY start_b\n"
+        "start_b:\n"
+        "    LDI R1, 77\n"
+        "    HALT\n";
+
+    int tab_a = window.createEditorTab("prog_a.asm", code_a);
+    int tab_b = window.createEditorTab("prog_b.asm", code_b);
+
+    window.documentTabs()->setCurrentIndex(tab_a);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+
+    // Switch to Tab B and close Tab A
+    window.documentTabs()->setCurrentIndex(tab_b);
+    int tab_a_idx = window.findTabByPath("prog_a.asm");
+    QVERIFY(window.closeTab(tab_a_idx));
+
+    // Stepping still steps session A
+    window.onStep();
+    QCOMPARE(window.controller()->session().registers().r[0], static_cast<byte_t>(11));
+    QCOMPARE(window.controller()->session().registers().r[1], static_cast<byte_t>(0));
+
+    // Now deliberately assemble from Document B
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+    QCOMPARE(window.executingEditor(), window.currentEditor());
+    QVERIFY(!window.statusStateLabel()->text().contains("(Closed)"));
+    QCOMPARE(window.controller()->session().pc(), static_cast<word_t>(0x0300));
+
+    // Run Document B to HALT
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+    QCOMPARE(window.controller()->session().registers().r[1], static_cast<byte_t>(77));
+}
+
+void GuiTest::testSaveAndCloseFailureMatrix() {
+    MainWindow window;
+    const int initial_count = window.openDocumentCount();
+    int t1 = window.createEditorTab();
+    int t2 = window.createEditorTab();
+    int t3 = window.createEditorTab();
+
+    auto* ed2 = qobject_cast<CodeEditor*>(window.documentTabs()->widget(t2));
+    auto* ed3 = qobject_cast<CodeEditor*>(window.documentTabs()->widget(t3));
+    QVERIFY(ed2 != nullptr);
+    QVERIFY(ed3 != nullptr);
+
+    ed2->insertPlainText("; dirty 2\n");
+    ed3->insertPlainText("; dirty 3\n");
+    QVERIFY(ed2->document()->isModified());
+    QVERIFY(ed3->document()->isModified());
+
+    // 1. Close Others cancelled on modified tab preserves all tabs atomically
+    dismissModalMessageBox(QMessageBox::Cancel);
+    window.closeOtherTabs(t1);
+
+    // None of the tabs should be closed!
+    QCOMPARE(window.openDocumentCount(), initial_count + 3);
+    QVERIFY(ed2->document()->isModified());
+    QVERIFY(ed3->document()->isModified());
+
+    // 2. Close All cancelled on modified tab preserves all tabs atomically
+    dismissModalMessageBox(QMessageBox::Cancel);
+    bool closed_all = window.closeAllTabs();
+    QVERIFY(!closed_all);
+    QCOMPARE(window.openDocumentCount(), initial_count + 3);
+
+    // 3. Unwritable save path fails gracefully and keeps document dirty
+    dismissModalMessageBox(QMessageBox::Ok);
+    bool save_fail = window.saveFile("Z:/nonexistent_volume_xyz/unwritable.asm");
+    QVERIFY(!save_fail);
+    QVERIFY(ed2->document()->isModified());
+}
+
+void GuiTest::testGuidedTourNavigationKeyboardAndControls() {
+    MainWindow window;
+    window.show();
+    window.onStartTutorial();
+
+    auto* guide = window.activeTutorial();
+    QVERIFY(guide != nullptr);
+    QVERIFY(guide->isVisible());
+    QCOMPARE(guide->currentStage(), 0);
+
+    // Step badge
+    QVERIFY(guide->stepBadgeLabel() != nullptr);
+    QCOMPARE(guide->stepBadgeLabel()->text(), "Step 1 of 9");
+
+    // Next stage navigation
+    guide->nextStage();
+    QCOMPARE(guide->currentStage(), 1);
+    QCOMPARE(guide->stepBadgeLabel()->text(), "Step 2 of 9");
+
+    // Forward through stages
+    for (int s = 2; s <= 7; ++s) {
+        guide->nextStage();
+        QCOMPARE(guide->currentStage(), s);
+        QCOMPARE(guide->stepBadgeLabel()->text(), QString("Step %1 of 9").arg(s + 1));
+    }
+
+    // Verify dock visibility on stage 7
+    if (window.rightDock()) {
+        QVERIFY(window.rightDock()->isVisible());
+    }
+
+    // Previous stage navigation
+    guide->previousStage();
+    QCOMPARE(guide->currentStage(), 6);
+    if (window.bottomDock()) {
+        QVERIFY(window.bottomDock()->isVisible());
+    }
+
+    // Restart tour
+    guide->restartTour();
+    QCOMPARE(guide->currentStage(), 0);
+    QCOMPARE(guide->stepBadgeLabel()->text(), "Step 1 of 9");
+
+    // Close and re-trigger from Help -> resets cleanly to Stage 0 without corruption
+    guide->nextStage();
+    guide->nextStage();
+    QCOMPARE(guide->currentStage(), 2);
+
+    window.onStartTutorial();
+    QCOMPARE(guide->currentStage(), 0);
+    QCOMPARE(guide->stepBadgeLabel()->text(), "Step 1 of 9");
+}
+
+void GuiTest::testIsolatedSettingsProfileRegistrySafety() {
+    // Verify isolated settings profile is active in tests
+    QCOMPARE(MainWindow::settingsOrganization(), QString("BitForgeTest"));
+    QCOMPARE(MainWindow::settingsApplication(), QString("BitForgeTest"));
+
+    QSettings testSettings(MainWindow::settingsOrganization(), MainWindow::settingsApplication());
+    testSettings.setValue("safetySentinelKey", 98765);
+
+    // Verify real user registry profile has NOT been polluted
+    QSettings realSettings("BitForge", "BitForge");
+    QVERIFY(!realSettings.contains("safetySentinelKey"));
+
+    // Cleanup
+    testSettings.remove("safetySentinelKey");
 }
 
 QTEST_MAIN(GuiTest)

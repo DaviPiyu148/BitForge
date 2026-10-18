@@ -27,6 +27,22 @@
 
 namespace bitforge::gui {
 
+static QString s_settings_org = "BitForge";
+static QString s_settings_app = "BitForge";
+
+void MainWindow::setSettingsProfile(const QString& organization, const QString& application) {
+    s_settings_org = organization;
+    s_settings_app = application;
+}
+
+QString MainWindow::settingsOrganization() {
+    return s_settings_org;
+}
+
+QString MainWindow::settingsApplication() {
+    return s_settings_app;
+}
+
 namespace {
 
 QString canonicalizePath(const QString& path) {
@@ -159,7 +175,7 @@ void MainWindow::setupUi() {
         }
     });
     connect(welcome_widget_, &WelcomeWidget::showOnStartupChanged, this, [](bool show) {
-        QSettings settings("BitForge", "BitForge");
+        QSettings settings(s_settings_org, s_settings_app);
         settings.setValue("showWelcomeOnStartup", show);
     });
 
@@ -273,6 +289,11 @@ void MainWindow::setupUi() {
     connect(controller_, &ExecutionController::staleChanged, this, &MainWindow::updateUiState);
     connect(controller_, &ExecutionController::assemblySucceeded, this, &MainWindow::updateUiState);
     connect(controller_, &ExecutionController::assemblyFailed, this, &MainWindow::updateUiState);
+    connect(controller_, &ExecutionController::breakpointsChanged, this, [this]() {
+        if (executing_editor_ != nullptr) {
+            executing_editor_->updateBreakpoints();
+        }
+    });
     connect(controller_, &ExecutionController::executionStopped, this, [this](debugger::StopReason reason) {
         updateUiState();
         if (reason == debugger::StopReason::BreakpointHit) {
@@ -294,6 +315,9 @@ void MainWindow::setupUi() {
                 document_tabs_->setCurrentIndex(tab_idx);
             }
             executing_editor_->gotoLine(line, col);
+        } else if (controller_->isAssembled() || !executing_document_path_.isEmpty()) {
+            QString name = executing_document_path_.isEmpty() ? "[Untitled]" : QFileInfo(executing_document_path_).fileName();
+            statusBar()->showMessage(QString("Source document is closed: %1").arg(name), 3000);
         } else if (currentEditor() != nullptr) {
             showEditor();
             currentEditor()->gotoLine(line, col);
@@ -308,6 +332,9 @@ void MainWindow::setupUi() {
                 document_tabs_->setCurrentIndex(tab_idx);
             }
             executing_editor_->gotoLine(line, 1);
+        } else if (controller_->isAssembled() || !executing_document_path_.isEmpty()) {
+            QString name = executing_document_path_.isEmpty() ? "[Untitled]" : QFileInfo(executing_document_path_).fileName();
+            statusBar()->showMessage(QString("Source document is closed: %1").arg(name), 3000);
         } else if (currentEditor() != nullptr) {
             showEditor();
             currentEditor()->gotoLine(line, 1);
@@ -923,6 +950,8 @@ bool MainWindow::closeTab(int index) {
     }
 
     if (ed == executing_editor_) {
+        ed->clearCurrentPcLine();
+        ed->clearBreakpoints();
         executing_editor_ = nullptr;
     }
     if (ed == current_editor_) {
@@ -951,7 +980,7 @@ bool MainWindow::closeActiveTab() {
 }
 
 bool MainWindow::closeAllTabs() {
-    // Check all dirty editor tabs first
+    // Pass 1: Check all dirty editor tabs first. If cancelled, abort without closing ANY tabs.
     for (int i = document_tabs_->count() - 1; i >= 0; --i) {
         QWidget* w = document_tabs_->widget(i);
         if (w == welcome_widget_) continue;
@@ -969,16 +998,23 @@ bool MainWindow::closeAllTabs() {
                 if (!saveTab(i)) return false;
             } else if (ret == QMessageBox::Cancel) {
                 return false;
+            } else if (ret == QMessageBox::Discard) {
+                ed->document()->setModified(false);
             }
         }
     }
 
-    // Now close all editor tabs cleanly
+    // Pass 2: Now close all editor tabs cleanly
     while (!editor_tabs_.isEmpty()) {
         auto doc = editor_tabs_.takeLast();
         int tab_idx = document_tabs_->indexOf(doc.editor);
         if (tab_idx >= 0) {
             document_tabs_->removeTab(tab_idx);
+        }
+        if (doc.editor == executing_editor_) {
+            doc.editor->clearCurrentPcLine();
+            doc.editor->clearBreakpoints();
+            executing_editor_ = nullptr;
         }
         doc.editor->deleteLater();
     }
@@ -997,6 +1033,32 @@ void MainWindow::closeOtherTabs(int keepIndex) {
     if (keepIndex < 0 || keepIndex >= document_tabs_->count()) return;
     QWidget* keepWidget = document_tabs_->widget(keepIndex);
 
+    // Pass 1: Verify all modified tabs to be closed. If cancelled, abort without closing ANY tabs.
+    for (int i = document_tabs_->count() - 1; i >= 0; --i) {
+        if (document_tabs_->widget(i) == keepWidget) continue;
+        QWidget* w = document_tabs_->widget(i);
+        if (w == welcome_widget_) continue;
+        auto* ed = qobject_cast<CodeEditor*>(w);
+        if (ed && ed->document()->isModified()) {
+            document_tabs_->setCurrentIndex(i);
+            int info_idx = findTabByEditor(ed);
+            QString docTitle = (info_idx >= 0) ? editor_tabs_[info_idx].title : "Document";
+            const QMessageBox::StandardButton ret = QMessageBox::warning(
+                this, "BitForge",
+                QString("The document '%1' has unsaved changes.\nDo you want to save before closing?").arg(docTitle),
+                QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel
+            );
+            if (ret == QMessageBox::Save) {
+                if (!saveTab(i)) return; // Save cancelled or write failed -> abort
+            } else if (ret == QMessageBox::Cancel) {
+                return; // User cancelled -> abort without closing ANY tabs
+            } else if (ret == QMessageBox::Discard) {
+                ed->document()->setModified(false);
+            }
+        }
+    }
+
+    // Pass 2: Now close all other tabs safely
     for (int i = document_tabs_->count() - 1; i >= 0; --i) {
         if (document_tabs_->widget(i) == keepWidget) continue;
         closeTab(i);
@@ -1486,12 +1548,32 @@ void MainWindow::updateUiState() {
         state_badge_->setStyleSheet(theme::stateBadgeStyle(st, is_executing, is_stale));
     }
 
+    // Update PC arrow on executing editor
+    if (executing_editor_ != nullptr) {
+        if (st == MachineState::Ready || st == MachineState::Running ||
+            st == MachineState::Paused || st == MachineState::Halted ||
+            st == MachineState::Faulted) {
+            auto loc = controller_->session().resolve_source_location();
+            if (loc.has_value()) {
+                executing_editor_->setCurrentPcLine(loc->line);
+            } else {
+                executing_editor_->clearCurrentPcLine();
+            }
+        } else {
+            executing_editor_->clearCurrentPcLine();
+        }
+    }
+
     // Update status bar
     if (status_state_label_) {
         if (is_assembled && executing_editor_ != nullptr && executing_editor_ != currentEditor()) {
             QString exec_name = executing_document_path_.isEmpty() ? "[Untitled]" : QFileInfo(executing_document_path_).fileName();
             QString base_text = state_badge_ ? state_badge_->text().trimmed() : "READY";
             status_state_label_->setText(QString("%1 (Exec: %2)").arg(base_text, exec_name));
+        } else if (is_assembled && executing_editor_ == nullptr) {
+            QString exec_name = executing_document_path_.isEmpty() ? "[Untitled]" : QFileInfo(executing_document_path_).fileName();
+            QString base_text = state_badge_ ? state_badge_->text().trimmed() : "READY";
+            status_state_label_->setText(QString("%1 (Exec: %2 (Closed))").arg(base_text, exec_name));
         } else if (state_badge_) {
             status_state_label_->setText(state_badge_->text().trimmed());
         }
@@ -1690,6 +1772,51 @@ void MainWindow::onStartTutorial() {
                 showEditor();
             }
         });
+        connect(active_tutorial_, &TutorialGuide::stageChanged, this, [this](int stage) {
+            switch (stage) {
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                    showEditor();
+                    break;
+                case 5:
+                    if (right_dock_) {
+                        right_dock_->show();
+                        right_dock_->raise();
+                    }
+                    if (registers_panel_) {
+                        registers_panel_->setFocus();
+                    }
+                    break;
+                case 6:
+                    if (bottom_dock_) {
+                        bottom_dock_->show();
+                        bottom_dock_->raise();
+                    }
+                    if (memory_viewer_) {
+                        memory_viewer_->setFocus();
+                    }
+                    break;
+                case 7:
+                    if (right_dock_) {
+                        right_dock_->show();
+                        right_dock_->raise();
+                    }
+                    if (devices_panel_) {
+                        devices_panel_->setFocus();
+                    }
+                    break;
+                case 8:
+                    showEditor();
+                    break;
+                default:
+                    break;
+            }
+        });
+    } else {
+        active_tutorial_->setStage(0);
     }
     active_tutorial_->show();
     active_tutorial_->raise();
@@ -1729,7 +1856,7 @@ void MainWindow::onCurriculumRequested() {
 }
 
 void MainWindow::loadSettings() {
-    QSettings settings("BitForge", "BitForge");
+    QSettings settings(s_settings_org, s_settings_app);
 
     // 1. Window geometry and dock layout state
     if (settings.contains("geometry")) {
@@ -1797,7 +1924,7 @@ void MainWindow::loadSettings() {
 }
 
 void MainWindow::saveSettings() {
-    QSettings settings("BitForge", "BitForge");
+    QSettings settings(s_settings_org, s_settings_app);
     settings.setValue("geometry", saveGeometry());
     settings.setValue("windowState", saveState());
 
@@ -1817,7 +1944,7 @@ void MainWindow::saveSettings() {
 
 void MainWindow::updateRecentFilesList(const QString& filePath) {
     if (filePath.isEmpty() || !QFile::exists(filePath)) return;
-    QSettings settings("BitForge", "BitForge");
+    QSettings settings(s_settings_org, s_settings_app);
     QStringList recents = settings.value("recentFiles").toStringList();
     QString abs_path = QFileInfo(filePath).absoluteFilePath();
     recents.removeAll(abs_path);

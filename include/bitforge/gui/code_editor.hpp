@@ -51,6 +51,7 @@ signals:
 
 public slots:
     void updateBreakpoints();
+    void clearBreakpoints();
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
