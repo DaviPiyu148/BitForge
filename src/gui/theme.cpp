@@ -494,6 +494,33 @@ QString secondaryButtonStyle() {
     ).arg(kRadiusControl).arg(kControlMinHeight);
 }
 
+QString accentButtonStyle(const QColor& accentColor) {
+    return QString(
+        "QPushButton {"
+        "  background-color: #282c34;"
+        "  color: %1;"
+        "  border: 1px solid #3b4048;"
+        "  border-radius: %2px;"
+        "  padding: 5px 12px;"
+        "  min-height: %3px;"
+        "  font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #3e4451;"
+        "  border-color: %1;"
+        "  color: #ffffff;"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: #1b1d23;"
+        "}"
+        "QPushButton:disabled {"
+        "  background-color: #21252b;"
+        "  color: #7f848e;"
+        "  border-color: #2c313a;"
+        "}"
+    ).arg(accentColor.name()).arg(kRadiusControl).arg(kControlMinHeight);
+}
+
 QString dangerButtonStyle() {
     return QString(
         "QPushButton {"
@@ -580,6 +607,22 @@ QString infoBannerStyle(const QColor& bg, const QColor& text, const QColor& bord
         "  font-size: 11px;"
         "}"
     ).arg(bg.name(), text.name(), border.name()).arg(kRadiusPanel);
+}
+
+QString statusBannerStyle(const QColor& bg, const QColor& text, const QColor& border, bool bold) {
+    return QString(
+        "QLabel {"
+        "  background-color: %1;"
+        "  color: %2;"
+        "  border: 1px solid %3;"
+        "  border-radius: %4px;"
+        "  padding: 6px 10px;"
+        "  font-size: 11px;"
+        "  %5"
+        "}"
+    ).arg(bg.name(), text.name(), border.name())
+     .arg(kRadiusControl)
+     .arg(bold ? "font-weight: bold;" : "");
 }
 
 QString welcomeActionCardStyle(const QString& customBg) {

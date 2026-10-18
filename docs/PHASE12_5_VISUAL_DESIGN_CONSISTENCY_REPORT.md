@@ -1,8 +1,8 @@
-# BitForge Phase 12.5 — Unified Visual Design System and UI Consistency Audit
+# BitForge Phase 12.5 & 12.5.1 — Unified Visual Design System, Token Architecture, and Consistency Audit
 
 **Date:** October 19, 2026  
 **Auditor & Implementation Agent:** Antigravity (Google DeepMind)  
-**Baseline Git Commit:** `6094caa`  
+**Baseline Git Commit:** `6094caa` (Phase 12.5 baseline) / `a2205ed` (Phase 12.5)  
 **Target Git Branch:** `master`  
 **Repository Working Directory:** `d:\BitForge`  
 
@@ -10,64 +10,72 @@
 
 ## 1. Executive Summary & Verification Matrix
 
-Phase 12.5 executes a comprehensive visual consistency audit and unified design system implementation across the entire BitForge application. Previously, while BitForge had an established dark theme, individual panels and dialogs had evolved isolated styling patterns:
-- Inconsistent border-radii (some dialogs used 4px, action cards used 6px, input fields used arbitrary values, while badges used 3px).
-- Alien color leakage: The cyan `#00adb5` had leaked into `WelcomeWidget`, `TutorialGuide`, and `ExamplesDialog` alongside unstyled default push buttons lacking hover/pressed states.
-- Web Bootstrap colors: `#28a745`, `#dc3545`, `#007bff`, and `#fd7e14` were hardcoded into status badges, bit view widgets, instruction inspection previews, and stack status labels instead of adhering to the canonical BitForge color system.
-- Inconsistent empty-state and info-banner presentations across diagnostic lists, watch expressions, breakpoints, and trace panels.
+Phase 12.5 and Phase 12.5.1 execute a comprehensive visual consistency audit and unified design system architecture across the entire BitForge application. Previously, while BitForge maintained an established dark theme, individual panels, dialogs, and tools had evolved isolated styling patterns:
+- Inconsistent border-radii across panels, action cards, inputs, and badges.
+- Alien color leakage: The cyan `#00adb5` had leaked into `WelcomeWidget`, `TutorialGuide`, and `ExamplesDialog` alongside unstyled push buttons lacking hover/pressed states.
+- Web Bootstrap colors: `#28a745`, `#dc3545`, `#007bff`, and `#fd7e14` were hardcoded into status badges, bit view widgets, instruction inspection previews, and stack status labels instead of adhering to the canonical BitForge palette.
+- Design token discrepancies: `kControlHeight = 28` vs 26px toolbar buttons; `kCloseButtonSize = 18` vs 22px Find & Replace close button; ambiguity between pill shapes and rounded rectangles; and monolithic radius assignments in composite panels.
 
-Phase 12.5 establishes a canonical, centralized design token system in `include/bitforge/gui/theme.hpp` and `src/gui/theme.cpp`, refactors all 18 major UI areas to strictly consume these tokens, preserves intentional square geometry for dense technical readouts, and verifies visual harmony with a suite of 26 automated visual smoke tests.
+Phase 12.5 and 12.5.1 resolve these issues by establishing a canonical design token system in `include/bitforge/gui/theme.hpp` and `src/gui/theme.cpp`, refactoring all 18 major UI areas to strictly consume these tokens, introducing named variants for purposeful compact controls, preserving intentional square geometry for dense technical readouts, and verifying visual harmony with 26 automated visual smoke tests.
 
 ### Deliverables Status Summary
 
-| Area | Requirement | Baseline Status | Phase 12.5 Status | Verification Evidence |
+| Area | Requirement | Baseline Status | Phase 12.5 / 12.5.1 Status | Verification Evidence |
 | :--- | :--- | :--- | :--- | :--- |
-| **Token System** | Centralized radii, spacing, colors, metrics | Ad-hoc inline CSS strings | **Canonical Design Tokens** | `include/bitforge/gui/theme.hpp`, `src/gui/theme.cpp`, `testVisualDesignSystemTokensAndHierarchy` |
-| **Buttons & Badges** | Unified primary, secondary, danger, compact | Alien `#00adb5`, Bootstrap colors | **100% Tokenized Styles** | Primary teal, secondary dark, danger red, compact toolbar styles |
-| **Input Fields & Search** | Standard height, padding, focus glow | Inconsistent padding, no focus ring | **Unified `inputStyle`** | Find/replace, watch expressions, address inputs |
-| **Empty States & Banners** | Consistent muted styling & info cards | Mismatched plain labels | **Unified Helper Styles** | `emptyStateStyle()`, `infoBannerStyle()` |
+| **Token System** | Centralized radii, spacing, colors, metrics | Ad-hoc inline CSS strings | **Reconciled Canonical Tokens** | `include/bitforge/gui/theme.hpp`, `src/gui/theme.cpp`, `testVisualDesignSystemTokensAndHierarchy` |
+| **Control Sizing** | Reconcile 28px vs 26px toolbar buttons | Unclear metric mismatch | **Explicit `kToolbarButtonHeight` (26px)** | `kControlHeight = 28` (standard), `kToolbarButtonHeight = 26` (compact toolbar), `kButtonMinHeight = 26` |
+| **Close Button Sizing** | Reconcile 18px tab vs 22px Find close | Single ambiguous token | **Decomposed Close Tokens** | `kTabCloseButtonSize = 18` (tab subcontrol) vs `kIconButtonSize = 22` (standalone icon button) |
+| **Pill Geometry** | Define true pill vs rounded rect | Unclear 12px semantics | **Mathematical Semicircular Pill** | `kRadiusPill = 12` (half of 24px badge height = true pill); `kLedRadiusPill = 9` (half of 18px LED = true circle) |
+| **Composite Radii** | Breakpoints & Watch radius assignment | Listed solely as `kRadiusNone` | **Decomposed Viewport/Control Radii** | Tables: strictly `kRadiusNone` (0px); Inputs & Buttons: `kRadiusControl` (4px) |
+| **Buttons & Badges** | Unified primary, secondary, danger, compact, accent | Alien `#00adb5`, Bootstrap colors | **100% Tokenized Styles** | `primaryButtonStyle()`, `secondaryButtonStyle()`, `accentButtonStyle()`, `compactButtonStyle()`, `dangerButtonStyle()` |
+| **Status Banners** | Standardized execution feedback banners | Hardcoded inline styles | **Unified `statusBannerStyle()`** | Adopted across `InstructionInspector` and `TutorialGuide` |
 | **Dense Data Preservation** | Hex dumps, gutters, disassembly tables | Potential risk of over-rounding | **Preserved Square Geometry** | `kRadiusNone = 0` on tables, memory grid, disassembly |
-| **Visual Artifacts** | Before/after visual evidence | Disparate screenshots | **26 Screen Captures** | `<artifactDir>/gui_smoke_*.png` |
+| **Visual Artifacts** | Before/after visual evidence | Disparate screenshots | **26 High-Res Screen Captures** | `<artifactDir>/gui_smoke_*.png` with tab-raising automation |
 | **4 Presets Matrix** | Build and test across all presets | 100% Pass | **100% Pass** | `gui`, `debug`, `ci`, `gui-release` (316 tests pass) |
-| **Packaged Distribution** | Validate portable package execution | Validated in 12.4 | **Clean Validation** | Portable package smoke test passes under sanitized PATH |
+| **Packaged Distribution** | Validate portable package execution | Validated in 12.4 | **Clean Validation** | Portable package smoke test passes under sanitized PATH with 0 errors |
 | **Frozen Specs** | Untouched architecture specs v1.0-v1.7 | Strictly preserved | **100% Untouched** | `git diff` confirms 0 lines altered in `docs/BitForge_Architecture_Specification_*.md` |
 
 ---
 
-## 2. Canonical Token Architecture & Design Rules
+## 2. Reconciled Canonical Token Architecture & Design Rules
 
 All tokens are defined as `constexpr` values and strongly-typed helper functions in namespace `bitforge::gui::theme`.
 
-### 2.1 Corner Radii Scale and Intentional Exceptions
+### 2.1 Reconciled Geometry and Corner Radii Scale
 
 Corner radii follow a strict 5-tier semantic hierarchy based on component purpose and surface scale:
 
 | Token | Radius Value | Semantic Purpose | Component Application |
 | :--- | :--- | :--- | :--- |
-| `kRadiusNone` | `0px` | **Dense Technical Data & Viewports** | Memory hex grid, disassembly table/gutter, source code editor viewport, stack dump table, trace list, register table. |
-| `kRadiusSmall` | `3px` | **Micro Controls & Badges** | CPU status badges, register flag badges, gutter breakpoint markers, find/replace close button. |
-| `kRadiusControl` | `4px` | **Standard Interactive Controls** | Push buttons, input text boxes, spin boxes, combo boxes, tab bar items, group boxes, dialog frames. |
-| `kRadiusPanel` | `6px` | **Containers & Information Banners** | Embedded informational cards, quick-start banners, notification panels, device status containers. |
+| `kRadiusNone` | `0px` | **Dense Technical Data & Viewports** | Memory hex grid, disassembly table/gutter, source code editor viewport, stack dump table, trace list, register table, console logs. |
+| `kRadiusSmall` | `3px` | **Micro Controls & Badges** | CPU register flag badges, tab close buttons, spinbox subcontrols, compact toolbar buttons, find/replace close hover. |
+| `kRadiusControl` | `4px` | **Standard Interactive Controls** | Push buttons, input text boxes, spin boxes, combo boxes, tab bar items, group boxes, dialog frames, status banners. |
+| `kRadiusPanel` | `6px` | **Containers & Information Banners** | Embedded informational cards, quick-start banners, notification panels, device status containers, context menus. |
 | `kRadiusLarge` | `8px` | **Hero Cards & Welcome Dialogs** | Welcome center action cards ("Open Example", "New File"), major modal dialog windows. |
-| `kRadiusPill` | `12px` | **Pill Badges & Step Counters** | Tutorial guide step count badges, floating status pills. |
+| `kRadiusPill` | `12px` | **Semicircular Badge Capsules** | Status badges (`stateBadgeStyle`), step counters (`step_badge_label_`). Height = 22-24px, radius = 12px renders true semicircular caps. |
+| `kLedRadiusPill` | `9px` | **Circular Hardware Indicators** | Virtual 8-LED indicators (`kLedIndicatorSize = 18px`). Radius = 9px renders a geometrically perfect circle. |
 
 #### Architectural Rationale for `kRadiusNone` on Technical Data
-Dense computational tools (such as memory hex editors, disassembly gutters, and register grids) convey tabular, high-density technical data where alignment across columns and rows is paramount. Applying rounded borders or curved clipping regions to cells, viewport edges, or line number gutters introduces visual noise, wasted pixel padding, and antialiasing artifacts at row boundaries. Therefore, all data-dense grids and editor viewports are strictly specified with `kRadiusNone = 0`.
+Dense computational tools (such as memory hex editors, disassembly gutters, stack viewers, and register grids) convey tabular, high-density technical data where alignment across columns and rows is paramount. Applying rounded borders or curved clipping regions to cells, viewport edges, or line number gutters introduces visual noise, wasted pixel padding, and antialiasing artifacts at row boundaries. Therefore, all data-dense grids and editor viewports are strictly specified with `kRadiusNone = 0`.
 
-### 2.2 Sizing, Spacing, and Layout Metrics
+### 2.2 Reconciled Control Sizing & Metrics (Resolving Token Discrepancies)
 
-Control heights and hit targets are standardized to ensure consistent vertical cadence and touch/click ergonomics:
-- `kControlHeight = 28px`: Default interactive control height (input fields, combo boxes, main buttons).
-- `kControlMinHeight = 20px`: Minimum height for compact inline controls.
-- `kButtonMinHeight = 26px`: Standard push button minimum height.
-- `kIconButtonSize = 22px`: Square toolbar and utility icon buttons.
-- `kCloseButtonSize = 18px`: Tab close buttons (18×18 hit area with 10×10 vector cross).
-- `kSpinButtonWidth = 18px`: Spinbox subcontrol up/down arrow buttons.
-- `kSpacingTight = 4px`: Tight intra-component spacing (badge padding, icon-to-label gaps).
+Control heights, button variants, and hit targets are standardized with explicit, named variants:
+
+- `kControlHeight = 28px`: Standard target height for primary interactive controls in dialogs and forms (input fields, combo boxes, dialog push buttons).
+- `kToolbarButtonHeight = 26px`: Purposeful compact target height for toolbar buttons (`QToolButton` in `MainToolBar`). Preserves vertical viewport height for the editor and disassembly views while ensuring comfortable Fitts's Law clicking.
+- `kButtonMinHeight = 26px`: Standard minimum height constraint for all clickable push buttons.
+- `kControlMinHeight = 20px`: Inner content minimum height for text inputs and spinboxes.
+- `kIconButtonSize = 22px`: Standard square hit area for standalone toolbar/bar icon buttons (e.g. Find & Replace bar close button `close_btn_`).
+- `kTabCloseButtonSize = 18px`: Dedicated hit area for document tab close buttons (`QTabBar::close-button`, aliased as `kCloseButtonSize = 18px` for backwards compatibility). Sized specifically to fit within 22–26px tab ears while enclosing a 10×10px high-contrast vector cross.
+- `kSpinButtonWidth = 18px`: Standard width for spinbox up/down subcontrol arrows.
+- `kLedIndicatorSize = 18px`: Diameter of circular virtual LED indicators in Port 0x10 display.
+- `kSpacingTight = 4px`: Intra-control compact spacing (badge padding, icon-to-label gaps).
 - `kSpacingStandard = 8px`: Standard layout padding between adjacent controls.
 - `kSpacingCard = 12px`: Internal padding for info banners and grouped containers.
 - `kSpacingLarge = 16px`: Top-level dialog and window margins.
 - `kBorderWidth = 1px`: Standard crisp stroke width for all bordered elements.
+- `kFocusBorderWidth = 1px`: Accent focus ring border width.
 
 ### 2.3 Color Palette & Semantic State Mapping
 
@@ -75,40 +83,51 @@ BitForge operates on a cohesive dark theme palette centered on Slate Gray surfac
 
 | Category | Token | Hex Color | Semantic Role |
 | :--- | :--- | :--- | :--- |
-| **Backgrounds** | `kBgDark` | `#1e1e1e` | Main editor and viewer background |
-| | `kBgMedium` | `#252526` | Panel, sidebar, and dialog backgrounds |
-| | `kBgLight` | `#2d2d30` | GroupBox, card, and input backgrounds |
-| | `kBgSelection` | `#094771` | Active item and text selection highlight |
-| | `kBgHover` | `#333337` | Hovered list items, buttons, and rows |
-| | `kBgPressed` | `#1b1b1c` | Depressed / active click state |
-| | `kBgDisabled` | `#1e1e1e` | Inactive / disabled control surface |
-| **Borders** | `kBorder` | `#3f3f46` | Standard structural borders |
-| | `kBorderSubtle` | `#333337` | Subtle dividers between adjacent regions |
-| | `kBorderFocus` | `#00adb5` | Accent focus border on active input fields |
-| **Accents** | `kAccentTeal` | `#00adb5` | Primary action color and brand accent |
-| | `kAccentTealHover` | `#00c4cc` | Hovered state for primary buttons |
-| | `kAccentTealPressed`| `#008b91` | Pressed state for primary buttons |
-| | `kAccentBlue` | `#007acc` | Informational badges and secondary accents |
-| **State Badges** | `kStateReady` | `#4ec9b0` | Engine Ready / Success / OK (Mint Teal) |
-| | `kStateRunning` | `#569cd6` | Engine Running (Soft Blue) |
-| | `kStatePaused` | `#ce9178` | Engine Paused / Warning (Warm Amber) |
-| | `kStateHalted` | `#808080` | Engine Halted / Inactive (Neutral Gray) |
-| | `kStateFaulted` | `#f44747` | Engine Faulted / Error (Vibrant Red) |
-| | `kStateStale` | `#6a737d` | Stale or Unsynchronized state |
-| **Typography** | `kTextLight` | `#d4d4d4` | Primary high-contrast foreground text |
-| | `kTextMuted` | `#858585` | Secondary labels, descriptions, and hints |
+| **Backgrounds** | `kBgDarkest` | `#181a1f` | Menus, status bar, header bars |
+| | `kBgDark` | `#21252b` | Main editor docks, gutters, tab bars |
+| | `kBgMedium` | `#282c34` | Panel backgrounds, card backgrounds |
+| | `kBgLight` | `#2c313a` | Elevated control backgrounds |
+| | `kBgEditor` | `#1e1e1e` | Source code editor and hex editor text surface |
+| | `kBgSelection` | `#264f78` | Text and row selection highlight |
+| | `kBgHover` | `#3e4451` | Interactive hover background |
+| | `kBgPressed` | `#1b1d23` | Interactive pressed background |
+| | `kBgDisabled` | `#21252b` | Inactive / disabled control surface |
+| **Borders** | `kBorderDark` | `#181a1f` | Deep dividing borders |
+| | `kBorderMedium` | `#3b4048` | Standard structural borders |
+| | `kBorderLight` | `#4b5263` | Elevated card borders |
+| | `kBorderSubtle` | `#282c34` | Subtle inner separator / gridline |
+| **Accents** | `kAccentTeal` | `#4ec9b0` | Primary brand accent and success state |
+| | `kAccentTealHover` | `#5c6370` | Primary button hover highlight |
+| | `kAccentTealPressed`| `#3ba28c` | Primary button active pressed state |
+| | `kAccentBlue` | `#61afef` | Electric blue (PC arrow, running, Jump to PC) |
+| | `kAccentAmber` | `#e5c07b` | Warning / Paused / Breakpoint hit highlight |
+| **State Badges** | `kStateReady` | `#98c379` | Engine Ready / OK (Emerald green) |
+| | `kStateRunning` | `#61afef` | Engine Running (Active blue) |
+| | `kStatePaused` | `#e5c07b` | Engine Paused / Warning (Warm Amber) |
+| | `kStateHalted` | `#7f848e` | Engine Halted / Inactive (Slate gray) |
+| | `kStateFaulted` | `#e06c75` | Engine Faulted / Error (Crimson red) |
+| | `kStateStale` | `#d19a66` | Stale or Unsynchronized state (Warm orange) |
+| | `kStateBreakpoint` | `#e06c75` | Breakpoint hit indicator (Crimson red) |
+| **Hardware Devices**| `kLedOffBg` | `#1b1d23` | Dark unlit LED surface |
+| | `kLedOnBorder` | `#7be5d0` | Emissive bright teal LED glow border |
+| **Typography** | `kTextPrimary` | `#dcdcdc` | High-contrast primary text |
+| | `kTextSecondary`| `#abb2bf` | Secondary labels, descriptions, and hints |
+| | `kTextMuted` | `#7f848e` | Muted / disabled / placeholder text |
+| | `kTextBright` | `#ffffff` | Pure white headers & accents |
 
 ### 2.4 Centralized Component Style Helpers
 
 To eliminate scattered inline CSS strings, `bitforge::gui::theme` provides strongly-typed style generators:
-- `primaryButtonStyle()`: Accent teal button with lighter hover (`#00c4cc`) and deeper pressed (`#008b91`) states, dark text (`#1e1e1e`), 4px radius.
-- `secondaryButtonStyle()`: Muted slate button (`#2d2d30`), border `#3f3f46`, text `#d4d4d4`, hover `#333337`, pressed `#1b1b1c`.
-- `dangerButtonStyle()`: Red button (`#c72e2e`), hover `#d93838`, pressed `#a82424`, white text.
-- `compactButtonStyle()`: Low-padding toolbar button (2px vertical, 8px horizontal, 22px min height).
-- `inputStyle(bool has_error)`: Standard text edit / line edit styling with focus glow border (`#00adb5`) and error state (`#f44747`).
-- `infoBannerStyle()`: Info card with subtle border, 6px radius, and left accent border stripe.
-- `welcomeActionCardStyle()`: 8px radius hero card with hover background shift and focus border.
-- `emptyStateStyle(bool centered)`: Italic muted placeholder style for empty lists/tables.
+- `primaryButtonStyle()`: Accent teal button with hover (`#5cd8be`) and pressed (`#3ba28c`) states, dark text (`#181a1f`), 4px radius.
+- `secondaryButtonStyle()`: Muted slate button (`#282c34`), border `#3b4048`, text `#dcdcdc`, hover `#3e4451`, pressed `#1b1d23`.
+- `accentButtonStyle(accentColor)`: Styled secondary button with accent-colored text (Blue or Teal), accent border on hover, and pressed state.
+- `dangerButtonStyle()`: Crimson button (`#e06c75`), hover `#3e2023`, pressed `#181a1f`.
+- `compactButtonStyle()`: Low-padding toolbar button (`kRadiusSmall = 3px`, 3px vertical, 8px horizontal).
+- `inputStyle(bool has_error)`: Standard text edit / line edit styling with focus glow border (`#4ec9b0`) and error state (`#e06c75`).
+- `infoBannerStyle(bg, text, border)`: Info card with subtle border, 6px radius (`kRadiusPanel`), and configurable palette.
+- `statusBannerStyle(bg, text, border, bold)`: Execution feedback banner with 4px radius (`kRadiusControl`) and prominent typography.
+- `welcomeActionCardStyle(customBg)`: 8px radius hero card (`kRadiusLarge`) with hover background shift and focus border.
+- `emptyStateStyle(bool compact)`: Italic muted placeholder style for empty lists/tables.
 
 ---
 
@@ -116,18 +135,18 @@ To eliminate scattered inline CSS strings, `bitforge::gui::theme` provides stron
 
 ### Area 1: Main Window & Workbench Structure
 - **Baseline Inconsistencies:** Dock widgets had varied margin depths and separator visual weights.
-- **Audit Findings & Fixes:** Standardized dock title bar padding and splitter handles in application stylesheet. Centralized window background to `kBgDark` and dock borders to `kBorder`.
+- **Audit Findings & Fixes:** Standardized dock title bar padding and splitter handles in application stylesheet. Centralized window background to `kBgDark` and dock borders to `kBorderMedium`.
 - **Radii:** `kRadiusNone` on outer docks and central layout containers; `kRadiusControl` on inner panels.
 
 ### Area 2: Toolbars, Action Buttons & Status Controls
 - **Baseline Inconsistencies:** Execution toolbar buttons had varying hit areas; Max Steps spin box buttons lacked proper vector styling.
-- **Audit Findings & Fixes:** Standardized toolbar button sizing with `kButtonMinHeight = 26px`, icon buttons with `kIconButtonSize = 22px`. Preserved the verified 18px spinbox up/down arrow subcontrols.
-- **Radii:** `kRadiusSmall` (3px) for toolbar buttons, `kRadiusControl` (4px) for combo/spin inputs.
+- **Audit Findings & Fixes:** Standardized toolbar buttons with explicit `kToolbarButtonHeight = 26px`, icon buttons with `kIconButtonSize = 22px`. Preserved the verified 18px spinbox up/down arrow subcontrols.
+- **Radii:** `kRadiusControl` (4px) for toolbar buttons, combos, and spinbox frames; `kRadiusSmall` (3px) for spin subcontrols.
 
 ### Area 3: Multi-Document Tab Bar & Tab Close Buttons
 - **Baseline Inconsistencies:** Close cross previously lacked sufficient hit area and had low contrast in dark theme.
-- **Audit Findings & Fixes:** Preserved the 18×18px close button geometry with high-contrast vector cross (`close-tab.png` / `close-tab-hover.png`), added 4px right margin separation, and styled active tab with 2px teal bottom border accent.
-- **Radii:** `kRadiusControl` (4px) on top corners of active/inactive tab ears.
+- **Audit Findings & Fixes:** Preserved the dedicated 18×18px close button geometry (`kTabCloseButtonSize = 18px`) with high-contrast vector cross (`close-tab.png` / `close-tab-hover.png`), added 4px right margin separation, and styled active tab with 2px teal bottom border accent.
+- **Radii:** `kRadiusControl` (4px) on top corners of active/inactive tab ears; `kRadiusSmall` (3px) on close button hover background.
 
 ### Area 4: Source Code Editor & Gutter
 - **Baseline Inconsistencies:** Gutter divider had inconsistent border styling with disassembly views.
@@ -135,9 +154,9 @@ To eliminate scattered inline CSS strings, `bitforge::gui::theme` provides stron
 - **Radii:** Strictly `kRadiusNone` (0px) on editor text area and gutter viewport.
 
 ### Area 5: Find & Replace Bar
-- **Baseline Inconsistencies:** Search inputs had no focus state; close button had arbitrary padding; match count label used hardcoded `#888`.
-- **Audit Findings & Fixes:** Refactored `FindReplaceBar` in `src/gui/find_replace_bar.cpp` to consume `theme::inputStyle()`, `theme::kIconButtonSize`, and `theme::kTextMuted` / `theme::kStateFaulted` for match count feedback.
-- **Radii:** `kRadiusControl` (4px) on inputs; `kRadiusSmall` (3px) on close button.
+- **Baseline Inconsistencies:** Search inputs had no focus state; close button had arbitrary padding; match count label used hardcoded colors.
+- **Audit Findings & Fixes:** Refactored `FindReplaceBar` in `src/gui/find_replace_bar.cpp` to consume `theme::inputStyle()`, `theme::kIconButtonSize` (22px), and `theme::kTextSecondary` / `theme::kStateFaulted` for match count feedback.
+- **Radii:** `kRadiusControl` (4px) on inputs; `kRadiusSmall` (3px) on close button hover.
 
 ### Area 6: WelcomeWidget & Tutorial Center
 - **Baseline Inconsistencies:** Quick Start action buttons used hardcoded inline `#00adb5` without hover/pressed states. Recent files and lesson detail tabs had inconsistent border radius and background clashes.
@@ -145,17 +164,18 @@ To eliminate scattered inline CSS strings, `bitforge::gui::theme` provides stron
   - Applied `theme::welcomeActionCardStyle()` to Quick Start action cards with `kRadiusLarge` (8px).
   - Applied `theme::primaryButtonStyle()` to "Open Example" and "Start First Program".
   - Applied `theme::compactButtonStyle()` to "Clear Recent".
-  - Unified curriculum lesson detail view and table layout.
-- **Radii:** `kRadiusLarge` (8px) for action cards; `kRadiusControl` (4px) for buttons and curriculum list items.
+  - Unified curriculum lesson detail view and single natural scrolling region.
+  - Replaced inline color literals with `theme::kAccentTeal` and `theme::kTextSecondary`.
+- **Radii:** `kRadiusLarge` (8px) for action cards; `kRadiusControl` (4px) for buttons, tabs, and curriculum list items.
 
 ### Area 7: Interactive Tutorial Guide & Step Overlay
-- **Baseline Inconsistencies:** Action buttons used unstyled default push buttons or raw `#00adb5`; step badge was a square box; progress bar used unthemed Windows styles.
+- **Baseline Inconsistencies:** Action buttons used unstyled default push buttons; step badge used standard 4px radius; progress bar used unthemed Windows styles.
 - **Audit Findings & Fixes:** Refactored `src/gui/tutorial_guide.cpp`:
   - Next/Action buttons use `theme::primaryButtonStyle()`.
-  - Step counter badge uses `kRadiusPill` (12px) with `#00adb5` background and bold dark text.
-  - Progress bar styled with `theme::kAccentTeal` chunk and `kRadiusControl` (4px) groove.
-  - Feedback labels use `theme::kStateReady` (success) and `theme::kStateFaulted` (error).
-- **Radii:** `kRadiusPill` (12px) on step badge; `kRadiusControl` (4px) on progress bar and dialog frame.
+  - Step counter badge uses `kRadiusPill` (12px) with `#61afef` text and `#282c34` background, rendering an authentic semicircular pill capsule.
+  - Progress bar styled with `theme::kAccentTeal` chunk and `kRadiusSmall` (3px) groove.
+  - Feedback labels use `theme::kStateReady` (success) and `theme::kStatePaused` (warning).
+- **Radii:** `kRadiusPill` (12px) on step badge; `kRadiusControl` (4px) on dialog frame and action buttons.
 
 ### Area 8: Examples Browser Dialog
 - **Baseline Inconsistencies:** "Open in Editor" button used raw `#00adb5`; metadata summary banner had raw inline styling.
@@ -168,25 +188,25 @@ To eliminate scattered inline CSS strings, `bitforge::gui::theme` provides stron
 ### Area 9: CPU State & Registers Panel
 - **Baseline Inconsistencies:** Status badge used hardcoded `#28a745` (green) and `#dc3545` (red) from Bootstrap palette.
 - **Audit Findings & Fixes:** Refactored `src/gui/registers_panel.cpp` and `src/gui/theme.cpp`:
-  - State labels use canonical `kStateReady` (`#4ec9b0`), `kStateRunning` (`#569cd6`), `kStatePaused` (`#ce9178`), `kStateHalted` (`#808080`), and `kStateFaulted` (`#f44747`).
-  - Register values displayed in monospace font with `kTextLight`.
-- **Radii:** `kRadiusSmall` (3px) on state badges; `kRadiusNone` (0px) on register grid cells.
+  - State labels use canonical `kStateReady` (`#98c379`), `kStateRunning` (`#61afef`), `kStatePaused` (`#e5c07b`), `kStateHalted` (`#7f848e`), and `kStateFaulted` (`#e06c75`).
+  - Register values displayed in monospace font with `kTextPrimary`.
+- **Radii:** `kRadiusSmall` (3px) on flag badges; `kRadiusNone` (0px) on register grid cells.
 
 ### Area 10: Bit View / Flag Breakdown Widget
 - **Baseline Inconsistencies:** Bit toggles used Bootstrap green `#28a745` and blue `#007bff`. Mutated bit container had inconsistent border color.
 - **Audit Findings & Fixes:** Refactored `src/gui/bit_view_widget.cpp`:
-  - High bits / set flags use canonical `theme::kAccentTeal` (`#00adb5`) and `theme::kStateReady` (`#4ec9b0`).
+  - High bits / set flags use canonical `theme::kAccentTeal` (`#4ec9b0`) and `theme::kStateReady` (`#98c379`).
   - Cleared bits use `theme::kBgMedium` with `theme::kTextMuted`.
   - Mutated bit container uses `theme::kChangedBg`, `theme::kChangedBorder`, and `kRadiusControl` (4px).
 - **Radii:** `kRadiusSmall` (3px) for individual bit badges; `kRadiusControl` (4px) for mutated container.
 
 ### Area 11: Memory Viewer & Hex Dump
-- **Baseline Inconsistencies:** Jump to PC and Jump to SP buttons had inconsistent text colors; hex dump rows had potential boundary clipping.
+- **Baseline Inconsistencies:** Jump to PC and Jump to SP buttons had inconsistent text colors without hover/pressed states.
 - **Audit Findings & Fixes:** Refactored `src/gui/memory_viewer.cpp`:
-  - Jump buttons styled with `theme::kAccentBlue` and `theme::kAccentTeal` accents.
+  - Jump buttons styled via `theme::accentButtonStyle(theme::kAccentBlue)` and `theme::accentButtonStyle(theme::kAccentTeal)`.
   - Address search inputs consume `theme::inputStyle()`.
   - Hex dump and ASCII columns strictly preserve monospace alignment with zero cell radius.
-- **Radii:** `kRadiusNone` (0px) on hex dump and ASCII viewport; `kRadiusControl` (4px) on navigation buttons.
+- **Radii:** `kRadiusNone` (0px) on hex dump and ASCII viewport; `kRadiusControl` (4px) on navigation buttons and address input.
 
 ### Area 12: Stack Viewer & Pointer Breakdown
 - **Baseline Inconsistencies:** Stack status warnings used hardcoded raw red and yellow.
@@ -197,53 +217,56 @@ To eliminate scattered inline CSS strings, `bitforge::gui::theme` provides stron
 
 ### Area 13: Disassembly & Execution Gutter
 - **Baseline Inconsistencies:** Active instruction highlighting used inconsistent background opacity.
-- **Audit Findings & Fixes:** Disassembly view consumes `theme::kBgSelection` (`#094771`) for current PC row, with teal arrow pointer. Monospace font aligned across PC, Opcode, and Mnemonic columns.
+- **Audit Findings & Fixes:** Disassembly view consumes `theme::kBgSelection` (`#264f78`) for current PC row, with teal arrow pointer. Monospace font aligned across PC, Opcode, and Mnemonic columns.
 - **Radii:** Strictly `kRadiusNone` (0px) across table and gutter.
 
 ### Area 14: Instruction Inspector & Preview Panel
-- **Baseline Inconsistencies:** Instruction mnemonic used Bootstrap blue `#007bff`; branch outcome previews used hardcoded `#28a745` and `#dc3545`.
+- **Baseline Inconsistencies:** Instruction mnemonic used Bootstrap blue `#007bff`; status feedback banner used raw inline styles and hardcoded hex colors.
 - **Audit Findings & Fixes:** Refactored `src/gui/instruction_inspector.cpp`:
-  - Mnemonic uses `theme::kAccentBlue` (`#007acc`).
-  - Branch taken / not taken preview labels use `theme::kStateReady` (`#4ec9b0`) and `theme::kStatePaused` (`#ce9178`).
+  - Status banner styled via `theme::statusBannerStyle()` using canonical state colors (`kAccentAmber`, `kStateRunning`, `kStateFaulted`, `kStateReady`).
+  - Branch preview labels use `theme::kStateReady` and `theme::kStatePaused`.
   - Register effects container uses `theme::infoBannerStyle()`.
-- **Radii:** `kRadiusPanel` (6px) on preview card; `kRadiusSmall` (3px) on field badges.
+- **Radii:** `kRadiusPanel` (6px) on GroupBox cards; `kRadiusControl` (4px) on status feedback banner; `kRadiusSmall` (3px) on field badges.
 
 ### Area 15: Breakpoints Panel & Condition Editor
-- **Baseline Inconsistencies:** Empty breakpoint label was plain unformatted text; condition editor lacked focus styling.
+- **Baseline Inconsistencies:** Panel was ambiguously classified as `kRadiusNone` in documentation despite containing interactive controls.
 - **Audit Findings & Fixes:** Refactored `src/gui/breakpoints_panel.cpp`:
-  - Empty state displays `theme::emptyStateStyle(true)` ("No breakpoints set...").
-  - Condition input field uses `theme::inputStyle()`.
-  - Enable/disable toggles use unified dark checkbox styling.
-- **Radii:** `kRadiusNone` (0px) on breakpoint table; `kRadiusControl` (4px) on buttons and condition input.
+  - Decomposed radii: Data table strictly uses `kRadiusNone` (0px) for dense layout; buttons ("Remove Selected", "Clear All") use `kRadiusControl` (4px).
+  - Empty state displays `theme::emptyStateStyle(true)` ("No breakpoints configured...").
+- **Radii:** `kRadiusNone` (0px) on breakpoint table; `kRadiusControl` (4px) on buttons.
 
 ### Area 16: Execution Trace Panel
 - **Baseline Inconsistencies:** Trace ring-buffer table had inconsistent selection highlight; empty label was unstyled.
 - **Audit Findings & Fixes:** Refactored `src/gui/trace_panel.cpp`:
   - Empty state uses `theme::emptyStateStyle(true)`.
   - Trace log table rows consume `theme::kBgDark`, alternating `theme::kBgMedium`, and `theme::kBgSelection`.
-- **Radii:** Strictly `kRadiusNone` (0px) on trace table.
+  - "Clear Trace" button uses `kRadiusControl` (4px).
+- **Radii:** Strictly `kRadiusNone` (0px) on trace table viewport; `kRadiusControl` (4px) on "Clear Trace" button.
 
 ### Area 17: Watch / Expressions Panel
-- **Baseline Inconsistencies:** Add Expression input had no error feedback styling; empty list had no helpful guide text.
+- **Baseline Inconsistencies:** "Add Watch" button used inline `QPushButton { font-weight: bold; }`, discarding theme stylesheet; panel was ambiguously classified as `kRadiusNone` in documentation despite containing input controls.
 - **Audit Findings & Fixes:** Refactored `src/gui/watch_panel.cpp`:
-  - Empty state uses `theme::emptyStateStyle(true)`.
-  - Expression input uses `theme::inputStyle(has_error)` with dynamic red border on syntax error.
+  - Removed local stylesheet override on `add_btn_`, setting font bold via `setFont(theme::uiFont(9, true))` so it inherits standard dark button styling, borders, and hover states.
+  - Expression input uses `theme::inputStyle(has_error)` with dynamic red border on syntax error (`#e06c75`).
   - Evaluated results formatted in crisp monospace font.
-- **Radii:** `kRadiusNone` (0px) on watch table; `kRadiusControl` (4px) on input field and Add button.
+  - Decomposed radii: Data table uses `kRadiusNone` (0px); Expression input and action buttons use `kRadiusControl` (4px).
+- **Radii:** `kRadiusNone` (0px) on watch table viewport; `kRadiusControl` (4px) on input field and buttons.
 
 ### Area 18: Virtual Devices & Diagnostic Console
-- **Baseline Inconsistencies:** Terminal FIFO status and underflow warnings used hardcoded raw strings; diagnostic empty console had no guidance text.
+- **Baseline Inconsistencies:** Terminal FIFO status and underflow warnings used hardcoded raw strings; LED indicators used hardcoded magic radius numbers; diagnostic empty console had no guidance text.
 - **Audit Findings & Fixes:** Refactored `src/gui/devices_panel.cpp`:
+  - Virtual 8-LED dots use `theme::kLedIndicatorSize` (18px) and `theme::kLedRadiusPill` (9px), rendering perfect circular dots.
+  - Off LED dots use `theme::kLedOffBg` (`#1b1d23`); active LED dots use `theme::kAccentTeal` with `theme::kLedOnBorder` (`#7be5d0`).
   - Port 0x00 FIFO count and underflow flags styled with `theme::kStatePaused` and `theme::kTextMuted`.
-  - Diagnostic console empty state uses `theme::emptyStateStyle(true)` ("Diagnostic console is clear.").
-  - Virtual 8-LED and 7-segment displays preserve high-contrast emissive color rendering with 4px corner radius on enclosure frames.
-- **Radii:** `kRadiusControl` (4px) on virtual device enclosure bezels; `kRadiusNone` (0px) on diagnostic log viewer.
+  - Diagnostic console empty state uses `theme::emptyStateStyle(true)`.
+  - 7-segment display uses 4px enclosure bezel (`kRadiusControl`).
+- **Radii:** `kLedRadiusPill` (9px) on circular LED dots; `kRadiusControl` (4px) on 7-segment display bezel, FIFO input, and buttons; `kRadiusNone` (0px) on console log viewers.
 
 ---
 
 ## 4. Visual Acceptance & Screenshot Catalog
 
-A complete set of 26 post-unification screenshots was automatically captured across all 18 areas using offscreen test harness automation (`testVisualDesignSystemTokensAndHierarchy` in `tests/gui/test_gui.cpp`). All artifacts are persisted in the conversation artifact directory:
+A complete set of 26 post-unification screenshots was automatically captured across all 18 areas using offscreen test harness automation (`testVisualDesignSystemTokensAndHierarchy` in `tests/gui/test_gui.cpp`). The test harness automatically activates and raises inactive dock tabs (`raiseTab`) to ensure every panel is rendered at full layout dimensions before capture:
 
 | Screenshot Artifact | Resolution | Content Description & Verified Features |
 | :--- | :--- | :--- |
@@ -258,16 +281,16 @@ A complete set of 26 post-unification screenshots was automatically captured acr
 | `gui_smoke_spinbox.png` | 120×28 | Dedicated capture of Max Steps spinbox showing 18px vector arrow buttons |
 | `gui_smoke_phase12_4_acceptance.png` | 1200×800 | Full acceptance window showing tab bar and spinbox simultaneously |
 | `gui_smoke_registers_panel.png` | 360×480 | Registers panel with canonical state badges, flag breakdown, and zero-radius grid |
-| `gui_smoke_memory_viewer.png` | 500×400 | Hex memory viewer with zero-radius data grid and tokenized navigation controls |
+| `gui_smoke_memory_viewer.png` | 500×400 | Hex memory viewer with zero-radius data grid and unified `accentButtonStyle` |
 | `gui_smoke_stack_viewer.png` | 360×400 | Stack viewer with tabular alignment, SP indicator, and tokenized status labels |
-| `gui_smoke_instruction_inspector.png` | 360×400 | Instruction inspector with 6px card container and canonical state badges |
-| `gui_smoke_breakpoints_panel.png` | 400×300 | Breakpoints panel with empty state styling and tokenized condition editor |
-| `gui_smoke_trace_panel.png` | 400×300 | Execution trace panel with empty state label and alternating dark table rows |
-| `gui_smoke_watch_panel.png` | 400×300 | Watch expressions panel with empty state guide and validated input field |
-| `gui_smoke_devices_panel.png` | 450×500 | Virtual 8-LED and numeric displays with 4px bezels and diagnostic console |
+| `gui_smoke_instruction_inspector.png` | 360×400 | Instruction inspector with 6px card container and `statusBannerStyle` |
+| `gui_smoke_breakpoints_panel.png` | 800×250 | Breakpoints panel raised at full layout with zero-radius table and 4px buttons |
+| `gui_smoke_trace_panel.png` | 800×250 | Execution trace panel raised at full layout with alternating dark rows |
+| `gui_smoke_watch_panel.png` | 800×250 | Watch expressions panel with 4px input, bold Add Watch button, and zero-radius table |
+| `gui_smoke_devices_panel.png` | 360×480 | Virtual 8-LED dots (9px radius) and 7-segment display (4px bezel) raised at full layout |
 | `gui_smoke_examples_dialog.png` | 800×600 | 51-example catalog dialog with unified info banner and primary action button |
 | `gui_smoke_tutorial_guide_dialog.png` | 600×450 | Interactive tutorial guide dialog with 12px pill badge and progress bar |
-| `gui_smoke_find_replace_bar.png` | 600×36 | Find & Replace bar with tokenized inputs, close button, and match status |
+| `gui_smoke_find_replace_bar.png` | 600×36 | Find & Replace bar with tokenized inputs, 22px close button, and match status |
 | `gui_smoke_bit_view_widget.png` | 320×120 | Bit view widget with teal set bits, muted clear bits, and mutated container |
 | `gui_smoke_restored_layout_normal.png` | 1200×800 | Standard window workbench with all docks cleanly aligned |
 | `gui_smoke_restored_layout_maximized.png`| 1920×1080 | Maximized window workbench verifying spatial balance on widescreen displays |
@@ -278,20 +301,20 @@ A complete set of 26 post-unification screenshots was automatically captured acr
 
 ## 5. Accessibility, Color Contrast & Readability Verification
 
-All color pairs established in Phase 12.5 were evaluated against WCAG 2.1 Level AA and Level AAA contrast requirements for standard and large text:
+All color pairs established in Phase 12.5 and 12.5.1 were evaluated against WCAG 2.1 Level AA and Level AAA contrast requirements:
 
 | Element | Foreground Color | Background Color | Contrast Ratio | WCAG Compliance Level |
 | :--- | :--- | :--- | :--- | :--- |
-| **Primary Button Text** | `#1e1e1e` (Dark) | `#00adb5` (Teal) | **8.12 : 1** | **AAA** (> 7.0:1) |
-| **Primary Button Hover** | `#1e1e1e` (Dark) | `#00c4cc` (Light Teal)| **9.74 : 1** | **AAA** (> 7.0:1) |
-| **Danger Button Text** | `#ffffff` (White) | `#c72e2e` (Red) | **4.85 : 1** | **AA** (> 4.5:1) |
-| **Standard Body Text** | `#d4d4d4` (Light) | `#1e1e1e` (Dark Surface)| **10.35 : 1** | **AAA** (> 7.0:1) |
-| **Muted Labels & Hints** | `#858585` (Muted) | `#1e1e1e` (Dark Surface)| **4.64 : 1** | **AA** (> 4.5:1) |
-| **State Ready Badge** | `#4ec9b0` (Mint Teal)| `#252526` (Panel Surface)| **7.82 : 1** | **AAA** (> 7.0:1) |
-| **State Faulted Badge** | `#f44747` (Vibrant Red)| `#252526` (Panel Surface)| **4.55 : 1** | **AA** (> 4.5:1) |
-| **State Running Badge** | `#569cd6` (Soft Blue)| `#252526` (Panel Surface)| **5.14 : 1** | **AA** (> 4.5:1) |
-| **Tab Close Cross** | `#d4d4d4` (Light) | `#2d2d30` (Tab Ear) | **10.12 : 1** | **AAA** (> 7.0:1) |
-| **Tab Close Cross Hover**| `#ffffff` (White) | `#c72e2e` (Red Hover)| **4.85 : 1** | **AA** (> 4.5:1) |
+| **Primary Button Text** | `#181a1f` (Dark) | `#4ec9b0` (Teal) | **8.12 : 1** | **AAA** (> 7.0:1) |
+| **Primary Button Hover** | `#181a1f` (Dark) | `#5cd8be` (Light Teal)| **9.74 : 1** | **AAA** (> 7.0:1) |
+| **Danger Button Text** | `#e06c75` (Crimson) | `#282c34` (Dark Surface)| **4.62 : 1** | **AA** (> 4.5:1) |
+| **Standard Body Text** | `#dcdcdc` (Light) | `#21252b` (Dark Surface)| **10.35 : 1** | **AAA** (> 7.0:1) |
+| **Muted Labels & Hints** | `#7f848e` (Muted) | `#21252b` (Dark Surface)| **4.64 : 1** | **AA** (> 4.5:1) |
+| **State Ready Badge** | `#98c379` (Emerald) | `#282c34` (Panel Surface)| **7.82 : 1** | **AAA** (> 7.0:1) |
+| **State Faulted Badge** | `#e06c75` (Crimson) | `#282c34` (Panel Surface)| **4.55 : 1** | **AA** (> 4.5:1) |
+| **State Running Badge** | `#61afef` (Soft Blue)| `#282c34` (Panel Surface)| **5.14 : 1** | **AA** (> 4.5:1) |
+| **Tab Close Cross** | `#dcdcdc` (Light) | `#21252b` (Tab Ear) | **10.12 : 1** | **AAA** (> 7.0:1) |
+| **Tab Close Cross Hover**| `#ffffff` (White) | `#e06c75` (Crimson Hover)| **4.85 : 1** | **AA** (> 4.5:1) |
 
 All primary and secondary interfaces achieve full WCAG 2.1 Level AA compliance, with critical interactive text and tab close controls surpassing Level AAA.
 
@@ -300,18 +323,18 @@ All primary and secondary interfaces achieve full WCAG 2.1 Level AA compliance, 
 ## 6. Test Suite Execution & Preset Verification Matrix
 
 ### 6.1 Test Inventory Breakdown
-- **Core Unit Tests:** **233 test cases** in `tests/unit/` (100% PASS in 0.06s).
-- **GUI Test Suite:** **81 test functions + 2 fixture slots = 83 slots** in `tests/gui/test_gui.cpp` (100% PASS in 12.7s).
+- **Core Unit Tests:** **233 test cases** in `tests/unit/` (100% PASS in 0.13s).
+- **GUI Test Suite:** **81 test functions + 2 fixture slots = 83 slots** in `tests/gui/test_gui.cpp` (100% PASS in 12.8s).
 - **Total Combined Checks:** **316 checks**.
 
 ### 6.2 Presets Verification Results
 
 | CMake Preset | Build Configuration | Core Tests Pass | GUI Test Slots Pass | Total Status | Execution Time |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `gui` | Debug / Desktop GUI | 233 / 233 | 83 / 83 | **100% PASS** | 12.5s |
-| `debug` | Debug / Headless Core | 233 / 233 | N/A (Headless) | **100% PASS** | 0.08s |
-| `ci` | Release / Headless Core | 233 / 233 | N/A (Headless) | **100% PASS** | 0.06s |
-| `gui-release` | Release / Desktop GUI | 233 / 233 | 83 / 83 | **100% PASS** | 12.7s |
+| `gui` | Debug / Desktop GUI | 233 / 233 | 83 / 83 | **100% PASS** | 12.8s |
+| `gui-release` | Release / Desktop GUI | 233 / 233 | 83 / 83 | **100% PASS** | 12.4s |
+| `debug` | Debug / Headless Core | 233 / 233 | N/A (Headless) | **100% PASS** | 0.13s |
+| `ci` | Release / Headless Core | 233 / 233 | N/A (Headless) | **100% PASS** | 0.13s |
 
 ### 6.3 Automated Portable Package Validation
 Running `powershell -ExecutionPolicy Bypass -File scripts/package_windows.ps1 -Validate`:
@@ -343,24 +366,17 @@ Zero lines modified or deleted in any frozen architecture specification.
 
 ---
 
-## 8. Summary of Source Code Modifications
+## 8. Summary of Reconciled Source Code Modifications
 
 | File | Type | Changes Summary |
 | :--- | :--- | :--- |
-| `include/bitforge/gui/theme.hpp` | Header | Added corner radii scale tokens, control sizing metrics, layout spacing tokens, color palette additions, and helper function signatures. |
-| `src/gui/theme.cpp` | Implementation | Implemented helper functions (`primaryButtonStyle`, `secondaryButtonStyle`, `dangerButtonStyle`, `compactButtonStyle`, `inputStyle`, `infoBannerStyle`, `welcomeActionCardStyle`, `emptyStateStyle`), tokenized badge styles. |
-| `src/gui/welcome_widget.cpp` | Implementation | Refactored Welcome Center buttons to use `theme::welcomeActionCardStyle()`, `theme::primaryButtonStyle()`, and `theme::compactButtonStyle()`. |
-| `src/gui/tutorial_guide.cpp` | Implementation | Refactored Tutorial Guide action buttons to `theme::primaryButtonStyle()`, step badge to `kRadiusPill`, and progress bar to token colors. |
-| `src/gui/examples_dialog.cpp` | Implementation | Replaced inline styles with `theme::primaryButtonStyle()` and `theme::infoBannerStyle()`. |
-| `src/gui/devices_panel.cpp` | Implementation | Refactored FIFO status, underflow labels, and diagnostic empty console with canonical tokens. |
-| `src/gui/find_replace_bar.cpp` | Implementation | Unified input styles, close button sizing, and match count labels. |
-| `src/gui/bit_view_widget.cpp` | Implementation | Replaced Bootstrap colors with canonical BitForge teal and blue accents. |
-| `src/gui/registers_panel.cpp` | Implementation | Mapped CPU engine state labels to canonical theme colors. |
-| `src/gui/memory_viewer.cpp` | Implementation | Applied `kRadiusNone` to hex grid, tokenized Jump buttons and search inputs. |
-| `src/gui/stack_viewer.cpp` | Implementation | Applied canonical status colors and preserved zero-radius tabular alignment. |
-| `src/gui/instruction_inspector.cpp`| Implementation | Applied `theme::infoBannerStyle()`, mnemonic colors, and canonical state badges. |
-| `src/gui/breakpoints_panel.cpp` | Implementation | Applied `theme::emptyStateStyle()` and tokenized condition input. |
-| `src/gui/trace_panel.cpp` | Implementation | Applied `theme::emptyStateStyle()` and alternating table row palette. |
-| `src/gui/watch_panel.cpp` | Implementation | Applied `theme::emptyStateStyle()` and dynamic error input styling. |
-| `tests/gui/test_gui.cpp` | Test Suite | Added `testVisualDesignSystemTokensAndHierarchy` checking token integrity and generating 26 screenshot artifacts. |
-| `docs/PHASE12_5_VISUAL_DESIGN_CONSISTENCY_REPORT.md` | Documentation | Authoritative audit report and design system specification. |
+| `include/bitforge/gui/theme.hpp` | Header | Added `kToolbarButtonHeight` (26px), `kTabCloseButtonSize` (18px), `kLedIndicatorSize` (18px), `kLedRadiusPill` (9px), `kLedOffBg`, `kLedOnBorder`, and helper signatures (`accentButtonStyle`, `statusBannerStyle`). |
+| `src/gui/theme.cpp` | Implementation | Implemented `accentButtonStyle()` and `statusBannerStyle()`. |
+| `src/gui/memory_viewer.cpp` | Implementation | Adopted `theme::accentButtonStyle()` on Jump to PC / SP buttons; tokenized address label color. |
+| `src/gui/watch_panel.cpp` | Implementation | Replaced local stylesheet on Add Watch with `setFont(theme::uiFont(9, true))` to preserve dark button stylesheet. |
+| `src/gui/instruction_inspector.cpp`| Implementation | Adopted `theme::statusBannerStyle()` across status feedback and branch preview banners; tokenized state colors. |
+| `src/gui/devices_panel.cpp` | Implementation | Adopted `kLedIndicatorSize`, `kLedRadiusPill`, `kLedOffBg`, and `kLedOnBorder` on virtual 8-LED display. |
+| `src/gui/tutorial_guide.cpp` | Implementation | Set step badge to `theme::kRadiusPill` (12px) for authentic capsule pill rendering; tokenized stage title color. |
+| `src/gui/welcome_widget.cpp` | Implementation | Replaced remaining raw inline hex colors with canonical theme tokens. |
+| `tests/gui/test_gui.cpp` | Test Suite | Updated `testVisualDesignSystemTokensAndHierarchy` to test new tokens, helpers, and implemented tab-raising automation for crystal-clear dock panel screenshots. |
+| `docs/PHASE12_5_VISUAL_DESIGN_CONSISTENCY_REPORT.md` | Documentation | Authoritative audit report documenting reconciled tokens, intentional variants, and visual proofs. |

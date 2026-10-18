@@ -102,14 +102,14 @@ TutorialGuide::TutorialGuide(QWidget* parent)
     // Header: Stage Title & Step Badge
     auto* header_layout = new QHBoxLayout();
     stage_title_label_ = new QLabel(this);
-    stage_title_label_->setStyleSheet("QLabel { font-size: 16px; font-weight: bold; color: #4ec9b0; }");
+    stage_title_label_->setStyleSheet(QString("QLabel { font-size: 16px; font-weight: bold; color: %1; }").arg(theme::kAccentTeal.name()));
     header_layout->addWidget(stage_title_label_, 1);
 
     step_badge_label_ = new QLabel("Step 1 of 9", this);
     step_badge_label_->setStyleSheet(
-        QString("QLabel { font-size: 11px; font-weight: bold; color: %1; background: %2; border: 1px solid %3; border-radius: %4px; padding: 2px 8px; }")
+        QString("QLabel { font-size: 11px; font-weight: bold; color: %1; background: %2; border: 1px solid %3; border-radius: %4px; padding: 3px 10px; }")
             .arg(theme::kAccentBlue.name(), theme::kBgMedium.name(), theme::kBorderMedium.name())
-            .arg(theme::kRadiusControl)
+            .arg(theme::kRadiusPill)
     );
     header_layout->addWidget(step_badge_label_);
     layout->addLayout(header_layout);

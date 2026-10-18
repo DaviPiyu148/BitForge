@@ -48,7 +48,7 @@ InstructionInspector::InstructionInspector(QWidget* parent)
     // 0. Prominent Execution Status Banner
     status_banner_label_ = new QLabel("Ready to Execute", content_widget);
     status_banner_label_->setFont(QFont("Segoe UI", 9, QFont::Bold));
-    status_banner_label_->setStyleSheet("QLabel { background-color: #282c34; color: #abb2bf; border: 1px solid #4b5263; border-radius: 4px; padding: 6px 10px; }");
+    status_banner_label_->setStyleSheet(theme::statusBannerStyle(theme::kBgMedium, theme::kTextSecondary, theme::kBorderLight, true));
     status_banner_label_->setWordWrap(true);
     content_layout->addWidget(status_banner_label_);
 
@@ -376,11 +376,11 @@ void InstructionInspector::refresh() {
                                           .arg(pc_hex)
                                           .arg(decoded.source_location));
         status_banner_label_->setStyleSheet(
-            "QLabel { background-color: #3e3520; color: #e5c07b; border: 1px solid #e5c07b; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
+            theme::statusBannerStyle(QColor("#3e3520"), theme::kAccentAmber, theme::kAccentAmber, true));
     } else if (stop_reason == debugger::StopReason::BudgetExhausted) {
         status_banner_label_->setText("Budget Exhausted: Step/slice limit reached. Click Continue to proceed.");
         status_banner_label_->setStyleSheet(
-            "QLabel { background-color: #21283b; color: #61afef; border: 1px solid #61afef; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
+            theme::statusBannerStyle(QColor("#21283b"), theme::kStateRunning, theme::kStateRunning, true));
     } else if (engine_state == MachineState::Faulted) {
         const auto& fault = controller_->cpu().last_fault();
         const QString fault_addr = formatHexWord(fault.instruction_address);
@@ -389,25 +389,25 @@ void InstructionInspector::refresh() {
                                           .arg(fault_addr)
                                           .arg(QString::fromStdString(fault.message)));
         status_banner_label_->setStyleSheet(
-            "QLabel { background-color: #3e2023; color: #e06c75; border: 1px solid #e06c75; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
+            theme::statusBannerStyle(QColor("#3e2023"), theme::kStateFaulted, theme::kStateFaulted, true));
     } else if (engine_state == MachineState::Halted) {
         status_banner_label_->setText("Program Halted: Execution finished normally via HALT.");
         status_banner_label_->setStyleSheet(
-            "QLabel { background-color: #1e3328; color: #98c379; border: 1px solid #98c379; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
+            theme::statusBannerStyle(QColor("#1e3328"), theme::kStateReady, theme::kStateReady, true));
     } else if (controller_->isExecuting()) {
         status_banner_label_->setText("CPU Running...");
         status_banner_label_->setStyleSheet(
-            "QLabel { background-color: #1d2c3f; color: #61afef; border: 1px solid #61afef; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
+            theme::statusBannerStyle(QColor("#1d2c3f"), theme::kStateRunning, theme::kStateRunning, true));
     } else if (!controller_->session().trace().empty()) {
         status_banner_label_->setText(QString("Step #%1 Completed (Next instruction at PC %2)")
                                           .arg(controller_->session().trace().back().step_number)
                                           .arg(pc_hex));
         status_banner_label_->setStyleSheet(
-            "QLabel { background-color: #282c34; color: #98c379; border: 1px solid #4b5263; border-radius: 4px; padding: 6px 10px; }");
+            theme::statusBannerStyle(theme::kBgMedium, theme::kStateReady, theme::kBorderLight, false));
     } else {
         status_banner_label_->setText("Program Ready to Execute");
         status_banner_label_->setStyleSheet(
-            "QLabel { background-color: #282c34; color: #abb2bf; border: 1px solid #4b5263; border-radius: 4px; padding: 6px 10px; }");
+            theme::statusBannerStyle(theme::kBgMedium, theme::kTextSecondary, theme::kBorderLight, false));
     }
 
     // Colorize branch preview
@@ -430,22 +430,22 @@ void InstructionInspector::refresh() {
         switch (last.state_after) {
             case MachineState::Ready:
                 last_state_label_->setText("Ready");
-                last_state_label_->setStyleSheet("QLabel { color: #98c379; font-weight: bold; }");
+                last_state_label_->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(theme::kStateReady.name()));
                 break;
             case MachineState::Running:
             case MachineState::Paused:
                 last_state_label_->setText("Paused / Step Completed");
-                last_state_label_->setStyleSheet("QLabel { color: #e5c07b; font-weight: bold; }");
+                last_state_label_->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(theme::kStatePaused.name()));
                 break;
             case MachineState::Halted:
                 last_state_label_->setText("Halted Normally");
-                last_state_label_->setStyleSheet("QLabel { color: #abb2bf; font-weight: bold; }");
+                last_state_label_->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(theme::kTextSecondary.name()));
                 break;
             case MachineState::Faulted:
                 last_state_label_->setText(last.fault.has_value()
                                                ? QString("Fault: %1").arg(last.fault->message.c_str())
                                                : "Faulted");
-                last_state_label_->setStyleSheet("QLabel { color: #e06c75; font-weight: bold; }");
+                last_state_label_->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(theme::kStateFaulted.name()));
                 break;
         }
 
@@ -487,7 +487,7 @@ void InstructionInspector::refresh() {
         last_pc_label_->setText("-");
         last_mnem_label_->setText("-");
         last_state_label_->setText("Ready");
-        last_state_label_->setStyleSheet("QLabel { color: #98c379; }");
+        last_state_label_->setStyleSheet(QString("QLabel { color: %1; }").arg(theme::kStateReady.name()));
         last_effect_label_->setText("Program ready to execute.");
         last_effect_label_->setStyleSheet("QLabel { color: inherit; }");
         last_step_info_ = std::nullopt;

@@ -296,14 +296,14 @@ WelcomeWidget::WelcomeWidget(QWidget* parent)
     title_box->setSpacing(2);
 
     auto* title_label = new QLabel("⚡ BitForge Workbench", header_container);
-    title_label->setStyleSheet("QLabel { font-size: 22px; font-weight: bold; color: #4ec9b0; }");
+    title_label->setStyleSheet(QString("QLabel { font-size: 22px; font-weight: bold; color: %1; }").arg(theme::kAccentTeal.name()));
     title_box->addWidget(title_label);
 
     auto* subtitle_label = new QLabel(
         "8-Bit Educational Computer Emulator, Two-Pass Assembler & Interactive Debugger",
         header_container
     );
-    subtitle_label->setStyleSheet("QLabel { font-size: 12px; color: #abb2bf; }");
+    subtitle_label->setStyleSheet(QString("QLabel { font-size: 12px; color: %1; }").arg(theme::kTextSecondary.name()));
     title_box->addWidget(subtitle_label);
 
     header_layout->addLayout(title_box, 1);
@@ -311,7 +311,7 @@ WelcomeWidget::WelcomeWidget(QWidget* parent)
     // Top-Right: Show on Startup CheckBox
     show_on_startup_cb_ = new QCheckBox("Show Welcome on Startup", header_container);
     show_on_startup_cb_->setChecked(true);
-    show_on_startup_cb_->setStyleSheet("QCheckBox { color: #abb2bf; font-size: 11px; }");
+    show_on_startup_cb_->setStyleSheet(QString("QCheckBox { color: %1; font-size: 11px; }").arg(theme::kTextSecondary.name()));
     connect(show_on_startup_cb_, &QCheckBox::toggled, this, &WelcomeWidget::showOnStartupChanged);
     header_layout->addWidget(show_on_startup_cb_, 0, Qt::AlignRight | Qt::AlignVCenter);
 
@@ -417,9 +417,9 @@ void WelcomeWidget::setupQuickStartTab() {
 
     auto addRef = [&](int row, const QString& key, const QString& desc) {
         auto* k = new QLabel(QString("<b>%1</b>").arg(key), ref_box);
-        k->setStyleSheet("QLabel { color: #4ec9b0; }");
+        k->setStyleSheet(QString("QLabel { color: %1; }").arg(theme::kAccentTeal.name()));
         auto* d = new QLabel(desc, ref_box);
-        d->setStyleSheet("QLabel { color: #abb2bf; font-size: 11px; }");
+        d->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; }").arg(theme::kTextSecondary.name()));
         ref_layout->addWidget(k, row, 0);
         ref_layout->addWidget(d, row, 1);
     };
@@ -647,7 +647,7 @@ void WelcomeWidget::setupFirstProgramTab() {
     fp_layout->setSpacing(12);
 
     auto* title = new QLabel("<h3>First Program Tutorial — Adding Numbers and Driving LEDs</h3>", fp_page);
-    title->setStyleSheet("QLabel { color: #4ec9b0; }");
+    title->setStyleSheet(QString("QLabel { color: %1; }").arg(theme::kAccentTeal.name()));
     fp_layout->addWidget(title);
 
     auto* desc = new QLabel(
@@ -667,7 +667,7 @@ void WelcomeWidget::setupFirstProgramTab() {
         fp_page
     );
     desc->setWordWrap(true);
-    desc->setStyleSheet("QLabel { color: #abb2bf; font-size: 12px; line-height: 1.4; }");
+    desc->setStyleSheet(QString("QLabel { color: %1; font-size: 12px; line-height: 1.4; }").arg(theme::kTextSecondary.name()));
     fp_layout->addWidget(desc, 1);
 
     first_program_btn_ = new QPushButton("🚀 Open First Program in Editor (tutorial_first_program.asm)", fp_page);

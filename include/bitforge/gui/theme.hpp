@@ -16,20 +16,24 @@ namespace bitforge::gui::theme {
 // -----------------------------------------------------------------
 
 // Canonical Corner Radii Scale
-inline constexpr int kRadiusNone = 0;       // Code editor surfaces, dense data grids, tables, memory viewer
-inline constexpr int kRadiusSmall = 3;      // Tab close buttons, spinbox arrow subcontrols, compact badges
-inline constexpr int kRadiusControl = 4;    // Standard buttons, line edits, combos, spinboxes, tab tops
+inline constexpr int kRadiusNone = 0;       // Dense technical grids & viewports (hex editor, disassembly, memory, stack, trace, registers)
+inline constexpr int kRadiusSmall = 3;      // Micro badges, tab close buttons, spinbox subcontrols, compact buttons
+inline constexpr int kRadiusControl = 4;    // Standard interactive controls (buttons, line edits, combos, spinboxes, tab tops)
 inline constexpr int kRadiusPanel = 6;      // Group boxes, dock frames, context menus, popup dropdowns
-inline constexpr int kRadiusLarge = 8;      // Welcome action cards, tutorial container cards, preview card
-inline constexpr int kRadiusPill = 12;      // Status badges, execution pills, rounded indicators
+inline constexpr int kRadiusLarge = 8;      // Hero cards (Welcome action cards), preview card, major dialog containers
+inline constexpr int kRadiusPill = 12;      // Semicircular pill radius for 20-24px status badges and indicator capsules (radius == height / 2)
 
 // Control Sizing & Metrics (in pixels)
-inline constexpr int kControlHeight = 28;       // Standard interactive control height
-inline constexpr int kControlMinHeight = 20;    // Inner content min-height
-inline constexpr int kButtonMinHeight = 26;     // Minimum button height
-inline constexpr int kIconButtonSize = 22;      // Standard icon-only button size (e.g. Find close)
-inline constexpr int kCloseButtonSize = 18;     // Tab close button hit area (18x18)
+inline constexpr int kControlHeight = 28;       // Standard interactive control target height (dialog inputs, main push buttons)
+inline constexpr int kToolbarButtonHeight = 26; // Purposeful compact toolbar button target height (QToolButton in MainToolBar)
+inline constexpr int kControlMinHeight = 20;    // Inner content min-height (for QLineEdit, QSpinBox, compact buttons)
+inline constexpr int kButtonMinHeight = 26;     // Minimum standard push button height
+inline constexpr int kIconButtonSize = 22;      // Standalone icon/action button size (e.g. Find & Replace close button)
+inline constexpr int kTabCloseButtonSize = 18;  // Document tab close button hit area (18x18, containing 10x10 vector cross)
+inline constexpr int kCloseButtonSize = 18;     // Backwards-compatible alias for kTabCloseButtonSize
 inline constexpr int kSpinButtonWidth = 18;     // Spinbox arrow subcontrol width
+inline constexpr int kLedIndicatorSize = 18;    // Emissive 8-LED circular indicator diameter (18x18)
+inline constexpr int kLedRadiusPill = 9;        // Circular LED dot radius (kLedIndicatorSize / 2)
 
 // Layout Spacing & Padding Tokens
 inline constexpr int kSpacingTight = 4;         // Inter-control compact spacing
@@ -88,6 +92,10 @@ inline const QColor kChangedBg{0x3e, 0x35, 0x20};      // Warm dark amber fill
 inline const QColor kChangedText{0xff, 0xd5, 0x4f};    // Bright gold text
 inline const QColor kChangedBorder{0xb2, 0x89, 0x00};  // Gold accent border
 
+// Hardware Device Emulation Tokens
+inline const QColor kLedOffBg{0x1b, 0x1d, 0x23};       // Dark unlit LED surface (#1b1d23)
+inline const QColor kLedOnBorder{0x7b, 0xe5, 0xd0};    // Bright teal LED glow border (#7be5d0)
+
 // -----------------------------------------------------------------
 // 3. Typography Helpers
 // -----------------------------------------------------------------
@@ -104,10 +112,12 @@ QString applicationStyleSheet();
 // -----------------------------------------------------------------
 QString primaryButtonStyle();
 QString secondaryButtonStyle();
+QString accentButtonStyle(const QColor& accentColor);
 QString dangerButtonStyle();
 QString compactButtonStyle();
 QString inputStyle(bool has_error = false);
 QString infoBannerStyle(const QColor& bg = kBgDark, const QColor& text = kTextSecondary, const QColor& border = kBorderMedium);
+QString statusBannerStyle(const QColor& bg, const QColor& text, const QColor& border, bool bold = false);
 QString welcomeActionCardStyle(const QString& customBg = "");
 
 QString stateBadgeStyle(bitforge::MachineState state, bool is_executing, bool is_stale);

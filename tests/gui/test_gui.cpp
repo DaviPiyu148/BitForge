@@ -3572,11 +3572,15 @@ void GuiTest::testVisualDesignSystemTokensAndHierarchy() {
 
     // 2. Sizing & Metric tokens
     QCOMPARE(theme::kControlHeight, 28);
+    QCOMPARE(theme::kToolbarButtonHeight, 26);
     QCOMPARE(theme::kControlMinHeight, 20);
     QCOMPARE(theme::kButtonMinHeight, 26);
     QCOMPARE(theme::kIconButtonSize, 22);
+    QCOMPARE(theme::kTabCloseButtonSize, 18);
     QCOMPARE(theme::kCloseButtonSize, 18);
     QCOMPARE(theme::kSpinButtonWidth, 18);
+    QCOMPARE(theme::kLedIndicatorSize, 18);
+    QCOMPARE(theme::kLedRadiusPill, 9);
 
     // 3. Spacing & Border tokens
     QCOMPARE(theme::kSpacingTight, 4);
@@ -3607,6 +3611,11 @@ void GuiTest::testVisualDesignSystemTokensAndHierarchy() {
     QVERIFY(sec_btn_qss.contains("border-radius: 4px;"));
     QVERIFY(sec_btn_qss.contains("#282c34"));
 
+    const QString accent_btn_qss = theme::accentButtonStyle(theme::kAccentBlue);
+    QVERIFY(accent_btn_qss.contains("border-radius: 4px;"));
+    QVERIFY(accent_btn_qss.contains(theme::kAccentBlue.name()));
+    QVERIFY(accent_btn_qss.contains(":hover"));
+
     const QString danger_btn_qss = theme::dangerButtonStyle();
     QVERIFY(danger_btn_qss.contains("border-radius: 4px;"));
     QVERIFY(danger_btn_qss.contains("#e06c75"));
@@ -3625,6 +3634,10 @@ void GuiTest::testVisualDesignSystemTokensAndHierarchy() {
 
     const QString info_banner_qss = theme::infoBannerStyle();
     QVERIFY(info_banner_qss.contains("border-radius: 6px;"));
+
+    const QString status_banner_qss = theme::statusBannerStyle(theme::kBgMedium, theme::kTextSecondary, theme::kBorderLight, true);
+    QVERIFY(status_banner_qss.contains("border-radius: 4px;"));
+    QVERIFY(status_banner_qss.contains("font-weight: bold;"));
 
     const QString card_qss = theme::welcomeActionCardStyle();
     QVERIFY(card_qss.contains("border-radius: 8px;"));
@@ -3658,26 +3671,52 @@ void GuiTest::testVisualDesignSystemTokensAndHierarchy() {
 
     const QString artifact_dir = "C:/Users/Piyush/.gemini/antigravity/brain/3b875d0c-8f06-4ff1-9305-0a2eefba0b93";
 
+    auto raiseTab = [&](QWidget* w) {
+        if (w == nullptr) return;
+        for (auto* tabs : window.findChildren<QTabWidget*>()) {
+            if (tabs->indexOf(w) >= 0) {
+                tabs->setCurrentWidget(w);
+                QTest::qWait(20);
+                break;
+            }
+        }
+    };
+
     if (window.registersPanel()) {
         window.registersPanel()->grab().save(artifact_dir + "/gui_smoke_registers_panel.png");
     }
     if (window.memoryViewer()) {
+        raiseTab(window.memoryViewer());
         window.memoryViewer()->grab().save(artifact_dir + "/gui_smoke_memory_viewer.png");
     }
     if (window.stackViewer()) {
+        raiseTab(window.stackViewer());
         window.stackViewer()->grab().save(artifact_dir + "/gui_smoke_stack_viewer.png");
     }
     if (window.breakpointsPanel()) {
+        raiseTab(window.breakpointsPanel());
         window.breakpointsPanel()->grab().save(artifact_dir + "/gui_smoke_breakpoints_panel.png");
     }
     if (window.tracePanel()) {
+        raiseTab(window.tracePanel());
         window.tracePanel()->grab().save(artifact_dir + "/gui_smoke_trace_panel.png");
     }
     if (window.instructionInspector()) {
+        raiseTab(window.instructionInspector());
         window.instructionInspector()->grab().save(artifact_dir + "/gui_smoke_instruction_inspector.png");
     }
     if (window.watchPanel()) {
+        raiseTab(window.watchPanel());
         window.watchPanel()->grab().save(artifact_dir + "/gui_smoke_watch_panel.png");
+    }
+    if (window.devicesPanel()) {
+        raiseTab(window.devicesPanel());
+        window.devicesPanel()->grab().save(artifact_dir + "/gui_smoke_devices_panel.png");
+    }
+    if (window.findBar()) {
+        window.onFind();
+        QTest::qWait(20);
+        window.findBar()->grab().save(artifact_dir + "/gui_smoke_find_replace_bar.png");
     }
 
     // Capture ExamplesDialog

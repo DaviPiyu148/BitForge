@@ -76,9 +76,12 @@ DevicesPanel::DevicesPanel(QWidget* parent)
         bit_label->setStyleSheet("QLabel { color: #61afef; font-size: 10px; font-weight: bold; }");
 
         auto* dot = new QLabel(led_group);
-        dot->setFixedSize(18, 18);
+        dot->setFixedSize(theme::kLedIndicatorSize, theme::kLedIndicatorSize);
         dot->setAlignment(Qt::AlignCenter);
-        dot->setStyleSheet("QLabel { background-color: #1b1d23; border-radius: 9px; border: 1px solid #3b4048; }");
+        dot->setStyleSheet(QString("QLabel { background-color: %1; border-radius: %2px; border: 1px solid %3; }")
+                               .arg(theme::kLedOffBg.name())
+                               .arg(theme::kLedRadiusPill)
+                               .arg(theme::kBorderMedium.name()));
         led_dots_[static_cast<std::size_t>(i)] = dot;
 
         dot_container->addWidget(bit_label, 0, Qt::AlignCenter);
@@ -95,7 +98,9 @@ DevicesPanel::DevicesPanel(QWidget* parent)
     led_value_label_ = new QLabel("0x00 (0b00000000)", led_group);
     led_value_label_->setFont(mono_font);
     led_value_label_->setStyleSheet(
-        "QLabel { background-color: #1e1e1e; color: #abb2bf; border: 1px solid #282c34; border-radius: 4px; padding: 2px 6px; font-size: 10px; }"
+        QString("QLabel { background-color: %1; color: %2; border: 1px solid %3; border-radius: %4px; padding: 2px 6px; font-size: 10px; }")
+            .arg(theme::kBgEditor.name(), theme::kTextSecondary.name(), theme::kBorderSubtle.name())
+            .arg(theme::kRadiusControl)
     );
     val_layout->addWidget(led_value_label_, 0, Qt::AlignLeft);
     val_layout->addStretch(1);
@@ -250,11 +255,17 @@ void DevicesPanel::refresh() {
         bool bit_set = (led_val & (1 << i)) != 0;
         if (bit_set) {
             led_dots_[static_cast<std::size_t>(i)]->setStyleSheet(
-                "QLabel { background-color: #4ec9b0; border-radius: 9px; border: 1px solid #7be5d0; }"
+                QString("QLabel { background-color: %1; border-radius: %2px; border: 1px solid %3; }")
+                    .arg(theme::kAccentTeal.name())
+                    .arg(theme::kLedRadiusPill)
+                    .arg(theme::kLedOnBorder.name())
             );
         } else {
             led_dots_[static_cast<std::size_t>(i)]->setStyleSheet(
-                "QLabel { background-color: #1b1d23; border-radius: 9px; border: 1px solid #3b4048; }"
+                QString("QLabel { background-color: %1; border-radius: %2px; border: 1px solid %3; }")
+                    .arg(theme::kLedOffBg.name())
+                    .arg(theme::kLedRadiusPill)
+                    .arg(theme::kBorderMedium.name())
             );
         }
     }

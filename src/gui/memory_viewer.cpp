@@ -31,7 +31,7 @@ MemoryViewer::MemoryViewer(QWidget* parent)
     // Top control bar
     auto* top_bar = new QHBoxLayout();
     auto* addr_lbl = new QLabel("Address:", this);
-    addr_lbl->setStyleSheet("QLabel { color: #abb2bf; font-weight: 500; }");
+    addr_lbl->setStyleSheet(QString("QLabel { color: %1; font-weight: 500; }").arg(theme::kTextSecondary.name()));
     top_bar->addWidget(addr_lbl);
 
     address_input_ = new QLineEdit("0x0200", this);
@@ -49,8 +49,8 @@ MemoryViewer::MemoryViewer(QWidget* parent)
 
     auto* btn_pc = new QPushButton("Jump to PC", this);
     auto* btn_sp = new QPushButton("Jump to SP", this);
-    btn_pc->setStyleSheet(QString("QPushButton { color: %1; font-weight: bold; }").arg(theme::kAccentBlue.name()));
-    btn_sp->setStyleSheet(QString("QPushButton { color: %1; font-weight: bold; }").arg(theme::kAccentTeal.name()));
+    btn_pc->setStyleSheet(theme::accentButtonStyle(theme::kAccentBlue));
+    btn_sp->setStyleSheet(theme::accentButtonStyle(theme::kAccentTeal));
     top_bar->addWidget(btn_pc);
     top_bar->addWidget(btn_sp);
 

@@ -27,7 +27,7 @@ WatchPanel::WatchPanel(QWidget* parent)
     top_bar->addWidget(expr_input_, 1);
 
     add_btn_ = new QPushButton("Add Watch", this);
-    add_btn_->setStyleSheet("QPushButton { font-weight: bold; }");
+    add_btn_->setFont(theme::uiFont(9, true));
     top_bar->addWidget(add_btn_);
 
     remove_btn_ = new QPushButton("Remove", this);
