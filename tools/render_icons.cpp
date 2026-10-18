@@ -220,9 +220,10 @@ int main(int argc, char* argv[]) {
     // Default 256px png copy for general icon usage
     QFile::copy(out_dir + "/bitforge-256.png", out_dir + "/bitforge.png");
 
-    // Generate crisp, highly visible tab close icons
+    // Generate crisp, prominent, highly visible tab close icons
     auto drawCloseIcon = [](int state) { // 0 = normal, 1 = hover, 2 = pressed
-        QImage img(16, 16, QImage::Format_ARGB32_Premultiplied);
+        const int s = 18;
+        QImage img(s, s, QImage::Format_ARGB32_Premultiplied);
         img.fill(Qt::transparent);
         QPainter p(&img);
         p.setRenderHint(QPainter::Antialiasing, true);
@@ -230,18 +231,18 @@ int main(int argc, char* argv[]) {
         if (state == 1) { // hover
             p.setPen(Qt::NoPen);
             p.setBrush(QColor(62, 68, 81));
-            p.drawRoundedRect(QRectF(1.0, 1.0, 14.0, 14.0), 3.0, 3.0);
+            p.drawRoundedRect(QRectF(0.5, 0.5, 17.0, 17.0), 3.5, 3.5);
         } else if (state == 2) { // pressed
             p.setPen(Qt::NoPen);
             p.setBrush(QColor(224, 108, 117));
-            p.drawRoundedRect(QRectF(1.0, 1.0, 14.0, 14.0), 3.0, 3.0);
+            p.drawRoundedRect(QRectF(0.5, 0.5, 17.0, 17.0), 3.5, 3.5);
         }
 
-        // Bold, bright, high-contrast cross
-        QColor col = (state == 0) ? QColor(220, 224, 230) : QColor(255, 255, 255);
-        p.setPen(QPen(col, 2.0, Qt::SolidLine, Qt::RoundCap));
-        p.drawLine(QPointF(4.0, 4.0), QPointF(12.0, 12.0));
-        p.drawLine(QPointF(12.0, 4.0), QPointF(4.0, 12.0));
+        // Bold, bright, high-contrast, large cross
+        QColor col = (state == 0) ? QColor(230, 235, 242) : QColor(255, 255, 255);
+        p.setPen(QPen(col, 2.5, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(QPointF(3.0, 3.0), QPointF(15.0, 15.0));
+        p.drawLine(QPointF(15.0, 3.0), QPointF(3.0, 15.0));
         return img;
     };
     drawCloseIcon(0).save(out_dir + "/close-tab.png", "PNG");

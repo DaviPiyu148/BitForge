@@ -153,10 +153,10 @@ QString applicationStyleSheet() {
             image: url(:/icons/close-tab.png);
             subcontrol-position: right;
             subcontrol-origin: padding;
-            width: 16px;
-            height: 16px;
-            margin-top: 2px;
-            margin-bottom: 2px;
+            width: 18px;
+            height: 18px;
+            margin-top: 1px;
+            margin-bottom: 1px;
             margin-right: 4px;
             margin-left: 6px;
             border-radius: 3px;

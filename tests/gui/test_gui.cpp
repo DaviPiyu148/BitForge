@@ -3245,8 +3245,8 @@ void GuiTest::testEditorTabCloseButtonMetricsAndStyle() {
     QVERIFY(theme_css.contains("url(:/icons/close-tab.png)"));
     QVERIFY(theme_css.contains("url(:/icons/close-tab-hover.png)"));
     QVERIFY(theme_css.contains("url(:/icons/close-tab-pressed.png)"));
-    QVERIFY(theme_css.contains("width: 16px"));
-    QVERIFY(theme_css.contains("height: 16px"));
+    QVERIFY(theme_css.contains("width: 18px"));
+    QVERIFY(theme_css.contains("height: 18px"));
 
     // Verify close button exists on tab 1 (editor document)
     auto* btn1 = tab_bar->tabButton(1, QTabBar::RightSide);
