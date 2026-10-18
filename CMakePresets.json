@@ -47,6 +47,17 @@
         "BITFORGE_BUILD_GUI": "ON",
         "BITFORGE_WARNINGS_AS_ERRORS": "OFF"
       }
+    },
+    {
+      "name": "gui-release",
+      "displayName": "GUI Release Build",
+      "description": "Release configuration with Qt 6 desktop GUI",
+      "binaryDir": "${sourceDir}/build/gui-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BITFORGE_BUILD_GUI": "ON",
+        "BITFORGE_WARNINGS_AS_ERRORS": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -69,6 +80,11 @@
       "name": "gui",
       "displayName": "Build GUI",
       "configurePreset": "gui"
+    },
+    {
+      "name": "gui-release",
+      "displayName": "Build GUI Release",
+      "configurePreset": "gui-release"
     }
   ],
   "testPresets": [
