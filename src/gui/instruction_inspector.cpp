@@ -11,11 +11,19 @@ namespace bitforge::gui {
 
 namespace {
 
+QString formatHexWord(word_t val) {
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(4, '0'));
+}
+
+QString formatHexByte(byte_t val) {
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(2, '0'));
+}
+
 QString regName(byte_t reg_enc) {
     if (reg_enc < 4) {
         return QString("R%1").arg(reg_enc);
     }
-    return QString("Invalid(0x%1)").arg(reg_enc, 2, 16, QLatin1Char('0')).toUpper();
+    return QString("Invalid(%1)").arg(formatHexByte(reg_enc));
 }
 
 } // namespace
@@ -148,10 +156,10 @@ DecodedInstructionInfo InstructionInspector::decodeAt(const ExecutionController&
         info.valid = false;
         info.length = 1;
         info.instruction_size = 1;
-        info.mnemonic = QString("0x%1").arg(op, 2, 16, QLatin1Char('0')).toUpper();
+        info.mnemonic = formatHexByte(op);
         info.operands = "(Invalid Opcode)";
-        info.full_disassembly = QString("0x%1 (Invalid)").arg(op, 2, 16, QLatin1Char('0')).toUpper();
-        info.raw_bytes_hex = QString("0x%1").arg(op, 2, 16, QLatin1Char('0')).toUpper();
+        info.full_disassembly = QString("%1 (Invalid)").arg(formatHexByte(op));
+        info.raw_bytes_hex = formatHexByte(op);
         info.source_location = "-";
         info.branch_evaluation = "N/A";
         info.description = "Invalid instruction opcode. Execution at this address will trigger an InvalidOpcode CPU fault.";
@@ -231,10 +239,10 @@ DecodedInstructionInfo InstructionInspector::decodeAt(const ExecutionController&
             break;
 
         case Opcode::LDI:
-            info.operands = QString("%1, %2 (0x%3)")
+            info.operands = QString("%1, %2 (%3)")
                                .arg(regName(raw[1]))
                                .arg(raw[2])
-                               .arg(raw[2], 2, 16, QLatin1Char('0')).toUpper();
+                               .arg(formatHexByte(raw[2]));
             info.full_disassembly = QString("%1 %2, %3").arg(info.mnemonic, regName(raw[1])).arg(raw[2]);
             break;
 
@@ -251,21 +259,21 @@ DecodedInstructionInfo InstructionInspector::decodeAt(const ExecutionController&
 
         case Opcode::LDI16: {
             word_t val = (static_cast<word_t>(raw[1]) << 8) | raw[2];
-            info.operands = QString("IX, 0x%1").arg(val, 4, 16, QLatin1Char('0')).toUpper();
+            info.operands = QString("IX, %1").arg(formatHexWord(val));
             info.full_disassembly = QString("%1 %2").arg(info.mnemonic, info.operands);
             break;
         }
 
         case Opcode::LD: {
             word_t target = (static_cast<word_t>(raw[2]) << 8) | raw[3];
-            info.operands = QString("%1, [0x%2]").arg(regName(raw[1])).arg(target, 4, 16, QLatin1Char('0')).toUpper();
+            info.operands = QString("%1, [%2]").arg(regName(raw[1])).arg(formatHexWord(target));
             info.full_disassembly = QString("%1 %2").arg(info.mnemonic, info.operands);
             break;
         }
 
         case Opcode::ST: {
             word_t target = (static_cast<word_t>(raw[1]) << 8) | raw[2];
-            info.operands = QString("[0x%1], %2").arg(target, 4, 16, QLatin1Char('0')).toUpper().arg(regName(raw[3]));
+            info.operands = QString("[%1], %2").arg(formatHexWord(target)).arg(regName(raw[3]));
             info.full_disassembly = QString("%1 %2").arg(info.mnemonic, info.operands);
             break;
         }
@@ -273,18 +281,18 @@ DecodedInstructionInfo InstructionInspector::decodeAt(const ExecutionController&
         case Opcode::JMP:
         case Opcode::CALL: {
             word_t target = (static_cast<word_t>(raw[1]) << 8) | raw[2];
-            info.operands = QString("0x%1").arg(target, 4, 16, QLatin1Char('0')).toUpper();
+            info.operands = formatHexWord(target);
             info.full_disassembly = QString("%1 %2").arg(info.mnemonic, info.operands);
-            info.branch_evaluation = QString("Unconditional branch to target 0x%1").arg(target, 4, 16, QLatin1Char('0')).toUpper();
+            info.branch_evaluation = QString("Unconditional branch to target %1").arg(formatHexWord(target));
             break;
         }
 
         case Opcode::JZ: {
             word_t target = (static_cast<word_t>(raw[1]) << 8) | raw[2];
-            info.operands = QString("0x%1").arg(target, 4, 16, QLatin1Char('0')).toUpper();
+            info.operands = formatHexWord(target);
             info.full_disassembly = QString("%1 %2").arg(info.mnemonic, info.operands);
             if (flags.z) {
-                info.branch_evaluation = QString("Branch TAKEN: Target 0x%1 (Zero Flag Z=1)").arg(target, 4, 16, QLatin1Char('0')).toUpper();
+                info.branch_evaluation = QString("Branch TAKEN: Target %1 (Zero Flag Z=1)").arg(formatHexWord(target));
             } else {
                 info.branch_evaluation = QString("Branch NOT taken: Fallthrough (Zero Flag Z=0)");
             }
@@ -293,10 +301,10 @@ DecodedInstructionInfo InstructionInspector::decodeAt(const ExecutionController&
 
         case Opcode::JNZ: {
             word_t target = (static_cast<word_t>(raw[1]) << 8) | raw[2];
-            info.operands = QString("0x%1").arg(target, 4, 16, QLatin1Char('0')).toUpper();
+            info.operands = formatHexWord(target);
             info.full_disassembly = QString("%1 %2").arg(info.mnemonic, info.operands);
             if (!flags.z) {
-                info.branch_evaluation = QString("Branch TAKEN: Target 0x%1 (Zero Flag Z=0)").arg(target, 4, 16, QLatin1Char('0')).toUpper();
+                info.branch_evaluation = QString("Branch TAKEN: Target %1 (Zero Flag Z=0)").arg(formatHexWord(target));
             } else {
                 info.branch_evaluation = QString("Branch NOT taken: Fallthrough (Zero Flag Z=1)");
             }
@@ -305,10 +313,10 @@ DecodedInstructionInfo InstructionInspector::decodeAt(const ExecutionController&
 
         case Opcode::JC: {
             word_t target = (static_cast<word_t>(raw[1]) << 8) | raw[2];
-            info.operands = QString("0x%1").arg(target, 4, 16, QLatin1Char('0')).toUpper();
+            info.operands = formatHexWord(target);
             info.full_disassembly = QString("%1 %2").arg(info.mnemonic, info.operands);
             if (flags.c) {
-                info.branch_evaluation = QString("Branch TAKEN: Target 0x%1 (Carry Flag C=1)").arg(target, 4, 16, QLatin1Char('0')).toUpper();
+                info.branch_evaluation = QString("Branch TAKEN: Target %1 (Carry Flag C=1)").arg(formatHexWord(target));
             } else {
                 info.branch_evaluation = QString("Branch NOT taken: Fallthrough (Carry Flag C=0)");
             }
@@ -317,10 +325,10 @@ DecodedInstructionInfo InstructionInspector::decodeAt(const ExecutionController&
 
         case Opcode::JNC: {
             word_t target = (static_cast<word_t>(raw[1]) << 8) | raw[2];
-            info.operands = QString("0x%1").arg(target, 4, 16, QLatin1Char('0')).toUpper();
+            info.operands = formatHexWord(target);
             info.full_disassembly = QString("%1 %2").arg(info.mnemonic, info.operands);
             if (!flags.c) {
-                info.branch_evaluation = QString("Branch TAKEN: Target 0x%1 (Carry Flag C=0)").arg(target, 4, 16, QLatin1Char('0')).toUpper();
+                info.branch_evaluation = QString("Branch TAKEN: Target %1 (Carry Flag C=0)").arg(formatHexWord(target));
             } else {
                 info.branch_evaluation = QString("Branch NOT taken: Fallthrough (Carry Flag C=1)");
             }
@@ -328,12 +336,12 @@ DecodedInstructionInfo InstructionInspector::decodeAt(const ExecutionController&
         }
 
         case Opcode::IN:
-            info.operands = QString("%1, 0x%2").arg(regName(raw[1])).arg(raw[2], 2, 16, QLatin1Char('0')).toUpper();
+            info.operands = QString("%1, %2").arg(regName(raw[1])).arg(formatHexByte(raw[2]));
             info.full_disassembly = QString("%1 %2").arg(info.mnemonic, info.operands);
             break;
 
         case Opcode::OUT:
-            info.operands = QString("0x%1, %2").arg(raw[1], 2, 16, QLatin1Char('0')).toUpper().arg(regName(raw[2]));
+            info.operands = QString("%1, %2").arg(formatHexByte(raw[1])).arg(regName(raw[2]));
             info.full_disassembly = QString("%1 %2").arg(info.mnemonic, info.operands);
             break;
     }
@@ -345,7 +353,7 @@ void InstructionInspector::refresh() {
     if (controller_ == nullptr) return;
 
     const word_t pc = controller_->session().pc();
-    pc_addr_label_->setText(QString("0x%1").arg(pc, 4, 16, QLatin1Char('0')).toUpper());
+    pc_addr_label_->setText(formatHexWord(pc));
 
     auto decoded = decodeAt(*controller_, pc);
     pc_source_label_->setText(decoded.source_location);
@@ -359,7 +367,7 @@ void InstructionInspector::refresh() {
     // Update prominent status banner
     const auto stop_reason = controller_->lastStopReason();
     const auto engine_state = controller_->session().state();
-    const QString pc_hex = "0x" + QString("%1").arg(pc, 4, 16, QLatin1Char('0')).toUpper();
+    const QString pc_hex = formatHexWord(pc);
 
     if (stop_reason == debugger::StopReason::BreakpointHit) {
         status_banner_label_->setText(QString("Breakpoint Hit at %1 (%2)")
@@ -373,7 +381,7 @@ void InstructionInspector::refresh() {
             "QLabel { background-color: #21283b; color: #61afef; border: 1px solid #61afef; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
     } else if (engine_state == MachineState::Faulted) {
         const auto& fault = controller_->cpu().last_fault();
-        const QString fault_addr = "0x" + QString("%1").arg(fault.instruction_address, 4, 16, QLatin1Char('0')).toUpper();
+        const QString fault_addr = formatHexWord(fault.instruction_address);
         status_banner_label_->setText(QString("CPU Fault: %1 at %2 — %3")
                                           .arg(to_string(fault.type).data())
                                           .arg(fault_addr)
@@ -414,7 +422,7 @@ void InstructionInspector::refresh() {
     if (!trace.empty()) {
         const auto& last = trace.back();
         last_step_label_->setText(QString("#%1").arg(last.step_number));
-        last_pc_label_->setText(QString("0x%1").arg(last.instruction_address, 4, 16, QLatin1Char('0')).toUpper());
+        last_pc_label_->setText(formatHexWord(last.instruction_address));
         last_mnem_label_->setText(QString::fromStdString(last.mnemonic));
 
         switch (last.state_after) {
@@ -440,8 +448,8 @@ void InstructionInspector::refresh() {
         }
 
         if (last.faulted && last.fault.has_value()) {
-            last_effect_label_->setText(QString("Fault at 0x%1: %2")
-                                            .arg(last.fault->instruction_address, 4, 16, QLatin1Char('0')).toUpper()
+            last_effect_label_->setText(QString("Fault at %1: %2")
+                                            .arg(formatHexWord(last.fault->instruction_address))
                                             .arg(last.fault->message.c_str()));
             last_effect_label_->setStyleSheet("QLabel { color: #dc3545; }");
         } else if (last.state_after == MachineState::Halted) {

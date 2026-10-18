@@ -16,11 +16,11 @@ namespace bitforge::gui {
 namespace {
 
 QString formatHexWord(word_t val) {
-    return QString("0x%1").arg(val, 4, 16, QLatin1Char('0')).toUpper();
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(4, '0'));
 }
 
 QString formatHexByte(byte_t val) {
-    return QString("0x%1").arg(val, 2, 16, QLatin1Char('0')).toUpper();
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(2, '0'));
 }
 
 void applyFlagStyle(QLabel* label, bool active) {
@@ -135,11 +135,11 @@ RegistersPanel::RegistersPanel(QWidget* parent)
     hex_layout->addWidget(status_group);
     hex_layout->addStretch();
 
-    tabs->addTab(hex_tab, "Hex && Dec");
+    tabs->addTab(hex_tab, "Values");
 
     // Tab 2: Bit Visualization
     bit_view_ = new BitViewWidget(tabs);
-    tabs->addTab(bit_view_, "Bit Visualization");
+    tabs->addTab(bit_view_, "Bits");
 
     main_layout->addWidget(tabs);
 }
@@ -178,7 +178,7 @@ void RegistersPanel::refresh() {
 
     // 8-bit register values and diffs
     for (std::size_t i = 0; i < 4; ++i) {
-        r_labels_[i]->setText(formatHexByte(regs.r[i]) + QString(" (%1)").arg(regs.r[i], 3, 10, QLatin1Char(' ')));
+        r_labels_[i]->setText(formatHexByte(regs.r[i]) + QString(" (%1)").arg(regs.r[i]));
         if (has_prev_state_) {
             applyValueStyle(r_labels_[i], regs.r[i] != prev_registers_.r[i]);
         }
@@ -190,28 +190,30 @@ void RegistersPanel::refresh() {
     applyFlagStyle(flag_n_label_, flg.n);
     applyFlagStyle(flag_v_label_, flg.v);
 
-    // State
-    switch (st) {
-        case MachineState::Ready:
-            state_label_->setText("READY");
-            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #98c379; }");
-            break;
-        case MachineState::Running:
-            state_label_->setText("RUNNING");
-            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #61afef; }");
-            break;
-        case MachineState::Paused:
-            state_label_->setText("PAUSED");
-            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #e5c07b; }");
-            break;
-        case MachineState::Halted:
-            state_label_->setText("HALTED");
-            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #7f848e; }");
-            break;
-        case MachineState::Faulted:
-            state_label_->setText("FAULTED");
-            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #e06c75; }");
-            break;
+    // State (synchronized with execution controller)
+    if (controller_->isExecuting()) {
+        state_label_->setText("RUNNING");
+        state_label_->setStyleSheet("QLabel { font-weight: bold; color: #61afef; }");
+    } else {
+        switch (st) {
+            case MachineState::Ready:
+                state_label_->setText("READY");
+                state_label_->setStyleSheet("QLabel { font-weight: bold; color: #98c379; }");
+                break;
+            case MachineState::Running:
+            case MachineState::Paused:
+                state_label_->setText("PAUSED");
+                state_label_->setStyleSheet("QLabel { font-weight: bold; color: #e5c07b; }");
+                break;
+            case MachineState::Halted:
+                state_label_->setText("HALTED");
+                state_label_->setStyleSheet("QLabel { font-weight: bold; color: #7f848e; }");
+                break;
+            case MachineState::Faulted:
+                state_label_->setText("FAULTED");
+                state_label_->setStyleSheet("QLabel { font-weight: bold; color: #e06c75; }");
+                break;
+        }
     }
 
     // Stop Reason

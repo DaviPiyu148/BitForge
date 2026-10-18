@@ -102,7 +102,7 @@ DevicesPanel::DevicesPanel(QWidget* parent)
     auto* input_row = new QHBoxLayout();
     fifo_input_edit_ = new QLineEdit(fifo_group);
     fifo_input_edit_->setFont(mono_font);
-    fifo_input_edit_->setPlaceholderText("Hex byte(s) (e.g. A5, 0x12 0xFF, 42)...");
+    fifo_input_edit_->setPlaceholderText("Hex byte(s) (e.g. A5, 0x12, 42)...");
     input_row->addWidget(fifo_input_edit_, 1);
 
     fifo_enqueue_btn_ = new QPushButton("Enqueue", fifo_group);
@@ -237,9 +237,8 @@ void DevicesPanel::refresh() {
     for (int i = 7; i >= 0; --i) {
         bin_str.append(((led_val & (1 << i)) != 0) ? '1' : '0');
     }
-    led_value_label_->setText(
-        QString("0x%1 (0b%2)").arg(led_val, 2, 16, QLatin1Char('0')).toUpper().arg(bin_str)
-    );
+    QString hex_str = QString("%1").arg(led_val, 2, 16, QLatin1Char('0')).toUpper();
+    led_value_label_->setText(QString("0x%1 (0b%2)").arg(hex_str, bin_str));
 
     // 2. Update 7-Segment Display
     if (seven_seg_display_ != nullptr) {

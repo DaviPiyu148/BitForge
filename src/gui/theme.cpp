@@ -223,6 +223,28 @@ QString applicationStyleSheet() {
             font-size: 11px;
         }
 
+        /* Lists & Trees */
+        QListWidget, QListView, QTreeWidget, QTreeView {
+            background-color: #1e1e1e;
+            color: #dcdcdc;
+            border: 1px solid #282c34;
+            selection-background-color: #264f78;
+            selection-color: #ffffff;
+            outline: none;
+        }
+        QListWidget::item, QListView::item, QTreeWidget::item, QTreeView::item {
+            padding: 4px 8px;
+            border-radius: 3px;
+        }
+        QListWidget::item:hover, QListView::item:hover, QTreeWidget::item:hover, QTreeView::item:hover {
+            background-color: #282c34;
+            color: #ffffff;
+        }
+        QListWidget::item:selected, QListView::item:selected, QTreeWidget::item:selected, QTreeView::item:selected {
+            background-color: #264f78;
+            color: #ffffff;
+        }
+
         /* Group Boxes */
         QGroupBox {
             border: 1px solid #3b4048;

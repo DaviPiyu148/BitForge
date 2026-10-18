@@ -22,7 +22,8 @@ FindReplaceBar::FindReplaceBar(QWidget* parent)
     search_input_ = new QLineEdit(this);
     search_input_->setPlaceholderText("Search in file (Enter for next, Shift+Enter for prev)");
     search_input_->setClearButtonEnabled(true);
-    search_input_->setMinimumWidth(240);
+    search_input_->setMinimumWidth(160);
+    search_input_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     layout->addWidget(search_input_);
 
     case_checkbox_ = new QCheckBox("Match Case", this);
@@ -37,6 +38,7 @@ FindReplaceBar::FindReplaceBar(QWidget* parent)
     layout->addWidget(next_btn_);
 
     match_label_ = new QLabel(this);
+    match_label_->setMinimumWidth(64);
     match_label_->setStyleSheet("QLabel { color: #abb2bf; font-size: 11px; margin-left: 4px; }");
     layout->addWidget(match_label_);
 

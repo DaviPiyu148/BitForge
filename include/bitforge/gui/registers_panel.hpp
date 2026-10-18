@@ -24,6 +24,10 @@ public:
 
     void setController(ExecutionController* controller);
     [[nodiscard]] BitViewWidget* bitView() const noexcept { return bit_view_; }
+    [[nodiscard]] QLabel* stateLabel() const noexcept { return state_label_; }
+    [[nodiscard]] QLabel* rLabel(std::size_t index) const noexcept {
+        return index < r_labels_.size() ? r_labels_[index] : nullptr;
+    }
 
 public slots:
     void refresh();

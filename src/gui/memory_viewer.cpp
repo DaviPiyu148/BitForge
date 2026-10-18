@@ -12,6 +12,14 @@
 
 namespace bitforge::gui {
 
+namespace {
+
+QString formatHexWord(word_t val) {
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(4, '0'));
+}
+
+} // namespace
+
 MemoryViewer::MemoryViewer(QWidget* parent)
     : QWidget(parent) {
     auto* main_layout = new QVBoxLayout(this);
@@ -99,7 +107,7 @@ void MemoryViewer::setController(ExecutionController* controller) {
 
 void MemoryViewer::scrollToAddress(word_t address) {
     base_address_ = static_cast<word_t>(address & 0xFFF0); // Align to 16 bytes
-    address_input_->setText(QString("0x%1").arg(base_address_, 4, 16, QLatin1Char('0')).toUpper());
+    address_input_->setText(formatHexWord(base_address_));
     updateTable();
 }
 
@@ -118,13 +126,13 @@ void MemoryViewer::onGoClicked() {
 
 void MemoryViewer::onPrevPage() {
     base_address_ = static_cast<word_t>((base_address_ - (kRowsPerPage * kBytesPerRow)) & 0xFFFF);
-    address_input_->setText(QString("0x%1").arg(base_address_, 4, 16, QLatin1Char('0')).toUpper());
+    address_input_->setText(formatHexWord(base_address_));
     updateTable();
 }
 
 void MemoryViewer::onNextPage() {
     base_address_ = static_cast<word_t>((base_address_ + (kRowsPerPage * kBytesPerRow)) & 0xFFFF);
-    address_input_->setText(QString("0x%1").arg(base_address_, 4, 16, QLatin1Char('0')).toUpper());
+    address_input_->setText(formatHexWord(base_address_));
     updateTable();
 }
 
@@ -143,7 +151,7 @@ void MemoryViewer::updateTable() {
 
     for (int r = 0; r < kRowsPerPage; ++r) {
         const word_t row_addr = static_cast<word_t>((base_address_ + r * kBytesPerRow) & 0xFFFF);
-        const QString addr_str = QString("0x%1").arg(row_addr, 4, 16, QLatin1Char('0')).toUpper();
+        const QString addr_str = formatHexWord(row_addr);
 
         auto* addr_item = table_->item(r, 0);
         if (addr_item == nullptr) {
@@ -224,7 +232,7 @@ void MemoryViewer::onCustomContextMenu(const QPoint& pos) {
     }
 
     QMenu menu(this);
-    QString hexStr = QString("0x%1").arg(target_addr, 4, 16, QLatin1Char('0')).toUpper();
+    QString hexStr = formatHexWord(target_addr);
     auto* addAct = menu.addAction(QString("Add [%1] to Watch").arg(hexStr));
     connect(addAct, &QAction::triggered, this, [this, target_addr]() {
         emit requestAddWatch(target_addr);

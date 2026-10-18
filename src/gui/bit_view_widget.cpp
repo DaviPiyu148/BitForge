@@ -12,6 +12,14 @@ namespace bitforge::gui {
 
 namespace {
 
+QString formatHexWord(word_t val) {
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(4, '0'));
+}
+
+QString formatHexByte(byte_t val) {
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(2, '0'));
+}
+
 void applyBitStyle(QLabel* dot, bool is_set, bool is_16bit) {
     if (is_set) {
         const QString bg = is_16bit ? "#007bff" : "#28a745";
@@ -227,18 +235,18 @@ void BitViewWidget::refresh() {
     const bool sp_changed = has_prev_state_ && (regs.sp != prev_registers_.sp);
     const bool ix_changed = has_prev_state_ && (regs.ix != prev_registers_.ix);
 
-    pc_row_.title_label->setText(QString("PC: 0x%1 (%2)")
-                                     .arg(regs.pc, 4, 16, QLatin1Char('0')).toUpper()
+    pc_row_.title_label->setText(QString("PC: %1 (%2)")
+                                     .arg(formatHexWord(regs.pc))
                                      .arg(regs.pc));
     updateBitRow16(pc_row_, regs.pc, pc_changed);
 
-    sp_row_.title_label->setText(QString("SP: 0x%1 (%2)")
-                                     .arg(regs.sp, 4, 16, QLatin1Char('0')).toUpper()
+    sp_row_.title_label->setText(QString("SP: %1 (%2)")
+                                     .arg(formatHexWord(regs.sp))
                                      .arg(regs.sp));
     updateBitRow16(sp_row_, regs.sp, sp_changed);
 
-    ix_row_.title_label->setText(QString("IX: 0x%1 (%2)")
-                                     .arg(regs.ix, 4, 16, QLatin1Char('0')).toUpper()
+    ix_row_.title_label->setText(QString("IX: %1 (%2)")
+                                     .arg(formatHexWord(regs.ix))
                                      .arg(regs.ix));
     updateBitRow16(ix_row_, regs.ix, ix_changed);
 
@@ -246,9 +254,9 @@ void BitViewWidget::refresh() {
         const byte_t r_val = regs.r[i];
         const bool r_changed = has_prev_state_ && (r_val != prev_registers_.r[i]);
         r_rows_[static_cast<std::size_t>(i)].title_label->setText(
-            QString("R%1: 0x%2 (%3)")
+            QString("R%1: %2 (%3)")
                 .arg(i)
-                .arg(r_val, 2, 16, QLatin1Char('0')).toUpper()
+                .arg(formatHexByte(r_val))
                 .arg(r_val)
         );
         updateBitRow8(r_rows_[static_cast<std::size_t>(i)], r_val, r_changed);

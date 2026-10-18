@@ -61,6 +61,10 @@ WatchPanel::WatchPanel(QWidget* parent)
     // Signals & connections
     connect(add_btn_, &QPushButton::clicked, this, &WatchPanel::onAddClicked);
     connect(expr_input_, &QLineEdit::returnPressed, this, &WatchPanel::onAddClicked);
+    connect(expr_input_, &QLineEdit::textChanged, this, [this]() {
+        expr_input_->setStyleSheet("");
+        expr_input_->setToolTip("");
+    });
     connect(remove_btn_, &QPushButton::clicked, this, &WatchPanel::onRemoveClicked);
     connect(clear_btn_, &QPushButton::clicked, this, &WatchPanel::onClearClicked);
     connect(table_, &QWidget::customContextMenuRequested, this, &WatchPanel::onCustomContextMenu);
@@ -126,7 +130,7 @@ std::optional<WatchItem> WatchPanel::parseExpression(const QString& rawExpr) con
     if (ok && val <= 0xFFFF) {
         item.type = WatchType::MemoryByte;
         item.address = static_cast<word_t>(val);
-        item.displayName = QString("[0x%1]").arg(item.address, 4, 16, QLatin1Char('0')).toUpper();
+        item.displayName = QString("[0x%1]").arg(QString::number(item.address, 16).toUpper().rightJustified(4, '0'));
         return item;
     }
 
@@ -159,7 +163,7 @@ void WatchPanel::addRegisterWatch(const QString& regName) {
 }
 
 void WatchPanel::addMemoryWatch(word_t address) {
-    addWatch(QString("0x%1").arg(address, 4, 16, QLatin1Char('0')).toUpper());
+    addWatch(QString("0x%1").arg(QString::number(address, 16).toUpper().rightJustified(4, '0')));
 }
 
 void WatchPanel::addFlagWatch(const QString& flagName) {
@@ -208,6 +212,11 @@ void WatchPanel::onAddClicked() {
     if (!text.isEmpty()) {
         if (addWatch(text)) {
             expr_input_->clear();
+            expr_input_->setStyleSheet("");
+            expr_input_->setToolTip("");
+        } else {
+            expr_input_->setStyleSheet("QLineEdit { border: 1px solid #e06c75; background-color: #2e2024; }");
+            expr_input_->setToolTip("Invalid watch expression. Supported: R0-R3, IX, PC, SP, Z, C, N, V, [0x8000], 0x8000");
         }
     }
 }
@@ -292,7 +301,7 @@ void WatchPanel::refresh() {
                 type_str = "Reg (8-bit)";
                 byte_t b = (item.reg_index >= 0 && item.reg_index < 4) ? regs.r[item.reg_index] : 0;
                 current_val = b;
-                hex_str = "0x" + QString("%1").arg(b, 2, 16, QLatin1Char('0'));
+                hex_str = "0x" + QString("%1").arg(b, 2, 16, QLatin1Char('0')).toUpper();
                 dec_str = QString::number(b);
                 bin_str = QString("0b%1").arg(b, 8, 2, QLatin1Char('0'));
                 break;
@@ -304,7 +313,7 @@ void WatchPanel::refresh() {
                 else if (item.displayName == "PC") w = regs.pc;
                 else if (item.displayName == "SP") w = regs.sp;
                 current_val = w;
-                hex_str = "0x" + QString("%1").arg(w, 4, 16, QLatin1Char('0'));
+                hex_str = "0x" + QString("%1").arg(w, 4, 16, QLatin1Char('0')).toUpper();
                 dec_str = QString::number(w);
                 bin_str = QString("0b%1").arg(w, 16, 2, QLatin1Char('0'));
                 break;
@@ -326,7 +335,7 @@ void WatchPanel::refresh() {
                 type_str = "Memory Byte";
                 byte_t b = mem.read_byte(item.address);
                 current_val = b;
-                hex_str = "0x" + QString("%1").arg(b, 2, 16, QLatin1Char('0'));
+                hex_str = "0x" + QString("%1").arg(b, 2, 16, QLatin1Char('0')).toUpper();
                 dec_str = QString::number(b);
                 bin_str = QString("0b%1").arg(b, 8, 2, QLatin1Char('0'));
                 break;

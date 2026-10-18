@@ -9,6 +9,18 @@
 
 namespace bitforge::gui {
 
+namespace {
+
+QString formatHexWord(word_t val) {
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(4, '0'));
+}
+
+QString formatHexByte(byte_t val) {
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(2, '0'));
+}
+
+} // namespace
+
 StackViewer::StackViewer(QWidget* parent)
     : QWidget(parent) {
     auto* main_layout = new QVBoxLayout(this);
@@ -23,7 +35,7 @@ StackViewer::StackViewer(QWidget* parent)
     header_label_->setFont(mono_font);
     top_layout->addWidget(header_label_);
 
-    status_label_ = new QLabel("Empty stack (SP = 0xFFFF sentinel per ADR-001; no items pushed)", this);
+    status_label_ = new QLabel("Empty stack (SP = 0xFFFF; no items pushed)", this);
     status_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; }");
     top_layout->addWidget(status_label_);
     top_layout->addStretch();
@@ -61,8 +73,8 @@ void StackViewer::refresh() {
     auto stack_info = controller_->session().inspect_stack();
 
     header_label_->setText(
-        QString("SP: 0x%1 | Depth: %2 byte(s)")
-            .arg(stack_info.sp, 4, 16, QLatin1Char('0')).toUpper()
+        QString("SP: %1 | Depth: %2 byte(s)")
+            .arg(formatHexWord(stack_info.sp))
             .arg(stack_info.depth)
     );
 
@@ -74,7 +86,7 @@ void StackViewer::refresh() {
     }
 
     if (stack_info.is_empty) {
-        status_label_->setText("Empty stack (SP = 0xFFFF sentinel per ADR-001; no items pushed)");
+        status_label_->setText("Empty stack (SP = 0xFFFF; no items pushed)");
         status_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; }");
         table_->setRowCount(0);
         return;
@@ -93,15 +105,11 @@ void StackViewer::refresh() {
         item_offset->setTextAlignment(Qt::AlignCenter);
         table_->setItem(i, 0, item_offset);
 
-        auto* item_addr = new QTableWidgetItem(
-            QString("0x%1").arg(entry.address, 4, 16, QLatin1Char('0')).toUpper()
-        );
+        auto* item_addr = new QTableWidgetItem(formatHexWord(entry.address));
         item_addr->setTextAlignment(Qt::AlignCenter);
         table_->setItem(i, 1, item_addr);
 
-        auto* item_hex = new QTableWidgetItem(
-            QString("0x%1").arg(entry.value, 2, 16, QLatin1Char('0')).toUpper()
-        );
+        auto* item_hex = new QTableWidgetItem(formatHexByte(entry.value));
         item_hex->setTextAlignment(Qt::AlignCenter);
         table_->setItem(i, 2, item_hex);
 

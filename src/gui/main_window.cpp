@@ -151,7 +151,7 @@ void MainWindow::setupUi() {
 
     stack_viewer_ = new StackViewer(bottom_tabs);
     stack_viewer_->setController(controller_);
-    bottom_tabs->addTab(stack_viewer_, "Stack (ADR-001)");
+    bottom_tabs->addTab(stack_viewer_, "Hardware Stack");
 
     breakpoints_panel_ = new BreakpointsPanel(bottom_tabs);
     breakpoints_panel_->setController(controller_);
@@ -840,7 +840,7 @@ void MainWindow::updateUiState() {
 
     // Update status bar
     status_state_label_->setText(state_badge_->text().trimmed());
-    status_pc_label_->setText(QString("PC: 0x%1").arg(pc, 4, 16, QLatin1Char('0')).toUpper());
+    status_pc_label_->setText(QString("PC: 0x%1").arg(QString::number(pc, 16).toUpper().rightJustified(4, '0')));
     status_steps_label_->setText(QString("Steps: %1").arg(steps));
 }
 

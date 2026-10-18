@@ -71,7 +71,7 @@ void SevenSegmentDisplay::paintEvent(QPaintEvent* /* event */) {
     painter.setFont(QFont("Segoe UI", 8, QFont::Bold));
     painter.setPen(QColor(160, 160, 168));
     painter.drawText(QRect(r.left() + 8, r.top() + 4, r.width() - 16, 16),
-                     Qt::AlignLeft | Qt::AlignVCenter, "Numeric Display — Port 0x02");
+                     Qt::AlignLeft | Qt::AlignVCenter, "DECIMAL READOUT");
 
     // 3. Three 7-segment digits
     const int digit_y = r.top() + 22;

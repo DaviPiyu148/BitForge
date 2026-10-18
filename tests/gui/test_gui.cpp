@@ -102,6 +102,7 @@ private slots:
     void testWatchPanelInspectionAndHighlighting();
     void testPreferencesPersistenceAcrossSessions();
     void testPerformanceAndResponsiveness();
+    void testPhase11UxPolishAndTypography();
 };
 
 void GuiTest::initTestCase() {
@@ -745,7 +746,7 @@ void GuiTest::testOffscreenScreenshotCapture() {
         for (int i = 0; i < tw->count(); ++i) {
             if (tw->tabText(i).contains("CPU Registers")) {
                 tw->setCurrentIndex(i);
-            } else if (tw->tabText(i).contains("Bit Visualization")) {
+            } else if (tw->tabText(i).contains("Bit Visualization") || tw->tabText(i) == "Bits") {
                 tw->setCurrentIndex(i);
             } else if (tw->tabText(i).contains("Instruction Inspector")) {
                 tw->setCurrentIndex(i);
@@ -1814,7 +1815,18 @@ void GuiTest::testADR001StackViewerEmptySentinelAndBreakpointsEmptyState() {
     QVERIFY(sv != nullptr);
     window.controller()->reset();
     sv->refresh();
-    QVERIFY(sv->statusLabel()->text().contains("Empty stack (SP = 0xFFFF sentinel per ADR-001"));
+    QVERIFY(sv->statusLabel()->text().contains("Empty stack (SP = 0xFFFF; no items pushed)"));
+
+    // Verify that the stack tab is labeled without ADR acronym leakage
+    bool found_adr = false;
+    for (auto* tw : window.findChildren<QTabWidget*>()) {
+        for (int i = 0; i < tw->count(); ++i) {
+            if (tw->tabText(i).contains("ADR-001")) {
+                found_adr = true;
+            }
+        }
+    }
+    QVERIFY(!found_adr);
 
     // 2. Breakpoints panel empty state
     auto* bp = window.breakpointsPanel();
@@ -2043,6 +2055,113 @@ void GuiTest::testPerformanceAndResponsiveness() {
     window.controller()->reset();
     window.controller()->step();
     QCOMPARE(trace_panel->table()->rowCount(), 1);
+}
+
+void GuiTest::testPhase11UxPolishAndTypography() {
+    MainWindow window;
+    window.show();
+
+    // 1. RegistersPanel tab titles and lack of ampersand escape artifacts
+    auto* rp = window.registersPanel();
+    QVERIFY(rp != nullptr);
+    auto* reg_tabs = rp->findChild<QTabWidget*>();
+    QVERIFY(reg_tabs != nullptr);
+    QCOMPARE(reg_tabs->tabText(0), QString("Values"));
+    QCOMPARE(reg_tabs->tabText(1), QString("Bits"));
+    QVERIFY(!reg_tabs->tabText(0).contains("&&"));
+    QVERIFY(!reg_tabs->tabText(1).contains("&&"));
+
+    // 2. RegistersPanel decimal formatting without space padding
+    window.editor()->setPlainText(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 10\n"
+        "    HALT\n"
+    );
+    window.onAssemble();
+    window.controller()->reset();
+    rp->refresh();
+    QCOMPARE(rp->rLabel(0)->text(), QString("0x00 (0)"));
+
+    // Step once to load R0 with 10
+    window.controller()->step();
+    rp->refresh();
+    QCOMPARE(rp->rLabel(0)->text(), QString("0x0A (10)"));
+
+    // 3. RegistersPanel Engine Status synchronized with controller
+    // While paused/stepped (not executing continuously), status must display "PAUSED"
+    QCOMPARE(rp->stateLabel()->text(), QString("PAUSED"));
+
+    // Step once more to HALT
+    window.controller()->step();
+    rp->refresh();
+    QCOMPARE(rp->stateLabel()->text(), QString("HALTED"));
+
+    // 4. Trace table high-contrast Halted row styling (WCAG AAA)
+    auto* tp = window.tracePanel();
+    QVERIFY(tp != nullptr);
+    int last_row = tp->table()->rowCount() - 1;
+    QVERIFY(last_row >= 0);
+    auto* halt_item = tp->table()->item(last_row, 0);
+    QVERIFY(halt_item != nullptr);
+    QCOMPARE(halt_item->background().color(), QColor(0x1e, 0x33, 0x24));
+    QCOMPARE(halt_item->foreground().color(), QColor(0x98, 0xc3, 0x79));
+
+    // 5. Trace table high-contrast Faulted row styling
+    window.editor()->setPlainText(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    .BYTE 0xFF\n"
+    );
+    window.onAssemble();
+    window.controller()->reset();
+    window.controller()->step();
+    QCOMPARE(window.controller()->session().state(), MachineState::Faulted);
+    tp->refresh();
+    int fault_row = tp->table()->rowCount() - 1;
+    QVERIFY(fault_row >= 0);
+    auto* fault_item = tp->table()->item(fault_row, 0);
+    QVERIFY(fault_item != nullptr);
+    QCOMPARE(fault_item->background().color(), QColor(0x3e, 0x20, 0x24));
+    QCOMPARE(fault_item->foreground().color(), QColor(0xe0, 0x6c, 0x75));
+
+    // 6. Watch panel invalid expression feedback and reset
+    auto* wp = window.watchPanel();
+    QVERIFY(wp != nullptr);
+    wp->inputField()->setText("invalid_expression_xyz");
+    wp->addButton()->click();
+    // Input must not be cleared on failure
+    QCOMPARE(wp->inputField()->text(), QString("invalid_expression_xyz"));
+    // Error styling applied
+    QVERIFY(wp->inputField()->styleSheet().contains("border: 1px solid #e06c75"));
+    QVERIFY(!wp->inputField()->toolTip().isEmpty());
+    // Typing clears the error style
+    wp->inputField()->setText("R0");
+    QVERIFY(wp->inputField()->styleSheet().isEmpty());
+    QVERIFY(wp->inputField()->toolTip().isEmpty());
+
+    // 7. Find bar elasticity and match label minimum width
+    auto* fb = window.findBar();
+    QVERIFY(fb != nullptr);
+    QCOMPARE(fb->searchInput()->sizePolicy().horizontalPolicy(), QSizePolicy::Expanding);
+    QVERIFY(fb->matchLabel()->minimumWidth() >= 60);
+
+    // 8. Devices panel LED label format with lowercase 0x and 0b prefixes
+    auto* dp = window.devicesPanel();
+    QVERIFY(dp != nullptr);
+    dp->refresh();
+    bool found_led = false;
+    for (auto* lbl : dp->findChildren<QLabel*>()) {
+        if (lbl->text().startsWith("0x") && lbl->text().contains("(0b")) {
+            found_led = true;
+            QVERIFY(!lbl->text().contains("0X"));
+            QVERIFY(!lbl->text().contains("0B"));
+            break;
+        }
+    }
+    QVERIFY(found_led);
 }
 
 QTEST_MAIN(GuiTest)

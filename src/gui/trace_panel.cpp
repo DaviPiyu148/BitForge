@@ -8,6 +8,18 @@
 
 namespace bitforge::gui {
 
+namespace {
+
+QString formatHexWord(word_t val) {
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(4, '0'));
+}
+
+QString formatHexByte(byte_t val) {
+    return QString("0x%1").arg(QString::number(val, 16).toUpper().rightJustified(2, '0'));
+}
+
+} // namespace
+
 TracePanel::TracePanel(QWidget* parent)
     : QWidget(parent) {
     auto* main_layout = new QVBoxLayout(this);
@@ -89,15 +101,13 @@ void TracePanel::refresh() {
             table_->setItem(i, 0, item_step);
 
             // 1: PC
-            auto* item_pc = new QTableWidgetItem(
-                QString("0x%1").arg(entry.instruction_address, 4, 16, QLatin1Char('0')).toUpper()
-            );
+            auto* item_pc = new QTableWidgetItem(formatHexWord(entry.instruction_address));
             item_pc->setTextAlignment(Qt::AlignCenter);
             table_->setItem(i, 1, item_pc);
 
             // 2: Mnemonic
             auto* item_mnem = new QTableWidgetItem(
-                entry.mnemonic.empty() ? QString("0x%1").arg(entry.opcode_raw, 2, 16, QLatin1Char('0')).toUpper()
+                entry.mnemonic.empty() ? formatHexByte(entry.opcode_raw)
                                        : QString::fromStdString(entry.mnemonic)
             );
             item_mnem->setTextAlignment(Qt::AlignCenter);
@@ -141,16 +151,26 @@ void TracePanel::refresh() {
             item_delta->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
             table_->setItem(i, 6, item_delta);
 
-            // Highlight HALT or Fault
+            // Highlight HALT or Fault with dark-theme compliant high-contrast colors (WCAG AAA)
             if (entry.state_after == MachineState::Halted) {
+                const QColor halted_bg(0x1e, 0x33, 0x24); // Dark emerald tint
+                const QColor halted_fg(0x98, 0xc3, 0x79); // Crisp light green text
                 for (int col = 0; col < 7; ++col) {
                     auto* it = table_->item(i, col);
-                    if (it != nullptr) it->setBackground(QColor(230, 244, 234)); // Soft green
+                    if (it != nullptr) {
+                        it->setBackground(halted_bg);
+                        it->setForeground(halted_fg);
+                    }
                 }
             } else if (entry.faulted || entry.state_after == MachineState::Faulted) {
+                const QColor faulted_bg(0x3e, 0x20, 0x24); // Dark wine/ruby tint
+                const QColor faulted_fg(0xe0, 0x6c, 0x75); // Crisp soft red text
                 for (int col = 0; col < 7; ++col) {
                     auto* it = table_->item(i, col);
-                    if (it != nullptr) it->setBackground(QColor(252, 232, 230)); // Soft red
+                    if (it != nullptr) {
+                        it->setBackground(faulted_bg);
+                        it->setForeground(faulted_fg);
+                    }
                 }
             }
         }
