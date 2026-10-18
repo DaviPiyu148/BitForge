@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QTextBrowser>
 #include <QLabel>
+#include <QFrame>
 
 namespace bitforge::gui {
 
@@ -36,6 +37,7 @@ public:
     [[nodiscard]] QPushButton* firstProgramBtn() const noexcept { return first_program_btn_; }
     [[nodiscard]] QCheckBox* showOnStartupCheckBox() const noexcept { return show_on_startup_cb_; }
     [[nodiscard]] QPushButton* openLessonExampleBtn() const noexcept { return open_lesson_example_btn_; }
+    [[nodiscard]] QFrame* lessonActionBar() const noexcept { return lesson_action_bar_; }
 
 signals:
     void newFileRequested();
@@ -70,6 +72,7 @@ private:
     // Curriculum Tab Components
     QListWidget* lesson_list_{nullptr};
     QTextBrowser* lesson_content_{nullptr};
+    QFrame* lesson_action_bar_{nullptr};
     QPushButton* open_lesson_example_btn_{nullptr};
     int current_lesson_idx_{0};
 

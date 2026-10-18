@@ -1745,7 +1745,23 @@ void MainWindow::onRestoreDefaultLayout() {
     bottom_dock_->show();
     right_dock_->setFloating(false);
     bottom_dock_->setFloating(false);
-    resize(1240, 820);
+    bottom_dock_->raise();
+
+    // Balance dock proportions within the current window size
+    if (right_dock_ != nullptr) {
+        int target_right_w = std::max(320, width() / 4);
+        resizeDocks({right_dock_}, {target_right_w}, Qt::Horizontal);
+    }
+    if (bottom_dock_ != nullptr) {
+        int target_bottom_h = std::max(220, height() / 3);
+        resizeDocks({bottom_dock_}, {target_bottom_h}, Qt::Vertical);
+    }
+
+    // Only apply minimum size clamp if not maximized and smaller than minimum viable dimensions
+    if (!isMaximized() && (width() < 900 || height() < 600)) {
+        resize(std::max(width(), 900), std::max(height(), 600));
+    }
+
     showEditor();
     statusBar()->showMessage("Workbench layout restored to default proportions.", 3000);
 }

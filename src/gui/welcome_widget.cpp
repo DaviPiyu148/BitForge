@@ -13,6 +13,8 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QFrame>
 
 namespace bitforge::gui {
 
@@ -485,20 +487,143 @@ void WelcomeWidget::setupCurriculumTab() {
     auto* right_box = new QGroupBox("Lesson Details", curr_page);
     auto* right_layout = new QVBoxLayout(right_box);
     right_layout->setContentsMargins(12, 12, 12, 12);
-    right_layout->setSpacing(10);
+    right_layout->setSpacing(8);
 
     lesson_content_ = new QTextBrowser(right_box);
     lesson_content_->setOpenExternalLinks(false);
+
+    // Set document default stylesheet for typography, tables, lists, and code blocks
+    lesson_content_->document()->setDefaultStyleSheet(
+        "body {"
+        "  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;"
+        "  font-size: 13px;"
+        "  color: #abb2bf;"
+        "  line-height: 1.45;"
+        "}"
+        "h3 {"
+        "  color: #4ec9b0;"
+        "  font-size: 15px;"
+        "  margin-top: 0px;"
+        "  margin-bottom: 8px;"
+        "  font-weight: 600;"
+        "}"
+        "h4 {"
+        "  color: #e5c07b;"
+        "  font-size: 13px;"
+        "  margin-top: 12px;"
+        "  margin-bottom: 6px;"
+        "  font-weight: 600;"
+        "}"
+        "p {"
+        "  margin-top: 3px;"
+        "  margin-bottom: 8px;"
+        "  color: #abb2bf;"
+        "}"
+        "ul, ol {"
+        "  margin-top: 3px;"
+        "  margin-bottom: 8px;"
+        "  padding-left: 20px;"
+        "}"
+        "li {"
+        "  margin-bottom: 4px;"
+        "  color: #abb2bf;"
+        "}"
+        "code {"
+        "  font-family: 'Cascadia Code', 'Consolas', monospace;"
+        "  font-size: 12px;"
+        "  background-color: #1b1d23;"
+        "  color: #98c379;"
+        "  padding: 1px 4px;"
+        "  border-radius: 3px;"
+        "}"
+        "pre {"
+        "  font-family: 'Cascadia Code', 'Consolas', monospace;"
+        "  font-size: 12px;"
+        "  background-color: #1b1d23;"
+        "  color: #abb2bf;"
+        "  padding: 8px 10px;"
+        "  border: 1px solid #282c34;"
+        "  border-radius: 4px;"
+        "  margin-top: 6px;"
+        "  margin-bottom: 8px;"
+        "}"
+        "table {"
+        "  border-collapse: collapse;"
+        "  width: 100%;"
+        "  margin-top: 6px;"
+        "  margin-bottom: 8px;"
+        "  border: 1px solid #3b4048;"
+        "}"
+        "th {"
+        "  background-color: #282c34;"
+        "  color: #61afef;"
+        "  padding: 5px 8px;"
+        "  border: 1px solid #3b4048;"
+        "  text-align: left;"
+        "  font-weight: bold;"
+        "  font-size: 12px;"
+        "}"
+        "td {"
+        "  padding: 4px 8px;"
+        "  border: 1px solid #3b4048;"
+        "  color: #abb2bf;"
+        "  font-size: 12px;"
+        "}"
+    );
+
     lesson_content_->setStyleSheet(
-        "QTextBrowser { background-color: #1b1d23; color: #dcdcdc; border: 1px solid #282c34; border-radius: 4px; padding: 12px; }"
+        "QTextBrowser {"
+        "  background-color: transparent;"
+        "  border: none;"
+        "  color: #abb2bf;"
+        "  selection-background-color: #264f78;"
+        "  selection-color: #ffffff;"
+        "  padding: 0px 4px 2px 0px;"
+        "}"
+        "QScrollBar:vertical {"
+        "  border: none;"
+        "  background: #1b1d23;"
+        "  width: 8px;"
+        "  margin: 0px;"
+        "  border-radius: 4px;"
+        "}"
+        "QScrollBar::handle:vertical {"
+        "  background: #3e4451;"
+        "  min-height: 24px;"
+        "  border-radius: 4px;"
+        "}"
+        "QScrollBar::handle:vertical:hover {"
+        "  background: #4ec9b0;"
+        "}"
+        "QScrollBar::handle:vertical:pressed {"
+        "  background: #528bff;"
+        "}"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
+        "  height: 0px;"
+        "  background: none;"
+        "}"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {"
+        "  background: none;"
+        "}"
     );
     right_layout->addWidget(lesson_content_, 1);
 
-    open_lesson_example_btn_ = new QPushButton(right_box);
+    // Anchored bottom action bar
+    lesson_action_bar_ = new QFrame(right_box);
+    lesson_action_bar_->setObjectName("lessonActionBar");
+    lesson_action_bar_->setStyleSheet(
+        "#lessonActionBar { border-top: 1px solid #282c34; background: transparent; padding-top: 8px; }"
+    );
+    auto* action_layout = new QHBoxLayout(lesson_action_bar_);
+    action_layout->setContentsMargins(0, 4, 0, 0);
+    action_layout->setSpacing(8);
+
+    open_lesson_example_btn_ = new QPushButton(lesson_action_bar_);
     open_lesson_example_btn_->setCursor(Qt::PointingHandCursor);
     open_lesson_example_btn_->setStyleSheet(
-        "QPushButton { background-color: #00adb5; color: white; font-weight: bold; padding: 7px 14px; border-radius: 4px; }"
+        "QPushButton { background-color: #00adb5; color: white; font-weight: bold; padding: 7px 16px; border-radius: 4px; border: none; font-size: 12px; }"
         "QPushButton:hover { background-color: #00c4cc; }"
+        "QPushButton:pressed { background-color: #00969d; }"
     );
     connect(open_lesson_example_btn_, &QPushButton::clicked, this, [this]() {
         if (current_lesson_idx_ >= 0 && current_lesson_idx_ < 11) {
@@ -508,7 +633,10 @@ void WelcomeWidget::setupCurriculumTab() {
             }
         }
     });
-    right_layout->addWidget(open_lesson_example_btn_);
+    action_layout->addWidget(open_lesson_example_btn_, 0, Qt::AlignLeft);
+    action_layout->addStretch(1);
+
+    right_layout->addWidget(lesson_action_bar_, 0);
 
     page_layout->addWidget(right_box, 5);
 
@@ -571,11 +699,22 @@ void WelcomeWidget::onLessonSelected(int row) {
     const auto& lesson = kLessons[row];
     lesson_content_->setHtml(lesson.htmlContent);
 
+    // Reset vertical scrollbar to top whenever a new lesson is selected
+    if (lesson_content_->verticalScrollBar()) {
+        lesson_content_->verticalScrollBar()->setValue(0);
+    }
+
     if (!lesson.buttonText.isEmpty() && !lesson.examplePath.isEmpty()) {
         open_lesson_example_btn_->setText(lesson.buttonText);
         open_lesson_example_btn_->show();
+        if (lesson_action_bar_ != nullptr) {
+            lesson_action_bar_->show();
+        }
     } else {
         open_lesson_example_btn_->hide();
+        if (lesson_action_bar_ != nullptr) {
+            lesson_action_bar_->hide();
+        }
     }
 }
 

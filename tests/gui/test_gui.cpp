@@ -11,6 +11,7 @@
 #include <QTabWidget>
 #include <QSettings>
 #include <QElapsedTimer>
+#include <QScrollBar>
 
 using namespace bitforge;
 using namespace bitforge::gui;
@@ -124,6 +125,8 @@ private slots:
     void testSaveAndCloseFailureMatrix();
     void testGuidedTourNavigationKeyboardAndControls();
     void testIsolatedSettingsProfileRegistrySafety();
+    void testCurriculumLessonScrollingAndResetPolicy();
+    void testRestoreDefaultLayoutPreservesWindowGeometryAndState();
     void cleanupTestCase();
 };
 
@@ -823,6 +826,29 @@ void GuiTest::testOffscreenScreenshotCapture() {
     QPixmap pixmap_multidoc = window.grab();
     bool saved_multidoc = pixmap_multidoc.save(artifact_dir + "/gui_smoke_tabs_multidocument.png");
     QVERIFY(saved_multidoc);
+
+    // Capture Phase 12.2 Curriculum Lesson Details widget
+    window.showWelcomeScreen();
+    window.welcomeWidget()->selectTab(1);
+    QPixmap pixmap_lesson = window.welcomeWidget()->lessonContent()->grab();
+    bool saved_lesson = pixmap_lesson.save(artifact_dir + "/gui_smoke_curriculum_lesson_details.png");
+    QVERIFY(saved_lesson);
+
+    // Capture Phase 12.2 Restored Layout (Normal 1400x900)
+    window.showEditor();
+    window.resize(1400, 900);
+    window.onRestoreDefaultLayout();
+    QPixmap pixmap_restored_norm = window.grab();
+    bool saved_norm = pixmap_restored_norm.save(artifact_dir + "/gui_smoke_restored_layout_normal.png");
+    QVERIFY(saved_norm);
+
+    // Capture Phase 12.2 Restored Layout (Maximized)
+    window.setWindowState(Qt::WindowMaximized);
+    window.onRestoreDefaultLayout();
+    QPixmap pixmap_restored_max = window.grab();
+    bool saved_max = pixmap_restored_max.save(artifact_dir + "/gui_smoke_restored_layout_maximized.png");
+    QVERIFY(saved_max);
+    window.setWindowState(Qt::WindowNoState);
 }
 
 void GuiTest::testDirtyStateTracking() {
@@ -3021,8 +3047,137 @@ void GuiTest::testIsolatedSettingsProfileRegistrySafety() {
     testSettings.remove("safetySentinelKey");
 }
 
+void GuiTest::testCurriculumLessonScrollingAndResetPolicy() {
+    MainWindow window;
+    window.resize(1200, 800);
+    window.show();
+    window.showWelcomeScreen();
+
+    auto* ww = window.welcomeWidget();
+    QVERIFY(ww != nullptr);
+    ww->selectTab(1); // Select Curriculum tab
+
+    auto* content = ww->lessonContent();
+    auto* lesson_list = ww->lessonList();
+    auto* btn = ww->openLessonExampleBtn();
+    auto* action_bar = ww->lessonActionBar();
+
+    QVERIFY(content != nullptr);
+    QVERIFY(lesson_list != nullptr);
+    QVERIFY(btn != nullptr);
+    QVERIFY(action_bar != nullptr);
+
+    // 1. Verify visual continuity styling (transparent background, no border)
+    QString style = content->styleSheet();
+    QVERIFY(style.contains("background-color: transparent"));
+    QVERIFY(style.contains("border: none"));
+    // Slim dark scrollbar styling
+    QVERIFY(style.contains("width: 8px"));
+    QVERIFY(style.contains("#1b1d23"));
+    QVERIFY(style.contains("#3e4451"));
+    QVERIFY(style.contains("#4ec9b0"));
+
+    // 2. Select Lesson 0
+    lesson_list->setCurrentRow(0);
+    QCOMPARE(ww->currentLessonIndex(), 0);
+    QVERIFY(content->toHtml().contains("Getting Started with BitForge"));
+    QVERIFY(content->toHtml().contains("CPU Execution Lifecycle"));
+    QVERIFY(btn->isVisible());
+    QVERIFY(action_bar->isVisible());
+    QCOMPARE(btn->text(), QString("Open 01_arithmetic.asm in Editor"));
+
+    // Verify vertical scrollbar exists
+    auto* vsb = content->verticalScrollBar();
+    QVERIFY(vsb != nullptr);
+
+    // Scroll down in lesson 0 if scrollable
+    if (vsb->maximum() > 0) {
+        vsb->setValue(vsb->maximum() > 30 ? 30 : vsb->maximum());
+    }
+
+    // 3. Switch to Lesson 1: Policy requires vertical scroll position resets to top (0)
+    lesson_list->setCurrentRow(1);
+    QCOMPARE(ww->currentLessonIndex(), 1);
+    QCOMPARE(vsb->value(), 0);
+    QVERIFY(content->toHtml().contains("The Assembly Editor"));
+    QCOMPARE(btn->text(), QString("Open 08_bitwise_logic.asm in Editor"));
+
+    // 4. Scroll within lesson 1, ensure ordinary interaction works
+    if (vsb->maximum() > 20) {
+        vsb->setValue(20);
+        QCOMPARE(vsb->value(), 20);
+    }
+
+    // 5. Switch to Lesson 10 (last lesson, Lesson 11 index 10)
+    lesson_list->setCurrentRow(10);
+    QCOMPARE(ww->currentLessonIndex(), 10);
+    QCOMPARE(vsb->value(), 0);
+    QVERIFY(content->toHtml().contains("Keyboard Shortcuts and Workspace Customization"));
+    // Lesson 11 has no examplePath / buttonText: action bar & button should be hidden
+    QVERIFY(btn->isHidden());
+    QVERIFY(action_bar->isHidden());
+
+    // Switch back to Lesson 0: button and action bar reappear, scroll is 0
+    lesson_list->setCurrentRow(0);
+    QCOMPARE(vsb->value(), 0);
+    QVERIFY(btn->isVisible());
+    QVERIFY(action_bar->isVisible());
+}
+
+void GuiTest::testRestoreDefaultLayoutPreservesWindowGeometryAndState() {
+    MainWindow window;
+    window.resize(1450, 920);
+    window.show();
+
+    // 1. Maximized Window Test:
+    window.setWindowState(Qt::WindowMaximized);
+    QVERIFY(window.isMaximized());
+
+    // Call restore default layout while maximized
+    window.onRestoreDefaultLayout();
+    // Window MUST remain maximized, not shrunk to 1240x820!
+    QVERIFY(window.isMaximized());
+    QVERIFY(window.rightDock()->isVisible());
+    QVERIFY(window.bottomDock()->isVisible());
+
+    // 2. Normal Custom Window Size Test:
+    window.setWindowState(Qt::WindowNoState);
+    window.resize(1500, 960);
+    QCOMPARE(window.width(), 1500);
+    QCOMPARE(window.height(), 960);
+
+    // Mess with layout: float right dock, hide bottom dock
+    window.rightDock()->setFloating(true);
+    window.bottomDock()->hide();
+    QVERIFY(window.rightDock()->isFloating());
+    QVERIFY(!window.bottomDock()->isVisible());
+
+    // Call restore default layout
+    window.onRestoreDefaultLayout();
+
+    // Size MUST NOT shrink to 1240x820!
+    QCOMPARE(window.width(), 1500);
+    QCOMPARE(window.height(), 960);
+    QVERIFY(!window.isMaximized());
+
+    // Docks must be unfloated and visible in correct areas
+    QVERIFY(!window.rightDock()->isFloating());
+    QVERIFY(window.rightDock()->isVisible());
+    QVERIFY(window.dockWidgetArea(window.rightDock()) == Qt::RightDockWidgetArea);
+    QVERIFY(!window.bottomDock()->isFloating());
+    QVERIFY(window.bottomDock()->isVisible());
+    QVERIFY(window.dockWidgetArea(window.bottomDock()) == Qt::BottomDockWidgetArea);
+
+    // 3. Minimum Clamping Test:
+    window.resize(600, 450);
+    window.onRestoreDefaultLayout();
+    QVERIFY(window.width() >= 900);
+    QVERIFY(window.height() >= 600);
+}
+
 QTEST_MAIN(GuiTest)
 #include "test_gui.moc"
+
 
 
 
