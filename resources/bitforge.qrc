@@ -12,5 +12,10 @@
     <file alias="bitforge-16.png">icons/bitforge-16.png</file>
     <file alias="close-tab.png">icons/close-tab.png</file>
     <file alias="close-tab-hover.png">icons/close-tab-hover.png</file>
+    <file alias="close-tab-pressed.png">icons/close-tab-pressed.png</file>
+    <file alias="spin-up.png">icons/spin-up.png</file>
+    <file alias="spin-up-hover.png">icons/spin-up-hover.png</file>
+    <file alias="spin-down.png">icons/spin-down.png</file>
+    <file alias="spin-down-hover.png">icons/spin-down-hover.png</file>
 </qresource>
 </RCC>

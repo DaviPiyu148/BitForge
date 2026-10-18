@@ -19,6 +19,7 @@
 #include <QScrollBar>
 #include <QIcon>
 #include <QPixmap>
+#include <QStyleOptionSpinBox>
 
 using namespace bitforge;
 using namespace bitforge::gui;
@@ -138,6 +139,8 @@ private slots:
     void testEditorTabCloseButtonMetricsAndStyle();
     void testVirtualLedAndNumericDisplayLayoutAndStyling();
     void testExamplesDialogFilterAndOpenButtonState();
+    void testMaxStepsSpinBoxSubcontrolsAndMouseClicks();
+    void testNoNegativePointSizeWarningOnFaultOrStartup();
     void cleanupTestCase();
 };
 
@@ -3224,26 +3227,68 @@ void GuiTest::testApplicationAndWindowIconIntegration() {
 void GuiTest::testEditorTabCloseButtonMetricsAndStyle() {
     MainWindow window;
     window.show();
-    window.newFile();
-    window.newFile();
+    window.newFile(); // Opens Untitled-2
 
-    auto* tab_bar = window.documentTabs()->tabBar();
+    auto* tabs = window.documentTabs();
+    auto* tab_bar = tabs->tabBar();
     QVERIFY(tab_bar != nullptr);
     QVERIFY(tab_bar->tabsClosable());
-    QVERIFY(window.documentTabs()->count() >= 2);
+    QVERIFY(tabs->count() >= 2);
+
+    // Verify all close icon resources exist and are loadable
+    QVERIFY(QFile::exists(":/icons/close-tab.png"));
+    QVERIFY(QFile::exists(":/icons/close-tab-hover.png"));
+    QVERIFY(QFile::exists(":/icons/close-tab-pressed.png"));
 
     const QString theme_css = theme::applicationStyleSheet();
     QVERIFY(theme_css.contains("QTabBar::close-button"));
     QVERIFY(theme_css.contains("url(:/icons/close-tab.png)"));
     QVERIFY(theme_css.contains("url(:/icons/close-tab-hover.png)"));
-    QVERIFY(theme_css.contains("margin-top: 3px"));
-    QVERIFY(theme_css.contains("margin-right: 5px"));
-    QVERIFY(theme_css.contains("margin-left: 8px"));
+    QVERIFY(theme_css.contains("url(:/icons/close-tab-pressed.png)"));
+    QVERIFY(theme_css.contains("width: 16px"));
+    QVERIFY(theme_css.contains("height: 16px"));
 
-    auto* btn0 = tab_bar->tabButton(0, QTabBar::RightSide);
-    if (!btn0) btn0 = tab_bar->tabButton(0, QTabBar::LeftSide);
-    QVERIFY(btn0 != nullptr);
-    QVERIFY(btn0->isVisible());
+    // Verify close button exists on tab 1 (editor document)
+    auto* btn1 = tab_bar->tabButton(1, QTabBar::RightSide);
+    if (!btn1) btn1 = tab_bar->tabButton(1, QTabBar::LeftSide);
+    QVERIFY(btn1 != nullptr);
+    QVERIFY(btn1->isVisible());
+    QVERIFY(btn1->width() >= 16 && btn1->height() >= 16);
+
+    // Verify rendered contrast of close button against tab background
+    QImage img = btn1->grab().toImage();
+    QVERIFY(!img.isNull());
+    int bright_pixels = 0;
+    for (int y = 0; y < img.height(); ++y) {
+        for (int x = 0; x < img.width(); ++x) {
+            QColor col = img.pixelColor(x, y);
+            // High luminance pixels representing the bright silver/white cross
+            if (col.red() >= 180 && col.green() >= 180 && col.blue() >= 180) {
+                bright_pixels++;
+            }
+        }
+    }
+    // Crisp cross has >= 10 bright pixels
+    QVERIFY(bright_pixels >= 10);
+
+    const QString artifact_dir = "C:/Users/Piyush/.gemini/antigravity/brain/3b875d0c-8f06-4ff1-9305-0a2eefba0b93";
+    tab_bar->grab().save(artifact_dir + "/gui_smoke_tabbar.png");
+    btn1->grab().save(artifact_dir + "/gui_smoke_tab_close_btn.png");
+
+    // Test tab label click: switches tab WITHOUT triggering close
+    tabs->setCurrentIndex(0); // Switch to Welcome
+    QCOMPARE(tabs->currentIndex(), 0);
+    const int count_before = tabs->count();
+    const QRect tab1_rect = tab_bar->tabRect(1);
+    // Click on tab 1 label (left portion of the tab rectangle)
+    QPoint label_pt = tab1_rect.topLeft() + QPoint(15, tab1_rect.height() / 2);
+    QTest::mouseClick(tab_bar, Qt::LeftButton, Qt::NoModifier, label_pt);
+    QCOMPARE(tabs->currentIndex(), 1);
+    QCOMPARE(tabs->count(), count_before); // Tab was NOT closed
+
+    // Test click on close button: closes tab
+    QTest::mouseClick(btn1, Qt::LeftButton);
+    QCOMPARE(tabs->count(), count_before - 1);
 }
 
 void GuiTest::testVirtualLedAndNumericDisplayLayoutAndStyling() {
@@ -3323,6 +3368,161 @@ void GuiTest::testExamplesDialogFilterAndOpenButtonState() {
     dlg.searchInput()->clear();
     QVERIFY(dlg.exampleList()->count() > 0);
     QVERIFY(dlg.openButton()->isEnabled());
+}
+
+void GuiTest::testMaxStepsSpinBoxSubcontrolsAndMouseClicks() {
+    MainWindow window;
+    window.show();
+
+    auto* sb = window.budgetSpinBox();
+    QVERIFY(sb != nullptr);
+    QVERIFY(sb->isVisible());
+
+    // Verify icons exist in resources
+    QVERIFY(QFile::exists(":/icons/spin-up.png"));
+    QVERIFY(QFile::exists(":/icons/spin-up-hover.png"));
+    QVERIFY(QFile::exists(":/icons/spin-down.png"));
+    QVERIFY(QFile::exists(":/icons/spin-down-hover.png"));
+
+    // Verify stylesheet rules
+    const QString css = theme::applicationStyleSheet();
+    QVERIFY(css.contains("QSpinBox::up-button"));
+    QVERIFY(css.contains("QSpinBox::down-button"));
+    QVERIFY(css.contains("QSpinBox::up-arrow"));
+    QVERIFY(css.contains("QSpinBox::down-arrow"));
+    QVERIFY(css.contains("padding-right: 22px"));
+
+    // Default configuration and limits
+    QCOMPARE(sb->minimum(), 1);
+    QCOMPARE(sb->maximum(), 100000000);
+    QCOMPARE(sb->value(), 1000000);
+    QCOMPARE(sb->singleStep(), 10000);
+    QVERIFY(sb->toolTip().contains("budget"));
+
+    // Calculate subcontrol rects
+    QStyleOptionSpinBox opt;
+    opt.initFrom(sb);
+    opt.subControls = QStyle::SC_SpinBoxUp | QStyle::SC_SpinBoxDown | QStyle::SC_SpinBoxEditField;
+    opt.activeSubControls = QStyle::SC_None;
+
+    QRect up_rect = sb->style()->subControlRect(QStyle::CC_SpinBox, &opt, QStyle::SC_SpinBoxUp, sb);
+    QRect down_rect = sb->style()->subControlRect(QStyle::CC_SpinBox, &opt, QStyle::SC_SpinBoxDown, sb);
+    QRect edit_rect = sb->style()->subControlRect(QStyle::CC_SpinBox, &opt, QStyle::SC_SpinBoxEditField, sb);
+
+    QVERIFY(up_rect.isValid() && !up_rect.isEmpty());
+    QVERIFY(down_rect.isValid() && !down_rect.isEmpty());
+    QVERIFY(sb->rect().contains(up_rect));
+    QVERIFY(sb->rect().contains(down_rect));
+    QVERIFY(!edit_rect.intersects(up_rect));
+    QVERIFY(!edit_rect.intersects(down_rect));
+    QVERIFY(up_rect.top() < down_rect.top());
+
+    const QString artifact_dir = "C:/Users/Piyush/.gemini/antigravity/brain/3b875d0c-8f06-4ff1-9305-0a2eefba0b93";
+    sb->grab().save(artifact_dir + "/gui_smoke_spinbox.png");
+
+    // Mouse click on Up subcontrol increments by singleStep (10,000)
+    QTest::mouseClick(sb, Qt::LeftButton, Qt::NoModifier, up_rect.center());
+    QCOMPARE(sb->value(), 1010000);
+
+    // Mouse click on Down subcontrol decrements by singleStep (10,000)
+    QTest::mouseClick(sb, Qt::LeftButton, Qt::NoModifier, down_rect.center());
+    QCOMPARE(sb->value(), 1000000);
+
+    // Keyboard navigation
+    sb->setFocus();
+    QTest::keyClick(sb, Qt::Key_Up);
+    QCOMPARE(sb->value(), 1010000);
+    QTest::keyClick(sb, Qt::Key_Down);
+    QCOMPARE(sb->value(), 1000000);
+
+    // Boundary enforcement
+    sb->setValue(100000000);
+    QTest::mouseClick(sb, Qt::LeftButton, Qt::NoModifier, up_rect.center());
+    QCOMPARE(sb->value(), 100000000);
+
+    sb->setValue(1);
+    QTest::mouseClick(sb, Qt::LeftButton, Qt::NoModifier, down_rect.center());
+    QCOMPARE(sb->value(), 1);
+
+    // Direct entry and controller synchronization
+    sb->setValue(500000);
+    QCOMPARE(sb->value(), 500000);
+
+    // Verify budget propagates to execution controller
+    window.editor()->setPlainText(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    HALT\n"
+    );
+    window.onAssemble();
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+}
+
+void GuiTest::testNoNegativePointSizeWarningOnFaultOrStartup() {
+    // 1. Verify theme font helpers do not crash or invoke setPointSize with <= 0
+    QFont f1 = theme::monoFont(-1);
+    QVERIFY(f1.pointSize() > 0);
+    QFont f2 = theme::monoFont(0);
+    QVERIFY(f2.pointSize() > 0);
+    QFont f3 = theme::uiFont(-1);
+    QVERIFY(f3.pointSize() > 0);
+    QFont f4 = theme::uiFont(0);
+    QVERIFY(f4.pointSize() > 0);
+
+    // 2. Install message handler to catch any QFont::setPointSize warning
+    static bool caught_font_warning = false;
+    caught_font_warning = false;
+    auto old_handler = qInstallMessageHandler([](QtMsgType, const QMessageLogContext&, const QString& msg) {
+        if (msg.contains("setPointSize: Point size <= 0")) {
+            caught_font_warning = true;
+        }
+    });
+
+    {
+        MainWindow window;
+        window.show();
+
+        auto* devices = window.devicesPanel();
+        QVERIFY(devices != nullptr);
+
+        // Load and run a program that triggers a CPU fault
+        window.editor()->setPlainText(
+            ".ORG 0x0200\n"
+            ".ENTRY start\n"
+            "start:\n"
+            "    .BYTE 0xFF\n" // Invalid opcode
+        );
+        window.onAssemble();
+        window.onRun();
+
+        QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Faulted, 2000);
+
+        // Refresh diagnostics display (previously triggered QFont(..., -1, QFont::Bold) warning)
+        devices->showDiagnostics();
+
+        auto* table = devices->diagnosticTable();
+        QVERIFY(table != nullptr);
+        QVERIFY(table->rowCount() > 0);
+
+        bool found_fault_item = false;
+        for (int r = 0; r < table->rowCount(); ++r) {
+            auto* it = table->item(r, 0);
+            if (it && it->text().contains("CPU Fault")) {
+                found_fault_item = true;
+                QVERIFY(it->font().bold());
+                QVERIFY(it->font().pointSize() > 0);
+            }
+        }
+        QVERIFY(found_fault_item);
+    }
+
+    // Restore message handler
+    qInstallMessageHandler(old_handler);
+
+    // Assert that zero setPointSize warnings were emitted
+    QVERIFY(!caught_font_warning);
 }
 
 QTEST_MAIN(GuiTest)

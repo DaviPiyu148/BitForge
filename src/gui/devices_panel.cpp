@@ -372,7 +372,9 @@ void DevicesPanel::showDiagnostics() {
 
         auto* item_sev = new QTableWidgetItem("CPU Fault");
         item_sev->setForeground(QColor(220, 53, 69));
-        item_sev->setFont(QFont(item_sev->font().family(), -1, QFont::Bold));
+        QFont fault_font = item_sev->font();
+        fault_font.setBold(true);
+        item_sev->setFont(fault_font);
         diag_table_->setItem(row, 0, item_sev);
 
         // Map fault PC to source line if possible

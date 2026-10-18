@@ -748,9 +748,13 @@ void MainWindow::setupMenusAndToolbars() {
     toolbar->addWidget(budget_label);
 
     budget_spinbox_ = new QSpinBox(toolbar);
+    budget_spinbox_->setObjectName("budgetSpinBox");
     budget_spinbox_->setRange(1, 100000000);
     budget_spinbox_->setValue(1000000); // 1,000,000 default budget
     budget_spinbox_->setSingleStep(10000);
+    budget_spinbox_->setMinimumWidth(110);
+    budget_spinbox_->setToolTip("Maximum instruction execution step budget before pausing");
+    budget_label->setBuddy(budget_spinbox_);
     toolbar->addWidget(budget_spinbox_);
 
     auto* spacer = new QWidget(toolbar);

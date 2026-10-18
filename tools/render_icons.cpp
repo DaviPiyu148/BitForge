@@ -220,21 +220,59 @@ int main(int argc, char* argv[]) {
     // Default 256px png copy for general icon usage
     QFile::copy(out_dir + "/bitforge-256.png", out_dir + "/bitforge.png");
 
-    // Generate crisp tab close icons
-    auto drawCloseIcon = [](bool hover) {
+    // Generate crisp, highly visible tab close icons
+    auto drawCloseIcon = [](int state) { // 0 = normal, 1 = hover, 2 = pressed
         QImage img(16, 16, QImage::Format_ARGB32_Premultiplied);
         img.fill(Qt::transparent);
         QPainter p(&img);
         p.setRenderHint(QPainter::Antialiasing, true);
-        QColor col = hover ? QColor(255, 255, 255) : QColor(171, 178, 191);
-        p.setPen(QPen(col, 1.6, Qt::SolidLine, Qt::RoundCap));
-        p.drawLine(QPointF(4.5, 4.5), QPointF(11.5, 11.5));
-        p.drawLine(QPointF(11.5, 4.5), QPointF(4.5, 11.5));
+
+        if (state == 1) { // hover
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(62, 68, 81));
+            p.drawRoundedRect(QRectF(1.0, 1.0, 14.0, 14.0), 3.0, 3.0);
+        } else if (state == 2) { // pressed
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(224, 108, 117));
+            p.drawRoundedRect(QRectF(1.0, 1.0, 14.0, 14.0), 3.0, 3.0);
+        }
+
+        // Bold, bright, high-contrast cross
+        QColor col = (state == 0) ? QColor(220, 224, 230) : QColor(255, 255, 255);
+        p.setPen(QPen(col, 2.0, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(QPointF(4.0, 4.0), QPointF(12.0, 12.0));
+        p.drawLine(QPointF(12.0, 4.0), QPointF(4.0, 12.0));
         return img;
     };
-    drawCloseIcon(false).save(out_dir + "/close-tab.png", "PNG");
-    drawCloseIcon(true).save(out_dir + "/close-tab-hover.png", "PNG");
-    std::cout << "Generated tab close icons: close-tab.png, close-tab-hover.png\n";
+    drawCloseIcon(0).save(out_dir + "/close-tab.png", "PNG");
+    drawCloseIcon(1).save(out_dir + "/close-tab-hover.png", "PNG");
+    drawCloseIcon(2).save(out_dir + "/close-tab-pressed.png", "PNG");
+    std::cout << "Generated tab close icons: close-tab.png, close-tab-hover.png, close-tab-pressed.png\n";
+
+    // Generate crisp spinbox arrow icons
+    auto drawSpinArrow = [](bool up, bool hover) {
+        QImage img(10, 8, QImage::Format_ARGB32_Premultiplied);
+        img.fill(Qt::transparent);
+        QPainter p(&img);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setPen(Qt::NoPen);
+        QColor col = hover ? QColor(78, 201, 176) : QColor(171, 178, 191);
+        p.setBrush(col);
+
+        QPolygonF poly;
+        if (up) {
+            poly << QPointF(5.0, 1.5) << QPointF(1.5, 6.5) << QPointF(8.5, 6.5);
+        } else {
+            poly << QPointF(1.5, 1.5) << QPointF(8.5, 1.5) << QPointF(5.0, 6.5);
+        }
+        p.drawPolygon(poly);
+        return img;
+    };
+    drawSpinArrow(true, false).save(out_dir + "/spin-up.png", "PNG");
+    drawSpinArrow(true, true).save(out_dir + "/spin-up-hover.png", "PNG");
+    drawSpinArrow(false, false).save(out_dir + "/spin-down.png", "PNG");
+    drawSpinArrow(false, true).save(out_dir + "/spin-down-hover.png", "PNG");
+    std::cout << "Generated spinbox arrows: spin-up.png, spin-down.png\n";
 
     // Build multi-resolution Windows .ico
     const QString ico_path = out_dir + "/bitforge.ico";

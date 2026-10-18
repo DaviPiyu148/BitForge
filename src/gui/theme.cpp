@@ -4,14 +4,18 @@ namespace bitforge::gui::theme {
 
 QFont monoFont(int pointSize, bool bold) {
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    font.setPointSize(pointSize);
+    if (pointSize > 0) {
+        font.setPointSize(pointSize);
+    }
     font.setBold(bold);
     return font;
 }
 
 QFont uiFont(int pointSize, bool bold) {
     QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    font.setPointSize(pointSize);
+    if (pointSize > 0) {
+        font.setPointSize(pointSize);
+    }
     font.setBold(bold);
     return font;
 }
@@ -148,20 +152,22 @@ QString applicationStyleSheet() {
         QTabBar::close-button {
             image: url(:/icons/close-tab.png);
             subcontrol-position: right;
-            margin-top: 3px;
+            subcontrol-origin: padding;
+            width: 16px;
+            height: 16px;
+            margin-top: 2px;
             margin-bottom: 2px;
-            margin-right: 5px;
-            margin-left: 8px;
-            padding: 2px;
+            margin-right: 4px;
+            margin-left: 6px;
             border-radius: 3px;
         }
         QTabBar::close-button:hover {
             image: url(:/icons/close-tab-hover.png);
-            background-color: rgba(224, 108, 117, 0.4);
+            background-color: #3e4451;
         }
         QTabBar::close-button:pressed {
-            image: url(:/icons/close-tab-hover.png);
-            background-color: rgba(224, 108, 117, 0.7);
+            image: url(:/icons/close-tab-pressed.png);
+            background-color: #e06c75;
         }
 
         /* Text Editors & Console Views */
@@ -176,8 +182,8 @@ QString applicationStyleSheet() {
             border: 1px solid #4ec9b0;
         }
 
-        /* Inputs: QLineEdit, QSpinBox, QComboBox */
-        QLineEdit, QSpinBox, QComboBox {
+        /* Inputs: QLineEdit, QComboBox */
+        QLineEdit, QComboBox {
             background-color: #1e1e1e;
             color: #dcdcdc;
             border: 1px solid #3b4048;
@@ -185,7 +191,7 @@ QString applicationStyleSheet() {
             padding: 4px 8px;
             min-height: 20px;
         }
-        QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
+        QLineEdit:focus, QComboBox:focus {
             border: 1px solid #4ec9b0;
         }
         QComboBox::drop-down {
@@ -200,6 +206,73 @@ QString applicationStyleSheet() {
             selection-background-color: #2c313a;
             selection-color: #4ec9b0;
             padding: 4px;
+        }
+
+        /* Inputs: QSpinBox */
+        QSpinBox {
+            background-color: #1e1e1e;
+            color: #dcdcdc;
+            border: 1px solid #3b4048;
+            border-radius: 4px;
+            padding-top: 3px;
+            padding-bottom: 3px;
+            padding-left: 6px;
+            padding-right: 22px;
+            min-height: 20px;
+        }
+        QSpinBox:focus {
+            border: 1px solid #4ec9b0;
+        }
+        QSpinBox::up-button {
+            subcontrol-origin: border;
+            subcontrol-position: top right;
+            width: 18px;
+            border-left: 1px solid #3b4048;
+            border-bottom: 1px solid #3b4048;
+            border-top-right-radius: 3px;
+            background-color: #282c34;
+        }
+        QSpinBox::up-button:hover {
+            background-color: #3e4451;
+        }
+        QSpinBox::up-button:pressed {
+            background-color: #1b1d23;
+        }
+        QSpinBox::up-arrow {
+            image: url(:/icons/spin-up.png);
+            width: 8px;
+            height: 6px;
+        }
+        QSpinBox::up-arrow:hover {
+            image: url(:/icons/spin-up-hover.png);
+        }
+        QSpinBox::up-arrow:disabled, QSpinBox::up-arrow:off {
+            image: none;
+        }
+        QSpinBox::down-button {
+            subcontrol-origin: border;
+            subcontrol-position: bottom right;
+            width: 18px;
+            border-left: 1px solid #3b4048;
+            border-bottom-right-radius: 3px;
+            background-color: #282c34;
+        }
+        QSpinBox::down-button:hover {
+            background-color: #3e4451;
+        }
+        QSpinBox::down-button:pressed {
+            background-color: #1b1d23;
+        }
+        QSpinBox::down-arrow {
+            image: url(:/icons/spin-down.png);
+            width: 8px;
+            height: 6px;
+        }
+        QSpinBox::down-arrow:hover {
+            image: url(:/icons/spin-down-hover.png);
+        }
+        QSpinBox::down-arrow:disabled, QSpinBox::down-arrow:off {
+            image: none;
         }
 
         /* Buttons */
