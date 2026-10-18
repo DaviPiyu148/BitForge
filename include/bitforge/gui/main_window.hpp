@@ -18,7 +18,7 @@
 #include "bitforge/gui/theme.hpp"
 
 #include <QMainWindow>
-#include <QStackedWidget>
+#include <QTabWidget>
 #include <QDockWidget>
 #include <QSpinBox>
 #include <QComboBox>
@@ -27,10 +27,18 @@
 #include <QActionGroup>
 #include <QString>
 #include <QStringList>
+#include <QList>
 
 namespace bitforge::gui {
 
-// Professional desktop IDE main window for BitForge emulator and assembly workbench
+struct EditorDocumentInfo {
+    CodeEditor* editor{nullptr};
+    QString file_path;      // Empty if untitled, or normalized absolute path
+    QString title;          // e.g. "Untitled-1" or "01_arithmetic.asm"
+    bool is_untitled{true};
+};
+
+// Professional desktop IDE main window for BitForge emulator and multi-document assembly workbench
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -39,7 +47,11 @@ public:
     ~MainWindow() override = default;
 
     [[nodiscard]] ExecutionController* controller() const noexcept { return controller_; }
-    [[nodiscard]] CodeEditor* editor() const noexcept { return editor_; }
+    [[nodiscard]] CodeEditor* editor() const noexcept;
+    [[nodiscard]] CodeEditor* currentEditor() const noexcept;
+    [[nodiscard]] int openDocumentCount() const noexcept { return editor_tabs_.size(); }
+    [[nodiscard]] const QList<EditorDocumentInfo>& openDocuments() const noexcept { return editor_tabs_; }
+
     [[nodiscard]] RegistersPanel* registersPanel() const noexcept { return registers_panel_; }
     [[nodiscard]] DevicesPanel* devicesPanel() const noexcept { return devices_panel_; }
     [[nodiscard]] InstructionInspector* instructionInspector() const noexcept { return instruction_inspector_; }
@@ -49,7 +61,7 @@ public:
     [[nodiscard]] StackViewer* stackViewer() const noexcept { return stack_viewer_; }
     [[nodiscard]] WatchPanel* watchPanel() const noexcept { return watch_panel_; }
 
-    [[nodiscard]] QStackedWidget* centralStack() const noexcept { return central_stack_; }
+    [[nodiscard]] QTabWidget* documentTabs() const noexcept { return document_tabs_; }
     [[nodiscard]] WelcomeWidget* welcomeWidget() const noexcept { return welcome_widget_; }
     [[nodiscard]] FindReplaceBar* findBar() const noexcept { return find_bar_; }
     [[nodiscard]] QDockWidget* rightDock() const noexcept { return right_dock_; }
@@ -75,12 +87,17 @@ public:
     [[nodiscard]] QAction* speedFastAction() const noexcept { return speed_fast_act_; }
     [[nodiscard]] QAction* speedTurboAction() const noexcept { return speed_turbo_act_; }
 
-    // Phase 9 UI Action Getters
+    // Phase 9 & Phase 12 UI Action Getters
     [[nodiscard]] QAction* welcomeScreenAction() const noexcept { return welcome_screen_act_; }
     [[nodiscard]] QAction* showEditorAction() const noexcept { return show_editor_act_; }
     [[nodiscard]] QAction* restoreDefaultLayoutAction() const noexcept { return restore_default_layout_act_; }
     [[nodiscard]] QAction* browseExamplesAction() const noexcept { return browse_examples_act_; }
     [[nodiscard]] QAction* interactiveTutorialAction() const noexcept { return tutorial_act_; }
+    [[nodiscard]] QAction* firstProgramTutorialAction() const noexcept { return first_program_act_; }
+    [[nodiscard]] QAction* curriculumAction() const noexcept { return curriculum_act_; }
+    [[nodiscard]] QAction* closeTabAction() const noexcept { return close_tab_act_; }
+    [[nodiscard]] QAction* nextTabAction() const noexcept { return next_tab_act_; }
+    [[nodiscard]] QAction* prevTabAction() const noexcept { return prev_tab_act_; }
     [[nodiscard]] QAction* findAction() const noexcept { return find_act_; }
     [[nodiscard]] QAction* findNextAction() const noexcept { return find_next_act_; }
     [[nodiscard]] QAction* findPreviousAction() const noexcept { return find_prev_act_; }
@@ -93,7 +110,19 @@ public:
     bool loadStartupFile(const QStringList& args);
     bool saveFile(const QString& filePath);
     bool maybeSave();
-    [[nodiscard]] const QString& currentFilePath() const noexcept { return current_file_path_; }
+    [[nodiscard]] QString currentFilePath() const noexcept;
+    [[nodiscard]] QString executingDocumentPath() const noexcept { return executing_document_path_; }
+
+    // Multi-Document Tab Operations
+    int createEditorTab(const QString& filePath = QString(), const QString& initialContent = QString());
+    bool closeTab(int index);
+    bool closeActiveTab();
+    bool closeAllTabs();
+    void closeOtherTabs(int keepIndex);
+    void nextTab();
+    void previousTab();
+    int findTabByPath(const QString& filePath) const;
+    int findTabByEditor(const CodeEditor* editor) const;
 
 public slots:
     void newFile();
@@ -105,6 +134,8 @@ public slots:
     void showEditor();
     void onBrowseExamples();
     void onStartTutorial();
+    void onFirstProgramTutorial();
+    void onCurriculumRequested();
     void onFind();
     void onFindNext();
     void onFindPrevious();
@@ -130,24 +161,38 @@ protected:
 private slots:
     void updateUiState();
     void updateWindowTitle();
+    void onTabCloseRequested(int index);
+    void onCurrentTabChanged(int index);
+    void onTabContextMenu(const QPoint& pos);
+    void onDocumentContentsChanged(CodeEditor* editor);
+    void onEditorCursorChanged(CodeEditor* editor, int line, int col);
 
 private:
     void setupUi();
     void setupMenusAndToolbars();
     void setupStatusBar();
-    void setCurrentFile(const QString& filePath);
+    bool saveTab(int tabIndex);
+    bool saveDocumentInfo(EditorDocumentInfo& info);
+    void updateTabTitle(int tabIndex);
     void updateRecentFilesList(const QString& filePath);
     void loadSettings();
     void saveSettings();
 
     ExecutionController* controller_;
 
-    // Central Stack & Components
-    QStackedWidget* central_stack_{nullptr};
+    // Central Area & Document Tabs
+    QWidget* central_container_{nullptr};
+    QTabWidget* document_tabs_{nullptr};
     WelcomeWidget* welcome_widget_{nullptr};
-    QWidget* editor_container_{nullptr};
     FindReplaceBar* find_bar_{nullptr};
-    CodeEditor* editor_{nullptr};
+
+    // Multi-Document Model State
+    QList<EditorDocumentInfo> editor_tabs_;
+    int untitled_counter_{1};
+    CodeEditor* current_editor_{nullptr};
+    CodeEditor* executing_editor_{nullptr};
+    QString executing_document_path_;
+    int current_font_size_{10};
 
     // Docks
     QDockWidget* right_dock_{nullptr};
@@ -169,6 +214,9 @@ private:
     QAction* open_act_{nullptr};
     QAction* save_act_{nullptr};
     QAction* save_as_act_{nullptr};
+    QAction* close_tab_act_{nullptr};
+    QAction* close_all_tabs_act_{nullptr};
+    QAction* close_other_tabs_act_{nullptr};
     QAction* exit_act_{nullptr};
 
     // Actions: Edit
@@ -189,6 +237,8 @@ private:
     // Actions: View
     QAction* welcome_screen_act_{nullptr};
     QAction* show_editor_act_{nullptr};
+    QAction* next_tab_act_{nullptr};
+    QAction* prev_tab_act_{nullptr};
     QAction* restore_default_layout_act_{nullptr};
 
     // Actions: Execution & Debug
@@ -206,6 +256,8 @@ private:
 
     // Actions: Help
     QAction* tutorial_act_{nullptr};
+    QAction* first_program_act_{nullptr};
+    QAction* curriculum_act_{nullptr};
     QAction* browse_examples_act_{nullptr};
     QAction* about_act_{nullptr};
 
@@ -227,7 +279,6 @@ private:
     QLabel* status_pc_label_{nullptr};
     QLabel* status_steps_label_{nullptr};
 
-    QString current_file_path_;
     TutorialGuide* active_tutorial_{nullptr};
 };
 

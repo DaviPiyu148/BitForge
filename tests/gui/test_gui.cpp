@@ -107,10 +107,27 @@ private slots:
     void testDocksAndCorruptPreferencesRecovery();
     void testEndToEndExecutionWorkflowAndStateLabels();
     void testAccessibilityFocusAndMicrocopy();
+    void testMultiDocumentTabsOpeningAndSwitching();
+    void testTabPathCanonicalizationAndNoDuplicates();
+    void testNewUntitledDocumentsAndDirtyIndicators();
+    void testTabCloseAndUnsavedChangesProtection();
+    void testCloseAllAndCloseOtherTabs();
+    void testExecutionIndependenceAcrossTabSwitches();
+    void testWelcomeAndTutorialCurriculumLessons();
+    void testFirstProgramTutorialNonDestructive();
+    void testWelcomeTabOpenCloseAndSettingsPersistence();
+    void testTabKeyboardShortcutsNavigation();
+    void cleanupTestCase();
 };
 
 void GuiTest::initTestCase() {
-    // Basic test case initialization
+    QSettings settings("BitForge", "BitForge");
+    settings.clear();
+}
+
+void GuiTest::cleanupTestCase() {
+    QSettings settings("BitForge", "BitForge");
+    settings.clear();
 }
 
 void GuiTest::testApplicationStarts() {
@@ -776,6 +793,27 @@ void GuiTest::testOffscreenScreenshotCapture() {
     bool saved_workbench = pixmap_workbench.save(artifact_dir + "/gui_smoke_dark_workbench.png");
     QVERIFY(saved_workbench);
     window.findBar()->closeButton()->click();
+
+    // Capture Phase 12 Curriculum
+    window.showWelcomeScreen();
+    window.welcomeWidget()->selectTab(1);
+    QPixmap pixmap_curriculum = window.grab();
+    bool saved_curr = pixmap_curriculum.save(artifact_dir + "/gui_smoke_welcome_curriculum.png");
+    QVERIFY(saved_curr);
+
+    // Capture Phase 12 First Program Tutorial
+    window.onFirstProgramTutorial();
+    QPixmap pixmap_tut = window.grab();
+    bool saved_tut = pixmap_tut.save(artifact_dir + "/gui_smoke_first_program_tutorial.png");
+    QVERIFY(saved_tut);
+
+    // Capture Phase 12 Multi-document tabs with multiple files and dirty indicator
+    window.loadFile(resolveExamplePath("examples/01_arithmetic.asm"));
+    window.loadFile(resolveExamplePath("examples/02_io_demo.asm"));
+    window.currentEditor()->insertPlainText("; User edit in progress\n");
+    QPixmap pixmap_multidoc = window.grab();
+    bool saved_multidoc = pixmap_multidoc.save(artifact_dir + "/gui_smoke_tabs_multidocument.png");
+    QVERIFY(saved_multidoc);
 }
 
 void GuiTest::testDirtyStateTracking() {
@@ -1642,22 +1680,22 @@ void GuiTest::testFreshRunMemoryResetAndIoContract() {
 
 void GuiTest::testWelcomeDashboardAndNavigation() {
     MainWindow window;
-    QVERIFY(window.centralStack() != nullptr);
+    QVERIFY(window.documentTabs() != nullptr);
     QVERIFY(window.welcomeWidget() != nullptr);
-    // At startup with no file loaded, central stack displays welcome screen (index 0)
-    QCOMPARE(window.centralStack()->currentIndex(), 0);
+    // At startup with no file loaded, central document tabs display welcome screen (index 0)
+    QCOMPARE(window.documentTabs()->currentIndex(), 0);
 
     // Switching to editor via action or welcome widget
     window.showEditor();
-    QCOMPARE(window.centralStack()->currentIndex(), 1);
+    QCOMPARE(window.documentTabs()->currentIndex(), 1);
 
     // Return to welcome screen
     window.showWelcomeScreen();
-    QCOMPARE(window.centralStack()->currentIndex(), 0);
+    QCOMPARE(window.documentTabs()->currentIndex(), 0);
 
     // Loading a file switches to editor automatically
     window.loadFile(resolveExamplePath("examples/01_arithmetic.asm"));
-    QCOMPARE(window.centralStack()->currentIndex(), 1);
+    QCOMPARE(window.documentTabs()->currentIndex(), 1);
     QVERIFY(window.editor()->toPlainText().contains(".ENTRY start"));
 
     // Welcome widget recent files: add paths and ensure pruning works
@@ -1807,7 +1845,7 @@ void GuiTest::testLayoutPersistenceAndRestoration() {
     window.onRestoreDefaultLayout();
     QVERIFY(window.rightDock()->isVisible());
     QVERIFY(window.bottomDock()->isVisible());
-    QCOMPARE(window.centralStack()->currentIndex(), 1); // Switched to editor
+    QCOMPARE(window.documentTabs()->currentIndex(), 1); // Switched to editor
 }
 
 void GuiTest::testADR001StackViewerEmptySentinelAndBreakpointsEmptyState() {
@@ -2289,7 +2327,7 @@ void GuiTest::testDocksAndCorruptPreferencesRecovery() {
         QVERIFY(window.watchDock()->isVisible());
         QVERIFY(!window.watchDock()->isFloating());
     }
-    QCOMPARE(window.centralStack()->currentIndex(), 1); // Editor visible
+    QCOMPARE(window.documentTabs()->currentIndex(), 1); // Editor visible
 
     // 4. Corrupted preferences and off-screen geometry recovery
     QSettings settings("BitForge", "BitForge");
@@ -2436,6 +2474,234 @@ void GuiTest::testAccessibilityFocusAndMicrocopy() {
         }
     }
     QVERIFY(found_ready);
+}
+
+void GuiTest::testMultiDocumentTabsOpeningAndSwitching() {
+    MainWindow window;
+    QCOMPARE(window.openDocumentCount(), 1);
+    QVERIFY(window.documentTabs()->count() >= 2);
+
+    int tab2_idx = window.createEditorTab();
+    QCOMPARE(window.openDocumentCount(), 2);
+    QCOMPARE(window.documentTabs()->currentIndex(), tab2_idx);
+    QVERIFY(window.documentTabs()->tabText(tab2_idx).contains("Untitled-2"));
+
+    CodeEditor* ed2 = window.currentEditor();
+    QVERIFY(ed2 != nullptr);
+    ed2->setPlainText("; Content in Tab 2\n");
+
+    window.documentTabs()->setCurrentIndex(1);
+    CodeEditor* ed1 = window.currentEditor();
+    QVERIFY(ed1 != nullptr);
+    QVERIFY(ed1 != ed2);
+    QCOMPARE(ed1->toPlainText(), QString());
+
+    window.documentTabs()->setCurrentIndex(tab2_idx);
+    QCOMPARE(window.currentEditor(), ed2);
+    QVERIFY(window.currentEditor()->toPlainText().contains("Tab 2"));
+}
+
+void GuiTest::testTabPathCanonicalizationAndNoDuplicates() {
+    MainWindow window;
+    const QString path1 = resolveExamplePath("examples/01_arithmetic.asm");
+    QVERIFY(QFile::exists(path1));
+
+    QVERIFY(window.loadFile(path1));
+    const int count1 = window.openDocumentCount();
+    const int current_idx = window.documentTabs()->currentIndex();
+
+    QVERIFY(window.loadFile(path1));
+    QCOMPARE(window.openDocumentCount(), count1);
+    QCOMPARE(window.documentTabs()->currentIndex(), current_idx);
+
+    QString backslash_path = path1;
+    backslash_path.replace('/', '\\');
+    QVERIFY(window.loadFile(backslash_path));
+    QCOMPARE(window.openDocumentCount(), count1);
+    QCOMPARE(window.documentTabs()->currentIndex(), current_idx);
+}
+
+void GuiTest::testNewUntitledDocumentsAndDirtyIndicators() {
+    MainWindow window;
+    int tab_idx = window.createEditorTab();
+    QVERIFY(window.documentTabs()->tabText(tab_idx).contains("Untitled-"));
+    QVERIFY(!window.documentTabs()->tabText(tab_idx).endsWith("*"));
+
+    auto* ed = window.currentEditor();
+    QVERIFY(ed != nullptr);
+
+    ed->insertPlainText("; Modifying text\n");
+    QVERIFY(ed->document()->isModified());
+    QVERIFY(window.documentTabs()->tabText(tab_idx).endsWith("*"));
+    QVERIFY(window.windowTitle().endsWith("*"));
+
+    ed->document()->setModified(false);
+    QVERIFY(!window.documentTabs()->tabText(tab_idx).endsWith("*"));
+    QVERIFY(!window.windowTitle().endsWith("*"));
+}
+
+void GuiTest::testTabCloseAndUnsavedChangesProtection() {
+    MainWindow window;
+    int tab_idx = window.createEditorTab();
+    auto* ed = window.currentEditor();
+    QVERIFY(ed != nullptr);
+
+    int count_before = window.openDocumentCount();
+    bool closed_clean = window.closeTab(tab_idx);
+    QVERIFY(closed_clean);
+    QCOMPARE(window.openDocumentCount(), count_before - 1);
+
+    tab_idx = window.createEditorTab();
+    ed = window.currentEditor();
+    QVERIFY(ed != nullptr);
+    ed->insertPlainText("NOP\n");
+    QVERIFY(ed->document()->isModified());
+
+    dismissModalMessageBox(QMessageBox::Discard);
+    bool closed_discard = window.closeTab(tab_idx);
+    QVERIFY(closed_discard);
+
+    tab_idx = window.createEditorTab();
+    ed = window.currentEditor();
+    QVERIFY(ed != nullptr);
+    ed->insertPlainText("HALT\n");
+    QVERIFY(ed->document()->isModified());
+
+    dismissModalMessageBox(QMessageBox::Cancel);
+    bool closed_cancel = window.closeTab(tab_idx);
+    QVERIFY(!closed_cancel);
+}
+
+void GuiTest::testCloseAllAndCloseOtherTabs() {
+    MainWindow window;
+    window.createEditorTab();
+    int t2 = window.createEditorTab();
+    window.createEditorTab();
+    QVERIFY(window.openDocumentCount() >= 3);
+
+    window.closeOtherTabs(t2);
+    QCOMPARE(window.openDocumentCount(), 1);
+
+    window.closeAllTabs();
+    QCOMPARE(window.openDocumentCount(), 0);
+    QVERIFY(window.documentTabs()->indexOf(window.welcomeWidget()) >= 0);
+    QCOMPARE(window.documentTabs()->currentWidget(), window.welcomeWidget());
+}
+
+void GuiTest::testExecutionIndependenceAcrossTabSwitches() {
+    MainWindow window;
+    const QString code1 =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 42\n"
+        "    HALT\n";
+
+    const QString code2 =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R1, 99\n"
+        "    HALT\n";
+
+    int tab1 = window.createEditorTab(QString(), code1);
+    int tab2 = window.createEditorTab(QString(), code2);
+
+    window.documentTabs()->setCurrentIndex(tab1);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+    QCOMPARE(window.controller()->session().pc(), 0x0200);
+
+    window.documentTabs()->setCurrentIndex(tab2);
+    QCOMPARE(window.currentEditor()->toPlainText(), code2);
+
+    window.onStep();
+    QCOMPARE(window.controller()->session().registers().r[0], 42);
+    QCOMPARE(window.controller()->session().registers().r[1], 0);
+
+    window.onContinue();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+    QCOMPARE(window.controller()->session().registers().r[0], 42);
+    QCOMPARE(window.controller()->session().registers().r[1], 0);
+}
+
+void GuiTest::testWelcomeAndTutorialCurriculumLessons() {
+    MainWindow window;
+    auto* ww = window.welcomeWidget();
+    QVERIFY(ww != nullptr);
+    QVERIFY(ww->welcomeTabs() != nullptr);
+    QCOMPARE(ww->welcomeTabs()->count(), 3);
+
+    ww->selectTab(1);
+    QCOMPARE(ww->welcomeTabs()->currentIndex(), 1);
+
+    auto* lesson_list = ww->lessonList();
+    QVERIFY(lesson_list != nullptr);
+    QVERIFY(ww->lessonContent() != nullptr);
+    QCOMPARE(lesson_list->count(), 11);
+
+    lesson_list->setCurrentRow(0);
+    QVERIFY(ww->lessonContent()->toHtml().contains("Lesson 1"));
+
+    lesson_list->setCurrentRow(10);
+    QVERIFY(ww->lessonContent()->toHtml().contains("Lesson 11"));
+}
+
+void GuiTest::testFirstProgramTutorialNonDestructive() {
+    MainWindow window;
+    window.onFirstProgramTutorial();
+
+    auto* ed = window.currentEditor();
+    QVERIFY(ed != nullptr);
+    QVERIFY(ed->toPlainText().contains("BitForge Tutorial — First Assembly Program"));
+    QVERIFY(ed->toPlainText().contains("LDI R0, 10"));
+    QVERIFY(ed->toPlainText().contains("OUT 0x10, R0"));
+
+    int tab_count = window.documentTabs()->count();
+
+    window.onFirstProgramTutorial();
+    QCOMPARE(window.documentTabs()->count(), tab_count);
+}
+
+void GuiTest::testWelcomeTabOpenCloseAndSettingsPersistence() {
+    MainWindow window;
+    auto* ww = window.welcomeWidget();
+    QVERIFY(ww != nullptr);
+
+    ww->setShowOnStartup(false);
+    QVERIFY(!ww->showOnStartup());
+
+    QSettings settings("BitForge", "BitForge");
+    QCOMPARE(settings.value("showWelcomeOnStartup").toBool(), false);
+
+    int welcome_idx = window.documentTabs()->indexOf(ww);
+    QVERIFY(welcome_idx >= 0);
+    window.closeTab(welcome_idx);
+    QCOMPARE(window.documentTabs()->indexOf(ww), -1);
+
+    window.showWelcomeScreen();
+    QVERIFY(window.documentTabs()->indexOf(ww) >= 0);
+    QCOMPARE(window.documentTabs()->currentWidget(), ww);
+}
+
+void GuiTest::testTabKeyboardShortcutsNavigation() {
+    MainWindow window;
+    int t1 = window.createEditorTab();
+    int t2 = window.createEditorTab();
+    int t3 = window.createEditorTab();
+
+    window.documentTabs()->setCurrentIndex(t1);
+    QCOMPARE(window.documentTabs()->currentIndex(), t1);
+
+    window.nextTab();
+    QCOMPARE(window.documentTabs()->currentIndex(), t2);
+    window.nextTab();
+    QCOMPARE(window.documentTabs()->currentIndex(), t3);
+
+    window.previousTab();
+    QCOMPARE(window.documentTabs()->currentIndex(), t2);
+    window.previousTab();
+    QCOMPARE(window.documentTabs()->currentIndex(), t1);
 }
 
 QTEST_MAIN(GuiTest)

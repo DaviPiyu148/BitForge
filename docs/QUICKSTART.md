@@ -44,7 +44,33 @@ This package is completely standalone and requires no installation, administrato
 
 ---
 
-## 4. Headless CLI Usage
+## 4. Multi-Document Editor & Workspace Tabs
+
+BitForge features a full multi-document tabbed editor:
+- **Tabs Bar**: Open and work on multiple assembly files simultaneously. Each tab displays the filename, dirty indicator (`*`), and full canonical file path tooltip.
+- **Shortcuts**:
+  - `Ctrl+N`: New untitled document (`Untitled-1`, `Untitled-2`, etc.)
+  - `Ctrl+O`: Open assembly file
+  - `Ctrl+S`: Save current document
+  - `Ctrl+Shift+S`: Save As
+  - `Ctrl+W`: Close active tab (with unsaved changes prompt)
+  - `Ctrl+Tab` / `Ctrl+Shift+Tab`: Cycle through open tabs
+- **Tab Context Menu**: Right-click any tab header to access Save, Save As, Close Tab, Close Others, Close All Tabs, Copy Full Path, and Reveal in Explorer.
+- **Execution Decoupling**: Tab switching never reloads or resets an active CPU execution session. `F5` runs the active document from entry, while `F8`, `F10`, `Pause`, and `Reset` continue to control the active execution session without disruption.
+
+---
+
+## 5. Welcome & Tutorial Center
+
+BitForge includes an integrated Welcome & Tutorial Center accessible via the **⚡ Welcome** tab or **Help** menu:
+- **🚀 Quick Start**: High-contrast action cards for creating new files, opening sources, browsing examples, and guided interactive tours, alongside a Recent Files list and keyboard reference grid.
+- **📚 Curriculum (11 Lessons)**: A structured 11-lesson computer architecture course covering registers, execution lifecycle, two-pass assembly, memory, stack frames, breakpoints, tracing, watches, and virtual I/O devices, complete with one-click example loading.
+- **🎓 First Program Tutorial**: A hands-on guided tutorial that creates `tutorial_first_program.asm` non-destructively, walking beginners through assembly, stepping, register inspection, and virtual LED hardware output.
+- **Show Welcome on Startup**: Persisted preference checkbox to launch BitForge directly into your code editor or the tutorial dashboard.
+
+---
+
+## 6. Headless CLI Usage
 
 To assemble and execute an assembly file without opening the graphical workbench:
 
