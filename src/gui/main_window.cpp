@@ -168,6 +168,38 @@ void MainWindow::setupUi() {
     bottom_dock_->setWidget(bottom_tabs);
     addDockWidget(Qt::BottomDockWidgetArea, bottom_dock_);
 
+    // Watch Dock: Dedicated dock widget for watch expressions
+    watch_dock_ = new QDockWidget("Watch Expressions", this);
+    watch_dock_->setObjectName("WatchDock");
+    watch_dock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+
+    watch_panel_ = new WatchPanel(watch_dock_);
+    watch_panel_->setController(controller_);
+    watch_dock_->setWidget(watch_panel_);
+    addDockWidget(Qt::BottomDockWidgetArea, watch_dock_);
+    tabifyDockWidget(bottom_dock_, watch_dock_);
+
+    // Wire right-click "Add to Watch" signals from panels to watch_panel_
+    connect(registers_panel_, &RegistersPanel::requestAddWatch, this, [this](const QString& sym) {
+        if (watch_panel_ != nullptr) {
+            watch_panel_->addWatch(sym);
+            if (watch_dock_ != nullptr) {
+                watch_dock_->show();
+                watch_dock_->raise();
+            }
+        }
+    });
+
+    connect(memory_viewer_, &MemoryViewer::requestAddWatch, this, [this](word_t addr) {
+        if (watch_panel_ != nullptr) {
+            watch_panel_->addMemoryWatch(addr);
+            if (watch_dock_ != nullptr) {
+                watch_dock_->show();
+                watch_dock_->raise();
+            }
+        }
+    });
+
     // Wire controller signals
     connect(controller_, &ExecutionController::stateChanged, this, &MainWindow::updateUiState);
     connect(controller_, &ExecutionController::staleChanged, this, &MainWindow::updateUiState);
@@ -456,6 +488,7 @@ void MainWindow::setupMenusAndToolbars() {
     view_menu->addSeparator();
     view_menu->addAction(right_dock_->toggleViewAction());
     view_menu->addAction(bottom_dock_->toggleViewAction());
+    view_menu->addAction(watch_dock_->toggleViewAction());
     view_menu->addSeparator();
     view_menu->addAction(restore_default_layout_act_);
 
@@ -570,12 +603,46 @@ void MainWindow::setupStatusBar() {
 
 void MainWindow::loadSettings() {
     QSettings settings("BitForge", "BitForge");
+
+    // 1. Window geometry and dock layout state
     if (settings.contains("geometry")) {
         restoreGeometry(settings.value("geometry").toByteArray());
     }
     if (settings.contains("windowState")) {
         restoreState(settings.value("windowState").toByteArray());
     }
+
+    // 2. Editor font size / zoom level (safe fallback clamp [6, 48])
+    if (editor_ != nullptr && settings.contains("editorFontSize")) {
+        bool ok_font = false;
+        int fontSize = settings.value("editorFontSize", 11).toInt(&ok_font);
+        if (ok_font && fontSize >= 6 && fontSize <= 48) {
+            editor_->setFontSize(fontSize);
+        }
+    }
+
+    // 3. Execution speed preset (safe fallback clamp [0, 3])
+    if (controller_ != nullptr && settings.contains("executionSpeed")) {
+        bool ok_speed = false;
+        int speedVal = settings.value("executionSpeed", static_cast<int>(ExecutionSpeed::Turbo)).toInt(&ok_speed);
+        if (ok_speed && speedVal >= 0 && speedVal <= 3) {
+            auto sp = static_cast<ExecutionSpeed>(speedVal);
+            controller_->setSpeed(sp);
+            if (speed_combo_ != nullptr) {
+                speed_combo_->setCurrentIndex(speedVal);
+            }
+        }
+    }
+
+    // 4. Watch expressions list
+    if (watch_panel_ != nullptr && settings.contains("watchList")) {
+        QStringList watches = settings.value("watchList").toStringList();
+        if (!watches.isEmpty()) {
+            watch_panel_->loadWatchExpressions(watches);
+        }
+    }
+
+    // 5. Recent files list
     QStringList recents = settings.value("recentFiles").toStringList();
     QStringList valid_recents;
     for (const auto& path : recents) {
@@ -592,6 +659,16 @@ void MainWindow::saveSettings() {
     QSettings settings("BitForge", "BitForge");
     settings.setValue("geometry", saveGeometry());
     settings.setValue("windowState", saveState());
+
+    if (editor_ != nullptr) {
+        settings.setValue("editorFontSize", editor_->currentFontSize());
+    }
+    if (controller_ != nullptr) {
+        settings.setValue("executionSpeed", static_cast<int>(controller_->speed()));
+    }
+    if (watch_panel_ != nullptr) {
+        settings.setValue("watchList", watch_panel_->watchExpressions());
+    }
 }
 
 void MainWindow::updateRecentFilesList(const QString& filePath) {
@@ -664,6 +741,12 @@ void MainWindow::onGoToLine() {
 void MainWindow::onRestoreDefaultLayout() {
     addDockWidget(Qt::RightDockWidgetArea, right_dock_);
     addDockWidget(Qt::BottomDockWidgetArea, bottom_dock_);
+    if (watch_dock_ != nullptr) {
+        addDockWidget(Qt::BottomDockWidgetArea, watch_dock_);
+        tabifyDockWidget(bottom_dock_, watch_dock_);
+        watch_dock_->show();
+        watch_dock_->setFloating(false);
+    }
     right_dock_->show();
     bottom_dock_->show();
     right_dock_->setFloating(false);

@@ -28,6 +28,12 @@ public:
 public slots:
     void refresh();
 
+signals:
+    void requestAddWatch(const QString& symbol);
+
+private slots:
+    void onCustomContextMenu(const QPoint& pos);
+
 private:
     ExecutionController* controller_{nullptr};
 

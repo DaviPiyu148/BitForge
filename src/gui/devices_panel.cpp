@@ -21,14 +21,22 @@ std::vector<byte_t> parseHexByteSequence(const QString& input) {
     const QStringList tokens = clean.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
     for (const QString& tok : tokens) {
         QString s = tok.trimmed();
+        bool is_explicit_hex = false;
         if (s.startsWith("0x", Qt::CaseInsensitive)) {
             s = s.mid(2);
+            is_explicit_hex = true;
         } else if (s.startsWith("$")) {
             s = s.mid(1);
+            is_explicit_hex = true;
         }
         if (s.isEmpty()) continue;
         bool ok = false;
-        uint val = s.toUInt(&ok, 16);
+        uint val = 0;
+        if (is_explicit_hex || s.contains(QRegularExpression("[a-fA-F]"))) {
+            val = s.toUInt(&ok, 16);
+        } else {
+            val = s.toUInt(&ok, 10);
+        }
         if (ok && val <= 0xFF) {
             bytes.push_back(static_cast<byte_t>(val));
         }
@@ -253,10 +261,11 @@ void DevicesPanel::refresh() {
         if (fifo_sz == 0) {
             fifo_status_label_->setText("Buffer: Empty (0 bytes queued)");
         } else if (next_b.has_value()) {
+            QString next_hex = "0x" + QString("%1").arg(*next_b, 2, 16, QLatin1Char('0')).toUpper();
             fifo_status_label_->setText(
-                QString("Buffer: %1 bytes queued | Next: 0x%2 (%3)")
+                QString("Buffer: %1 bytes queued | Next: %2 (%3)")
                     .arg(fifo_sz)
-                    .arg(*next_b, 2, 16, QLatin1Char('0')).toUpper()
+                    .arg(next_hex)
                     .arg(*next_b)
             );
         } else {
@@ -281,7 +290,7 @@ void DevicesPanel::refresh() {
                 const std::size_t max_disp = std::min(bytes.size(), static_cast<std::size_t>(16));
                 for (std::size_t i = 0; i < max_disp; ++i) {
                     if (i > 0) qstr += " ";
-                    qstr += QString("0x%1").arg(bytes[i], 2, 16, QLatin1Char('0')).toUpper();
+                    qstr += "0x" + QString("%1").arg(bytes[i], 2, 16, QLatin1Char('0')).toUpper();
                 }
                 if (bytes.size() > max_disp) {
                     qstr += QString(" ... (+%1 more)").arg(bytes.size() - max_disp);
@@ -407,12 +416,14 @@ void DevicesPanel::onEnqueueInput() {
     if (!bytes.empty()) {
         controller_->pushInputFifo(bytes);
         fifo_input_edit_->clear();
+        refresh();
     }
 }
 
 void DevicesPanel::onClearFifo() {
     if (controller_ == nullptr) return;
     controller_->clearInputFifo();
+    refresh();
 }
 
 } // namespace bitforge::gui

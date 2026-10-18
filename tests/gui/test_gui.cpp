@@ -9,6 +9,7 @@
 #include <QTimer>
 #include <QDockWidget>
 #include <QTabWidget>
+#include <QSettings>
 
 using namespace bitforge;
 using namespace bitforge::gui;
@@ -96,6 +97,9 @@ private slots:
     void testExamplesCatalogBrowser();
     void testLayoutPersistenceAndRestoration();
     void testADR001StackViewerEmptySentinelAndBreakpointsEmptyState();
+    void testInteractiveInputFifoOperations();
+    void testWatchPanelInspectionAndHighlighting();
+    void testPreferencesPersistenceAcrossSessions();
 };
 
 void GuiTest::initTestCase() {
@@ -1797,7 +1801,138 @@ void GuiTest::testADR001StackViewerEmptySentinelAndBreakpointsEmptyState() {
     QVERIFY(!tp->emptyLabel()->isHidden());
 }
 
+void GuiTest::testInteractiveInputFifoOperations() {
+    MainWindow window;
+    auto* dp = window.devicesPanel();
+    QVERIFY(dp != nullptr);
+    QVERIFY(dp->fifoInputField() != nullptr);
+    QVERIFY(dp->fifoEnqueueButton() != nullptr);
+    QVERIFY(dp->fifoClearButton() != nullptr);
+    QVERIFY(dp->fifoContentsLabel() != nullptr);
+    QVERIFY(dp->fifoUnderflowLabel() != nullptr);
+
+    // Initial state: empty FIFO
+    QVERIFY(dp->fifoStatusLabel()->text().contains("Empty"));
+    QVERIFY(dp->fifoContentsLabel()->text().contains("Empty"));
+    QVERIFY(dp->fifoUnderflowLabel()->text().contains("0"));
+
+    // Enter hex bytes and click Enqueue
+    dp->fifoInputField()->setText("0xA5 0x5A 42");
+    dp->fifoEnqueueButton()->click();
+
+    QCOMPARE(window.controller()->bus().input_fifo_size(), static_cast<std::size_t>(3));
+    QVERIFY(dp->fifoStatusLabel()->text().contains("3 bytes queued"));
+    QVERIFY(dp->fifoContentsLabel()->text().contains("0xA5"));
+    QVERIFY(dp->fifoContentsLabel()->text().contains("0x5A"));
+    QVERIFY(dp->fifoContentsLabel()->text().contains("0x2A")); // 42 in hex is 0x2A
+
+    // Reading 1 byte via bus pops from FIFO
+    auto val = window.controller()->bus().read_io(0x00);
+    QVERIFY(val.has_value());
+    QCOMPARE(*val, static_cast<byte_t>(0xA5));
+    dp->refresh();
+    QCOMPARE(window.controller()->bus().input_fifo_size(), static_cast<std::size_t>(2));
+
+    // Clear button clears queue
+    dp->fifoClearButton()->click();
+    QCOMPARE(window.controller()->bus().input_fifo_size(), static_cast<std::size_t>(0));
+    QVERIFY(dp->fifoStatusLabel()->text().contains("Empty"));
+
+    // Reading from empty FIFO increments underflow counter and returns 0x00
+    auto underflow_val = window.controller()->bus().read_io(0x00);
+    QVERIFY(underflow_val.has_value());
+    QCOMPARE(*underflow_val, static_cast<byte_t>(0x00));
+    QCOMPARE(window.controller()->bus().input_underflow_count(), static_cast<std::size_t>(1));
+    dp->refresh();
+    QVERIFY(dp->fifoUnderflowLabel()->text().contains("1"));
+}
+
+void GuiTest::testWatchPanelInspectionAndHighlighting() {
+    MainWindow window;
+    auto* wp = window.watchPanel();
+    QVERIFY(wp != nullptr);
+    QVERIFY(wp->table() != nullptr);
+    QVERIFY(wp->addButton() != nullptr);
+    QVERIFY(wp->removeButton() != nullptr);
+    QVERIFY(wp->clearButton() != nullptr);
+
+    // Initial state: empty watches
+    QCOMPARE(wp->watchCount(), static_cast<std::size_t>(0));
+    QVERIFY(!wp->emptyLabel()->isHidden());
+
+    // Add watches
+    QVERIFY(wp->addWatch("R0"));
+    QVERIFY(wp->addWatch("IX"));
+    QVERIFY(wp->addWatch("Flag Z"));
+    QVERIFY(wp->addWatch("0x8000"));
+    QCOMPARE(wp->watchCount(), static_cast<std::size_t>(4));
+    QCOMPARE(wp->table()->rowCount(), 4);
+    QVERIFY(wp->emptyLabel()->isHidden());
+
+    // Assemble program that modifies R0 and Memory[0x8000]
+    window.editor()->setPlainText(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 99\n"
+        "    ST [0x8000], R0\n"
+        "    HALT\n"
+    );
+    QVERIFY(window.controller()->assemble(window.editor()->toPlainText()));
+
+    // Execute step 1: LDI R0, 99
+    window.controller()->step();
+    wp->refresh();
+
+    // Verify row 0 (R0) value is 0x63 / 99 and highlighted as changed
+    auto* r0_hex = wp->table()->item(0, 2);
+    QVERIFY(r0_hex != nullptr);
+    QCOMPARE(r0_hex->text(), QString("0x63"));
+    QCOMPARE(r0_hex->background().color(), theme::kChangedBg);
+
+    // Remove row 1 (IX)
+    wp->removeWatch(1);
+    QCOMPARE(wp->watchCount(), static_cast<std::size_t>(3));
+
+    // Clear all watches
+    wp->clearWatches();
+    QCOMPARE(wp->watchCount(), static_cast<std::size_t>(0));
+    QCOMPARE(wp->table()->rowCount(), 0);
+    QVERIFY(!wp->emptyLabel()->isHidden());
+}
+
+void GuiTest::testPreferencesPersistenceAcrossSessions() {
+    {
+        MainWindow window;
+        window.editor()->setFontSize(16);
+        window.controller()->setSpeed(ExecutionSpeed::Fast);
+        window.watchPanel()->clearWatches();
+        window.watchPanel()->addWatch("R1");
+        window.watchPanel()->addWatch("0x5000");
+
+        // Close/save settings
+        QCloseEvent ce;
+        window.close();
+    }
+
+    {
+        // Re-open fresh instance
+        MainWindow window2;
+        // Verify restored preferences
+        QCOMPARE(window2.editor()->currentFontSize(), 16);
+        QCOMPARE(window2.controller()->speed(), ExecutionSpeed::Fast);
+        QCOMPARE(window2.watchPanel()->watchCount(), static_cast<std::size_t>(2));
+
+        // Clean up settings
+        QSettings settings("BitForge", "BitForge");
+        settings.remove("editorFontSize");
+        settings.remove("executionSpeed");
+        settings.remove("watchList");
+    }
+}
+
 QTEST_MAIN(GuiTest)
 #include "test_gui.moc"
+
 
 

@@ -7,6 +7,7 @@
 #include <QLabel>
 #include <QHeaderView>
 #include <QFontDatabase>
+#include <QMenu>
 #include <cctype>
 
 namespace bitforge::gui {
@@ -54,6 +55,8 @@ MemoryViewer::MemoryViewer(QWidget* parent)
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->verticalHeader()->setVisible(false);
+    table_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(table_, &QWidget::customContextMenuRequested, this, &MemoryViewer::onCustomContextMenu);
 
     QStringList headers;
     headers << "Address";
@@ -183,6 +186,27 @@ void MemoryViewer::updateTable() {
 
     prev_data_ = range.data;
     prev_base_address_ = base_address_;
+}
+
+void MemoryViewer::onCustomContextMenu(const QPoint& pos) {
+    int row = table_->rowAt(pos.y());
+    int col = table_->columnAt(pos.x());
+    if (row < 0 || row >= kRowsPerPage) return;
+
+    word_t target_addr = 0;
+    if (col >= 1 && col <= 16) {
+        target_addr = static_cast<word_t>((base_address_ + row * kBytesPerRow + (col - 1)) & 0xFFFF);
+    } else {
+        target_addr = static_cast<word_t>((base_address_ + row * kBytesPerRow) & 0xFFFF);
+    }
+
+    QMenu menu(this);
+    QString hexStr = QString("0x%1").arg(target_addr, 4, 16, QLatin1Char('0')).toUpper();
+    auto* addAct = menu.addAction(QString("Add [%1] to Watch").arg(hexStr));
+    connect(addAct, &QAction::triggered, this, [this, target_addr]() {
+        emit requestAddWatch(target_addr);
+    });
+    menu.exec(table_->viewport()->mapToGlobal(pos));
 }
 
 } // namespace bitforge::gui

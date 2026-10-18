@@ -172,6 +172,7 @@ if (BITFORGE_BUILD_GUI)
         include/bitforge/gui/welcome_widget.hpp
         include/bitforge/gui/examples_dialog.hpp
         include/bitforge/gui/tutorial_guide.hpp
+        include/bitforge/gui/watch_panel.hpp
         include/bitforge/gui/main_window.hpp
     )
 
@@ -190,6 +191,7 @@ if (BITFORGE_BUILD_GUI)
         src/gui/trace_panel.cpp
         src/gui/instruction_inspector.cpp
         src/gui/execution_controller.cpp
+        src/gui/watch_panel.cpp
         src/gui/theme.cpp
         src/gui/find_replace_bar.cpp
         src/gui/welcome_widget.cpp

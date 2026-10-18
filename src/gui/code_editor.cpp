@@ -211,6 +211,16 @@ void CodeEditor::resetZoom() {
     updateLineNumberAreaWidth(0);
 }
 
+void CodeEditor::setFontSize(int size) {
+    current_font_size_ = std::clamp(size, 6, 48);
+    QFont f = font();
+    f.setPointSize(current_font_size_);
+    setFont(f);
+    const int tab_stop = 4 * fontMetrics().horizontalAdvance(' ');
+    setTabStopDistance(tab_stop);
+    updateLineNumberAreaWidth(0);
+}
+
 void CodeEditor::wheelEvent(QWheelEvent* event) {
     if (event->modifiers() & Qt::ControlModifier) {
         const int delta = event->angleDelta().y();

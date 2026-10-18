@@ -39,6 +39,7 @@ public:
     void zoomIn(int delta = 1);
     void zoomOut(int delta = 1);
     void resetZoom();
+    void setFontSize(int size);
     [[nodiscard]] int currentFontSize() const noexcept { return current_font_size_; }
 
     // Search

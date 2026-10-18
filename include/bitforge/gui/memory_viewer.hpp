@@ -29,10 +29,14 @@ public:
 public slots:
     void refresh();
 
+signals:
+    void requestAddWatch(word_t address);
+
 private slots:
     void onGoClicked();
     void onPrevPage();
     void onNextPage();
+    void onCustomContextMenu(const QPoint& pos);
 
 private:
     void updateTable();

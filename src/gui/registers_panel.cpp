@@ -9,6 +9,7 @@
 #include <QGroupBox>
 #include <QTabWidget>
 #include <QFontDatabase>
+#include <QMenu>
 
 namespace bitforge::gui {
 
@@ -37,6 +38,9 @@ RegistersPanel::RegistersPanel(QWidget* parent)
     auto* main_layout = new QVBoxLayout(this);
     main_layout->setContentsMargins(4, 4, 4, 4);
     main_layout->setSpacing(4);
+
+    setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(this, &QWidget::customContextMenuRequested, this, &RegistersPanel::onCustomContextMenu);
 
     const QFont mono_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
 
@@ -220,6 +224,25 @@ void RegistersPanel::refresh() {
     prev_registers_ = regs;
     prev_flags_ = flg;
     has_prev_state_ = true;
+}
+
+void RegistersPanel::onCustomContextMenu(const QPoint& pos) {
+    QMenu menu(this);
+    auto* regMenu = menu.addMenu("Add Register to Watch");
+    for (const char* reg : {"R0", "R1", "R2", "R3", "IX", "PC", "SP"}) {
+        auto* act = regMenu->addAction(reg);
+        connect(act, &QAction::triggered, this, [this, reg]() {
+            emit requestAddWatch(QString::fromLatin1(reg));
+        });
+    }
+    auto* flagMenu = menu.addMenu("Add Flag to Watch");
+    for (const char* flg : {"Z", "C", "N", "V"}) {
+        auto* act = flagMenu->addAction(QString("Flag %1").arg(flg));
+        connect(act, &QAction::triggered, this, [this, flg]() {
+            emit requestAddWatch(QString::fromLatin1(flg));
+        });
+    }
+    menu.exec(mapToGlobal(pos));
 }
 
 } // namespace bitforge::gui

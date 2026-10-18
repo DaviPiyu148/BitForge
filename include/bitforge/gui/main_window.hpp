@@ -14,6 +14,7 @@
 #include "bitforge/gui/welcome_widget.hpp"
 #include "bitforge/gui/examples_dialog.hpp"
 #include "bitforge/gui/tutorial_guide.hpp"
+#include "bitforge/gui/watch_panel.hpp"
 #include "bitforge/gui/theme.hpp"
 
 #include <QMainWindow>
@@ -46,12 +47,14 @@ public:
     [[nodiscard]] TracePanel* tracePanel() const noexcept { return trace_panel_; }
     [[nodiscard]] MemoryViewer* memoryViewer() const noexcept { return memory_viewer_; }
     [[nodiscard]] StackViewer* stackViewer() const noexcept { return stack_viewer_; }
+    [[nodiscard]] WatchPanel* watchPanel() const noexcept { return watch_panel_; }
 
     [[nodiscard]] QStackedWidget* centralStack() const noexcept { return central_stack_; }
     [[nodiscard]] WelcomeWidget* welcomeWidget() const noexcept { return welcome_widget_; }
     [[nodiscard]] FindReplaceBar* findBar() const noexcept { return find_bar_; }
     [[nodiscard]] QDockWidget* rightDock() const noexcept { return right_dock_; }
     [[nodiscard]] QDockWidget* bottomDock() const noexcept { return bottom_dock_; }
+    [[nodiscard]] QDockWidget* watchDock() const noexcept { return watch_dock_; }
 
     [[nodiscard]] QComboBox* speedComboBox() const noexcept { return speed_combo_; }
     [[nodiscard]] QSpinBox* budgetSpinBox() const noexcept { return budget_spinbox_; }
@@ -143,6 +146,7 @@ private:
     // Docks
     QDockWidget* right_dock_{nullptr};
     QDockWidget* bottom_dock_{nullptr};
+    QDockWidget* watch_dock_{nullptr};
 
     // UI Panels
     RegistersPanel* registers_panel_{nullptr};
@@ -152,6 +156,7 @@ private:
     BreakpointsPanel* breakpoints_panel_{nullptr};
     TracePanel* trace_panel_{nullptr};
     InstructionInspector* instruction_inspector_{nullptr};
+    WatchPanel* watch_panel_{nullptr};
 
     // Actions: File
     QAction* new_act_{nullptr};
