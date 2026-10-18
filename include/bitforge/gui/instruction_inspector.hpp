@@ -12,6 +12,8 @@
 #include <optional>
 #include <cstdint>
 
+#include "bitforge/core/instruction_info.hpp"
+
 namespace bitforge::gui {
 
 class ExecutionController;
@@ -29,6 +31,8 @@ struct DecodedInstructionInfo {
     QString raw_bytes_hex;
     QString source_location;
     QString branch_evaluation;
+    QString description;
+    QString group;
 };
 
 // Summary of the most recently executed step
@@ -67,6 +71,10 @@ public:
         return last_step_info_;
     }
 
+    [[nodiscard]] QLabel* pcDescriptionLabel() const noexcept { return pc_desc_label_; }
+    [[nodiscard]] QLabel* pcGroupLabel() const noexcept { return pc_group_label_; }
+    [[nodiscard]] QLabel* statusBannerLabel() const noexcept { return status_banner_label_; }
+
 public slots:
     void refresh();
 
@@ -76,11 +84,16 @@ private:
     DecodedInstructionInfo current_decoded_info_{};
     std::optional<LastExecutedStepInfo> last_step_info_{std::nullopt};
 
+    // Execution status banner
+    QLabel* status_banner_label_{nullptr};
+
     // Current PC instruction widgets
     QLabel* pc_addr_label_{nullptr};
     QLabel* pc_source_label_{nullptr};
     QLabel* pc_mnemonic_label_{nullptr};
     QLabel* pc_bytes_label_{nullptr};
+    QLabel* pc_group_label_{nullptr};
+    QLabel* pc_desc_label_{nullptr};
     QLabel* pc_branch_label_{nullptr};
 
     // Last executed step widgets

@@ -36,6 +36,13 @@ InstructionInspector::InstructionInspector(QWidget* parent)
 
     const QFont mono_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
 
+    // 0. Prominent Execution Status Banner
+    status_banner_label_ = new QLabel("Ready to Execute", content_widget);
+    status_banner_label_->setFont(QFont("Segoe UI", 9, QFont::Bold));
+    status_banner_label_->setStyleSheet("QLabel { background-color: #282c34; color: #abb2bf; border: 1px solid #4b5263; border-radius: 4px; padding: 6px 10px; }");
+    status_banner_label_->setWordWrap(true);
+    content_layout->addWidget(status_banner_label_);
+
     // 1. Current PC Instruction (Next to Execute)
     auto* current_group = new QGroupBox("Current Instruction (at Program Counter)", content_widget);
     auto* current_grid = new QGridLayout(current_group);
@@ -63,10 +70,21 @@ InstructionInspector::InstructionInspector(QWidget* parent)
     pc_bytes_label_->setFont(mono_font);
     current_grid->addWidget(pc_bytes_label_, 1, 3);
 
-    current_grid->addWidget(new QLabel("Branch Target / Condition:", current_group), 2, 0);
+    current_grid->addWidget(new QLabel("Group / Category:", current_group), 2, 0);
+    pc_group_label_ = new QLabel("Control", current_group);
+    pc_group_label_->setFont(mono_font);
+    current_grid->addWidget(pc_group_label_, 2, 1);
+
+    current_grid->addWidget(new QLabel("Semantics / Operation:", current_group), 2, 2);
+    pc_desc_label_ = new QLabel("No operation; advances PC by 1 byte.", current_group);
+    pc_desc_label_->setFont(mono_font);
+    pc_desc_label_->setWordWrap(true);
+    current_grid->addWidget(pc_desc_label_, 2, 3);
+
+    current_grid->addWidget(new QLabel("Branch Target / Condition:", current_group), 3, 0);
     pc_branch_label_ = new QLabel("N/A", current_group);
     pc_branch_label_->setFont(mono_font);
-    current_grid->addWidget(pc_branch_label_, 2, 1, 1, 3);
+    current_grid->addWidget(pc_branch_label_, 3, 1, 1, 3);
 
     content_layout->addWidget(current_group);
 
@@ -125,7 +143,8 @@ DecodedInstructionInfo InstructionInspector::decodeAt(const ExecutionController&
     const byte_t op = mem.read_byte(address);
     info.opcode = op;
 
-    if (!is_valid_opcode(op)) {
+    auto desc = get_instruction_info(op);
+    if (!is_valid_opcode(op) || !desc.has_value()) {
         info.valid = false;
         info.length = 1;
         info.instruction_size = 1;
@@ -135,14 +154,17 @@ DecodedInstructionInfo InstructionInspector::decodeAt(const ExecutionController&
         info.raw_bytes_hex = QString("0x%1").arg(op, 2, 16, QLatin1Char('0')).toUpper();
         info.source_location = "-";
         info.branch_evaluation = "N/A";
+        info.description = "Invalid instruction opcode. Execution at this address will trigger an InvalidOpcode CPU fault.";
+        info.group = "Unknown";
         return info;
     }
 
     info.valid = true;
-    info.length = instruction_length(op);
+    info.length = desc->length;
     info.instruction_size = info.length;
-    info.mnemonic = QString::fromLatin1(opcode_to_mnemonic(op).data(),
-                                        static_cast<qsizetype>(opcode_to_mnemonic(op).size()));
+    info.mnemonic = QString::fromUtf8(desc->mnemonic.data(), static_cast<qsizetype>(desc->mnemonic.size()));
+    info.description = QString::fromUtf8(desc->description.data(), static_cast<qsizetype>(desc->description.size()));
+    info.group = QString::fromUtf8(to_string(desc->group).data(), static_cast<qsizetype>(to_string(desc->group).size()));
 
     // Collect raw bytes
     QStringList byte_strs;
@@ -329,8 +351,54 @@ void InstructionInspector::refresh() {
     pc_source_label_->setText(decoded.source_location);
     pc_mnemonic_label_->setText(decoded.full_disassembly);
     pc_bytes_label_->setText(decoded.raw_bytes_hex);
+    pc_group_label_->setText(decoded.group);
+    pc_desc_label_->setText(decoded.description);
     pc_branch_label_->setText(decoded.branch_evaluation);
     current_decoded_info_ = decoded;
+
+    // Update prominent status banner
+    const auto stop_reason = controller_->lastStopReason();
+    const auto engine_state = controller_->session().state();
+    const QString pc_hex = "0x" + QString("%1").arg(pc, 4, 16, QLatin1Char('0')).toUpper();
+
+    if (stop_reason == debugger::StopReason::BreakpointHit) {
+        status_banner_label_->setText(QString("Breakpoint Hit at %1 (%2)")
+                                          .arg(pc_hex)
+                                          .arg(decoded.source_location));
+        status_banner_label_->setStyleSheet(
+            "QLabel { background-color: #3e3520; color: #e5c07b; border: 1px solid #e5c07b; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
+    } else if (stop_reason == debugger::StopReason::BudgetExhausted) {
+        status_banner_label_->setText("Budget Exhausted: Step/slice limit reached. Click Continue to proceed.");
+        status_banner_label_->setStyleSheet(
+            "QLabel { background-color: #21283b; color: #61afef; border: 1px solid #61afef; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
+    } else if (engine_state == MachineState::Faulted) {
+        const auto& fault = controller_->cpu().last_fault();
+        const QString fault_addr = "0x" + QString("%1").arg(fault.instruction_address, 4, 16, QLatin1Char('0')).toUpper();
+        status_banner_label_->setText(QString("CPU Fault: %1 at %2 — %3")
+                                          .arg(to_string(fault.type).data())
+                                          .arg(fault_addr)
+                                          .arg(QString::fromStdString(fault.message)));
+        status_banner_label_->setStyleSheet(
+            "QLabel { background-color: #3e2023; color: #e06c75; border: 1px solid #e06c75; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
+    } else if (engine_state == MachineState::Halted) {
+        status_banner_label_->setText("Program Halted: Execution finished normally via HALT.");
+        status_banner_label_->setStyleSheet(
+            "QLabel { background-color: #1e3328; color: #98c379; border: 1px solid #98c379; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
+    } else if (controller_->isExecuting()) {
+        status_banner_label_->setText("CPU Running...");
+        status_banner_label_->setStyleSheet(
+            "QLabel { background-color: #1d2c3f; color: #61afef; border: 1px solid #61afef; border-radius: 4px; padding: 6px 10px; font-weight: bold; }");
+    } else if (!controller_->session().trace().empty()) {
+        status_banner_label_->setText(QString("Step #%1 Completed (Next instruction at PC %2)")
+                                          .arg(controller_->session().trace().back().step_number)
+                                          .arg(pc_hex));
+        status_banner_label_->setStyleSheet(
+            "QLabel { background-color: #282c34; color: #98c379; border: 1px solid #4b5263; border-radius: 4px; padding: 6px 10px; }");
+    } else {
+        status_banner_label_->setText("Program Ready to Execute");
+        status_banner_label_->setStyleSheet(
+            "QLabel { background-color: #282c34; color: #abb2bf; border: 1px solid #4b5263; border-radius: 4px; padding: 6px 10px; }");
+    }
 
     // Colorize branch preview
     if (decoded.branch_evaluation.contains("TAKEN")) {

@@ -6,6 +6,7 @@
 #include "bitforge/core/registers.hpp"
 #include "bitforge/core/cpu_state.hpp"
 #include "bitforge/core/faults.hpp"
+#include "bitforge/core/instruction_info.hpp"
 
 #include <type_traits>
 #include <string_view>
@@ -260,4 +261,35 @@ TEST(TypesTest, EnumStrings) {
     EXPECT_EQ(bitforge::to_string(bitforge::FaultType::InvalidPort), "InvalidPort");
     EXPECT_EQ(bitforge::to_string(bitforge::FaultType::StackOverflow), "StackOverflow");
     EXPECT_EQ(bitforge::to_string(bitforge::FaultType::StackUnderflow), "StackUnderflow");
+}
+
+TEST(TypesTest, InstructionInfoMetadata) {
+    EXPECT_EQ(bitforge::kInstructionDescriptors.size(), 31u);
+
+    // Verify all 31 descriptors have valid length, mnemonic, and description
+    for (const auto& desc : bitforge::kInstructionDescriptors) {
+        EXPECT_TRUE(bitforge::is_valid_opcode(desc.opcode));
+        EXPECT_EQ(desc.length, bitforge::instruction_length(desc.opcode));
+        EXPECT_EQ(desc.mnemonic, bitforge::opcode_to_mnemonic(desc.opcode));
+        EXPECT_FALSE(desc.description.empty());
+        EXPECT_FALSE(bitforge::to_string(desc.group).empty());
+
+        auto found = bitforge::get_instruction_info(desc.opcode);
+        ASSERT_TRUE(found.has_value());
+        EXPECT_EQ(found->mnemonic, desc.mnemonic);
+
+        auto found_by_mnem = bitforge::find_instruction_info_by_mnemonic(desc.mnemonic);
+        ASSERT_TRUE(found_by_mnem.has_value());
+        EXPECT_EQ(found_by_mnem->opcode, desc.opcode);
+    }
+
+    // Case-insensitive lookup check
+    auto ldi_lower = bitforge::find_instruction_info_by_mnemonic("ldi");
+    ASSERT_TRUE(ldi_lower.has_value());
+    EXPECT_EQ(ldi_lower->opcode, 0x10);
+
+    // Invalid opcode lookup returns nullopt
+    EXPECT_FALSE(bitforge::get_instruction_info(0x02).has_value());
+    EXPECT_FALSE(bitforge::get_instruction_info(0xFF).has_value());
+    EXPECT_FALSE(bitforge::find_instruction_info_by_mnemonic("NONEXISTENT").has_value());
 }

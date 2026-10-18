@@ -1333,12 +1333,19 @@ void GuiTest::testInstructionInspectorDecoding() {
     QCOMPARE(info.mnemonic, QString("LDI"));
     QCOMPARE(info.instruction_size, static_cast<std::size_t>(3));
     QVERIFY(info.full_disassembly.contains("LDI"));
+    QCOMPARE(info.group, QString("Data Movement"));
+    QVERIFY(info.description.contains("Load 8-bit immediate"));
+    QCOMPARE(inspector->pcGroupLabel()->text(), QString("Data Movement"));
+    QVERIFY(inspector->pcDescriptionLabel()->text().contains("Load 8-bit immediate"));
+    QVERIFY(inspector->statusBannerLabel()->text().contains("Ready"));
 
-    // Step once
+    // Step once (LDI)
     window.onStep();
     inspector->refresh();
     info = inspector->decodedInfo();
     QCOMPARE(info.mnemonic, QString("ADD"));
+    QCOMPARE(info.group, QString("Arithmetic"));
+    QVERIFY(inspector->statusBannerLabel()->text().contains("Step #1 Completed"));
 
     // Check last executed step trace summary
     auto last_step = inspector->lastExecutedStep();
@@ -1351,7 +1358,14 @@ void GuiTest::testInstructionInspectorDecoding() {
     inspector->refresh();
     info = inspector->decodedInfo();
     QCOMPARE(info.mnemonic, QString("JZ"));
+    QCOMPARE(info.group, QString("Branch"));
     QVERIFY(info.branch_evaluation.toLower().contains("taken"));
+
+    // Step to HALT (0x0207)
+    window.onStep();
+    window.onStep();
+    inspector->refresh();
+    QVERIFY(inspector->statusBannerLabel()->text().contains("Halted"));
 }
 
 void GuiTest::testExecutionSpeedModesAndBatching() {
