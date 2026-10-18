@@ -211,8 +211,11 @@ powershell -ExecutionPolicy Bypass -File scripts/package_windows.ps1 -Validate
   * CLI `--help` passed.
   * CLI register dump / program execution passed cleanly.
   * GUI smoke test (`-platform offscreen --smoke-test`) passed cleanly with zero font warnings:
-    `[BitForge Smoke Test] SUCCESS: MainWindow and all panels initialized cleanly.`
 - Script exit code: **0**.
+
+> [!NOTE]
+> **Packaging Scope & Clean-Machine Validation Boundary:**
+> While `package_windows.ps1 -Validate` confirms that the packaged portable binary bundle operates with complete independence from the development compiler toolchain by running under a sanitized runtime environment (`PATH=C:\Windows\System32;C:\Windows`), this validation is executed on the development host. It validates self-contained DLL staging, runtime dependency resolution, asset binding, and CLI/GUI invocation. However, it does not substitute for testing on an independent clean Windows installation (or air-gapped clean VM) where system-wide runtimes, registry keys, and graphics driver stacks have not been previously installed. A clean-machine matrix in an isolated sandbox or CI runner is recommended prior to broad end-user distribution.
 
 ---
 

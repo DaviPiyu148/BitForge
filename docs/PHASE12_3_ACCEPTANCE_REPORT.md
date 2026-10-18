@@ -185,9 +185,11 @@ In `src/gui/examples_dialog.cpp`:
 
 ### 6.1 Discrepancy Reconciliation
 
-The historical discrepancy between reported test counts is resolved:
+> [!NOTE]
+> **Erratum & Core Count Reconciliation (Audited in Phase 12.4.1):**
+> Section 6.1 below originally cited "220 core tests" by carrying forward an obsolete pre-Phase 10 template figure. In reality, the core unit test suite in `tests/unit/*.cpp` has contained **exactly 233 tests** continuously and uninterruptedly since Phase 10.2 (commit `1680914`), when 13 tests were added for FIFO input, fault atomicity, and instruction metadata. Running `bitforge_tests.exe` directly confirms: `Test Summary: 233 passed, 0 failed out of 233 total tests`. The true Phase 12.3 test inventory was therefore **233 core tests + 78 GUI test methods (80 QtTest slots) = 311 test methods (313 total slots)**. Zero core tests were ever lost.
 
-1. **Core CTest Unit Tests:** Exactly **220** tests in `tests/core/test_main.cpp`.
+1. **Core CTest Unit Tests:** Exactly **233** tests in `tests/test_main.cpp` and `tests/unit/*.cpp` (historically misreported as 220 in early templates).
 2. **QtTest GUI Test Structure:**
    - In `tests/gui/test_gui.cpp`, Qt's test runner executes `Q_OBJECT` `private slots`.
    - **Test Methods:** Previously 74 test methods in Phase 12.2.
@@ -201,7 +203,7 @@ The historical discrepancy between reported test counts is resolved:
 4. **Current Phase 12.3 Test Totals:**
    - **Runnable GUI Test Methods:** **78**
    - **Total QtTest Slots Executed:** 78 + 2 = **80 slots**
-   - **Total Project Automated Tests:** 220 core + 78 GUI = **298 tests**
+   - **Total Project Automated Tests:** 233 core + 78 GUI = **311 tests** (or **313 checks** counting fixture slots)
 
 ### 6.2 Four-Preset Build & Test Results
 

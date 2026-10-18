@@ -3274,6 +3274,8 @@ void GuiTest::testEditorTabCloseButtonMetricsAndStyle() {
     const QString artifact_dir = "C:/Users/Piyush/.gemini/antigravity/brain/3b875d0c-8f06-4ff1-9305-0a2eefba0b93";
     tab_bar->grab().save(artifact_dir + "/gui_smoke_tabbar.png");
     btn1->grab().save(artifact_dir + "/gui_smoke_tab_close_btn.png");
+    window.resize(1280, 800);
+    window.grab().save(artifact_dir + "/gui_smoke_phase12_4_acceptance.png");
 
     // Test tab label click: switches tab WITHOUT triggering close
     tabs->setCurrentIndex(0); // Switch to Welcome
@@ -3471,16 +3473,26 @@ void GuiTest::testNoNegativePointSizeWarningOnFaultOrStartup() {
     QFont f4 = theme::uiFont(0);
     QVERIFY(f4.pointSize() > 0);
 
-    // 2. Install message handler to catch any QFont::setPointSize warning
-    static bool caught_font_warning = false;
-    caught_font_warning = false;
-    auto old_handler = qInstallMessageHandler([](QtMsgType, const QMessageLogContext&, const QString& msg) {
+    // 2. Install chained diagnostic message handler to track all messages without suppression
+    static QtMessageHandler s_previous_handler = nullptr;
+    static QStringList s_captured_messages;
+    static int s_matching_font_warnings = 0;
+
+    s_captured_messages.clear();
+    s_matching_font_warnings = 0;
+
+    s_previous_handler = qInstallMessageHandler([](QtMsgType type, const QMessageLogContext& ctx, const QString& msg) {
+        s_captured_messages.append(msg);
         if (msg.contains("setPointSize: Point size <= 0")) {
-            caught_font_warning = true;
+            s_matching_font_warnings++;
+        }
+        if (s_previous_handler) {
+            s_previous_handler(type, ctx, msg);
         }
     });
 
     {
+        // Exercise full workflow: MainWindow construction, show, editor, assemble, run to CPU fault
         MainWindow window;
         window.show();
 
@@ -3499,7 +3511,7 @@ void GuiTest::testNoNegativePointSizeWarningOnFaultOrStartup() {
 
         QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Faulted, 2000);
 
-        // Refresh diagnostics display (previously triggered QFont(..., -1, QFont::Bold) warning)
+        // Open and refresh diagnostics display (previously triggered QFont(..., -1, QFont::Bold) warning)
         devices->showDiagnostics();
 
         auto* table = devices->diagnosticTable();
@@ -3516,13 +3528,26 @@ void GuiTest::testNoNegativePointSizeWarningOnFaultOrStartup() {
             }
         }
         QVERIFY(found_fault_item);
+
+        // Exercise clear and re-refreshing diagnostics
+        devices->refresh();
+        devices->showDiagnostics();
+    }
+
+    // 3. Verify zero matching setPointSize warnings occurred across the entire workflow
+    QCOMPARE(s_matching_font_warnings, 0);
+
+    // 4. Verify the diagnostic handler is active and capable of detecting font warnings
+    // by testing that an explicit negative point size would be captured.
+    {
+        QFont test_font;
+        test_font.setPointSize(-1); // Qt emits "QFont::setPointSize: Point size <= 0 (-1), must be greater than 0"
+        QCOMPARE(s_matching_font_warnings, 1);
     }
 
     // Restore message handler
-    qInstallMessageHandler(old_handler);
-
-    // Assert that zero setPointSize warnings were emitted
-    QVERIFY(!caught_font_warning);
+    qInstallMessageHandler(s_previous_handler);
+    s_previous_handler = nullptr;
 }
 
 QTEST_MAIN(GuiTest)
