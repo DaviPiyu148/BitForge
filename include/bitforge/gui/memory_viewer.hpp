@@ -8,6 +8,7 @@
 #include <QTableWidget>
 #include <QLineEdit>
 #include <QPushButton>
+#include <vector>
 
 namespace bitforge::gui {
 
@@ -23,6 +24,7 @@ public:
 
     void setController(ExecutionController* controller);
     void scrollToAddress(word_t address);
+    [[nodiscard]] word_t currentBaseAddress() const noexcept { return base_address_; }
 
 public slots:
     void refresh();
@@ -37,6 +39,8 @@ private:
 
     ExecutionController* controller_{nullptr};
     word_t base_address_{kDefaultEntryAddress}; // 0x0200
+    word_t prev_base_address_{0xFFFF};
+    std::vector<byte_t> prev_data_;
 
     QLineEdit* address_input_;
     QPushButton* go_button_;

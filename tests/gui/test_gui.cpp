@@ -89,6 +89,13 @@ private slots:
     void testBreakpointErgonomicsAndGutterF9();
     void testVirtualDevicesTabTitleNoScrollClipping();
     void testFreshRunMemoryResetAndIoContract();
+    void testWelcomeDashboardAndNavigation();
+    void testFindReplaceBarOperations();
+    void testEditorZoomControls();
+    void testTutorialGuideWalkthrough();
+    void testExamplesCatalogBrowser();
+    void testLayoutPersistenceAndRestoration();
+    void testADR001StackViewerEmptySentinelAndBreakpointsEmptyState();
 };
 
 void GuiTest::initTestCase() {
@@ -743,6 +750,21 @@ void GuiTest::testOffscreenScreenshotCapture() {
     QPixmap pixmap4 = window.grab();
     bool saved4 = pixmap4.save(artifact_dir + "/gui_smoke_visualization.png");
     QVERIFY(saved4);
+
+    // Capture Phase 9 Welcome Dashboard
+    window.showWelcomeScreen();
+    QPixmap pixmap_welcome = window.grab();
+    bool saved_welcome = pixmap_welcome.save(artifact_dir + "/gui_smoke_welcome.png");
+    QVERIFY(saved_welcome);
+
+    // Capture Phase 9 Dark Workbench with active Find bar
+    window.showEditor();
+    window.onFind();
+    window.findBar()->searchInput()->setText("LDI");
+    QPixmap pixmap_workbench = window.grab();
+    bool saved_workbench = pixmap_workbench.save(artifact_dir + "/gui_smoke_dark_workbench.png");
+    QVERIFY(saved_workbench);
+    window.findBar()->closeButton()->click();
 }
 
 void GuiTest::testDirtyStateTracking() {
@@ -1593,6 +1615,189 @@ void GuiTest::testFreshRunMemoryResetAndIoContract() {
     QCOMPARE(window.controller()->bus().led_state(), static_cast<byte_t>(0x0F));
 }
 
+void GuiTest::testWelcomeDashboardAndNavigation() {
+    MainWindow window;
+    QVERIFY(window.centralStack() != nullptr);
+    QVERIFY(window.welcomeWidget() != nullptr);
+    // At startup with no file loaded, central stack displays welcome screen (index 0)
+    QCOMPARE(window.centralStack()->currentIndex(), 0);
+
+    // Switching to editor via action or welcome widget
+    window.showEditor();
+    QCOMPARE(window.centralStack()->currentIndex(), 1);
+
+    // Return to welcome screen
+    window.showWelcomeScreen();
+    QCOMPARE(window.centralStack()->currentIndex(), 0);
+
+    // Loading a file switches to editor automatically
+    window.loadFile(resolveExamplePath("examples/01_arithmetic.asm"));
+    QCOMPARE(window.centralStack()->currentIndex(), 1);
+    QVERIFY(window.editor()->toPlainText().contains(".ENTRY start"));
+
+    // Welcome widget recent files: add paths and ensure pruning works
+    QStringList recents;
+    recents << resolveExamplePath("examples/01_arithmetic.asm")
+            << resolveExamplePath("examples/02_io_demo.asm")
+            << "D:/nonexistent_file_xyz.asm";
+    window.welcomeWidget()->setRecentFiles(recents);
+
+    // Recent files in widget should only contain existing files
+    const auto active_recents = window.welcomeWidget()->recentFiles();
+    QVERIFY(active_recents.contains(resolveExamplePath("examples/01_arithmetic.asm")));
+    QVERIFY(!active_recents.contains("D:/nonexistent_file_xyz.asm"));
+}
+
+void GuiTest::testFindReplaceBarOperations() {
+    MainWindow window;
+    window.show();
+    window.loadFile(resolveExamplePath("examples/01_arithmetic.asm"));
+    window.showEditor();
+
+    auto* fb = window.findBar();
+    QVERIFY(fb != nullptr);
+    QVERIFY(!fb->isVisible());
+
+    // Open find bar
+    window.onFind();
+    QVERIFY(fb->isVisible());
+
+    // Find "LDI" in 01_arithmetic.asm (which has 2 instances: LDI R0, 10 and LDI R1, 20)
+    fb->searchInput()->setText("LDI");
+    fb->triggerFindNext();
+
+    int match_idx = 0;
+    int total_matches = 0;
+    bool found = window.editor()->findText("LDI", true, false, &match_idx, &total_matches);
+    QVERIFY(found);
+    QCOMPARE(total_matches, 2);
+    QVERIFY(match_idx >= 1 && match_idx <= 2);
+
+    // Navigate next
+    fb->triggerFindNext();
+    QVERIFY(window.editor()->textCursor().hasSelection());
+    QCOMPARE(window.editor()->textCursor().selectedText(), QString("LDI"));
+
+    // Case sensitive search for non-matching case
+    bool found_case = window.editor()->findText("ldi", true, true, &match_idx, &total_matches);
+    QVERIFY(!found_case);
+    QCOMPARE(total_matches, 0);
+
+    // Close find bar via close button
+    fb->closeButton()->click();
+    QVERIFY(!fb->isVisible());
+}
+
+void GuiTest::testEditorZoomControls() {
+    MainWindow window;
+    auto* ed = window.editor();
+    QVERIFY(ed != nullptr);
+
+    const int initial_size = ed->currentFontSize();
+    QVERIFY(initial_size >= 8 && initial_size <= 24);
+
+    // Zoom in
+    ed->zoomIn(2);
+    QCOMPARE(ed->currentFontSize(), initial_size + 2);
+
+    // Zoom out
+    ed->zoomOut(1);
+    QCOMPARE(ed->currentFontSize(), initial_size + 1);
+
+    // Reset zoom
+    ed->resetZoom();
+    QCOMPARE(ed->currentFontSize(), initial_size);
+}
+
+void GuiTest::testTutorialGuideWalkthrough() {
+    MainWindow window;
+    TutorialGuide tutorial(&window);
+    tutorial.setController(window.controller());
+
+    QCOMPARE(tutorial.currentStage(), 0);
+
+    // Test stage progression through all 9 stages (0 to 8)
+    for (int s = 0; s < 8; ++s) {
+        QCOMPARE(tutorial.currentStage(), s);
+        tutorial.setStage(s + 1);
+        QCOMPARE(tutorial.currentStage(), s + 1);
+    }
+
+    QCOMPARE(tutorial.currentStage(), 8);
+
+    // Reset back to stage 0
+    tutorial.setStage(0);
+    QCOMPARE(tutorial.currentStage(), 0);
+}
+
+void GuiTest::testExamplesCatalogBrowser() {
+    ExamplesDialog dialog;
+    // Dialog should populate categories without crashing
+    QVERIFY(dialog.layout() != nullptr);
+}
+
+void GuiTest::testLayoutPersistenceAndRestoration() {
+    MainWindow window;
+    window.show();
+    QVERIFY(window.rightDock() != nullptr);
+    QVERIFY(window.bottomDock() != nullptr);
+
+    // Close right dock
+    window.rightDock()->close();
+    QVERIFY(!window.rightDock()->isVisible());
+
+    // Restore default layout
+    window.onRestoreDefaultLayout();
+    QVERIFY(window.rightDock()->isVisible());
+    QVERIFY(window.bottomDock()->isVisible());
+    QCOMPARE(window.centralStack()->currentIndex(), 1); // Switched to editor
+}
+
+void GuiTest::testADR001StackViewerEmptySentinelAndBreakpointsEmptyState() {
+    MainWindow window;
+    window.show();
+
+    // 1. Stack viewer empty state
+    auto* sv = window.stackViewer();
+    QVERIFY(sv != nullptr);
+    window.controller()->reset();
+    sv->refresh();
+    QVERIFY(sv->statusLabel()->text().contains("Empty stack (SP = 0xFFFF sentinel per ADR-001"));
+
+    // 2. Breakpoints panel empty state
+    auto* bp = window.breakpointsPanel();
+    QVERIFY(bp != nullptr);
+    bp->refresh();
+    QVERIFY(bp->emptyLabel() != nullptr);
+    QVERIFY(!bp->emptyLabel()->isHidden());
+    QVERIFY(!bp->removeButton()->isEnabled());
+    QVERIFY(!bp->clearAllButton()->isEnabled());
+
+    // Add breakpoint
+    window.loadFile(resolveExamplePath("examples/01_arithmetic.asm"));
+    window.onAssemble();
+    window.controller()->toggleBreakpoint(10);
+    bp->refresh();
+    QVERIFY(bp->emptyLabel()->isHidden());
+    QVERIFY(bp->removeButton()->isEnabled());
+    QVERIFY(bp->clearAllButton()->isEnabled());
+
+    // Clear breakpoints
+    window.controller()->clearAllBreakpoints();
+    bp->refresh();
+    QVERIFY(!bp->emptyLabel()->isHidden());
+    QVERIFY(!bp->removeButton()->isEnabled());
+    QVERIFY(!bp->clearAllButton()->isEnabled());
+
+    // 3. Trace panel empty state
+    auto* tp = window.tracePanel();
+    QVERIFY(tp != nullptr);
+    tp->refresh();
+    QVERIFY(tp->emptyLabel() != nullptr);
+    QVERIFY(!tp->emptyLabel()->isHidden());
+}
+
 QTEST_MAIN(GuiTest)
 #include "test_gui.moc"
+
 

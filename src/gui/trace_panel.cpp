@@ -32,7 +32,12 @@ TracePanel::TracePanel(QWidget* parent)
 
     auto* button_bar = new QHBoxLayout();
     clear_btn_ = new QPushButton("Clear Trace", this);
+    empty_label_ = new QLabel("Execution trace empty. Assemble and run/step to record instruction history.", this);
+    empty_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; }");
+
     button_bar->addWidget(clear_btn_);
+    button_bar->addSpacing(12);
+    button_bar->addWidget(empty_label_);
     button_bar->addStretch();
     main_layout->addLayout(button_bar);
 
@@ -124,12 +129,21 @@ void TracePanel::refresh() {
     if (!trace.empty()) {
         table_->scrollToBottom();
     }
+
+    if (empty_label_ != nullptr) {
+        empty_label_->setVisible(trace.empty());
+    }
+    clear_btn_->setEnabled(!trace.empty());
 }
 
 void TracePanel::onClearTrace() {
     if (controller_ == nullptr) return;
     controller_->session().clear_trace();
     table_->setRowCount(0);
+    if (empty_label_ != nullptr) {
+        empty_label_->setVisible(true);
+    }
+    clear_btn_->setEnabled(false);
 }
 
 } // namespace bitforge::gui

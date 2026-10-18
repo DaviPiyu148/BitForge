@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QTableWidget>
 #include <QPushButton>
+#include <QLabel>
 
 namespace bitforge::gui {
 
@@ -18,6 +19,7 @@ public:
     ~TracePanel() override = default;
 
     void setController(ExecutionController* controller);
+    [[nodiscard]] QLabel* emptyLabel() const noexcept { return empty_label_; }
 
 public slots:
     void refresh();
@@ -29,6 +31,7 @@ private:
     ExecutionController* controller_{nullptr};
     QTableWidget* table_;
     QPushButton* clear_btn_;
+    QLabel* empty_label_{nullptr};
 };
 
 } // namespace bitforge::gui

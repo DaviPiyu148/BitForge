@@ -18,6 +18,9 @@ public:
     ~StackViewer() override = default;
 
     void setController(ExecutionController* controller);
+    [[nodiscard]] QLabel* statusLabel() const noexcept { return status_label_; }
+    [[nodiscard]] QLabel* headerLabel() const noexcept { return header_label_; }
+    [[nodiscard]] QTableWidget* table() const noexcept { return table_; }
 
 public slots:
     void refresh();

@@ -25,6 +25,7 @@ public:
     void setController(ExecutionController* controller);
     [[nodiscard]] SevenSegmentDisplay* sevenSegmentDisplay() const noexcept { return seven_seg_display_; }
     [[nodiscard]] QLabel* fifoStatusLabel() const noexcept { return fifo_status_label_; }
+    [[nodiscard]] QLabel* diagnosticsEmptyLabel() const noexcept { return diag_empty_label_; }
 
 public slots:
     void refresh();
@@ -55,6 +56,7 @@ private:
 
     // Diagnostics & Faults
     QTableWidget* diag_table_{nullptr};
+    QLabel* diag_empty_label_{nullptr};
 };
 
 } // namespace bitforge::gui

@@ -6,7 +6,7 @@ BitForge is an educational software model of a fictional 8-bit microprocessor an
 
 ---
 
-## Current Status: Phase 8 Complete (GUI Usability and Digital Computer Visualization)
+## Current Status: Phase 9 Complete (Professional UI/UX Design, Visual Polish, and Educational Experience)
 
 BitForge is developed incrementally in strict adherence to [BitForge Architecture Specification v1.7](BitForge_Architecture_Specification_v1.7.md).
 
@@ -20,9 +20,15 @@ Implemented capabilities include:
 - **Two-Pass Assembler & Source Mapping:** Lexer, parser, symbol table, expression evaluation, multi-segment program image generation, explicit entry-point validation, line classification, and bidirectional instruction-to-source location mapping.
 - **Headless CLI Executable (`bitforge`):** Command-line assembler and execution runner supporting `help`, `assemble`, and `run` subcommands with execution step budgeting, register dumping, virtual I/O presentation, and stable numeric exit codes.
 - **Debugger Engine (`bitforge_debugger`):** Platform-independent, deterministic debugging layer (`DebuggerSession`) supporting single-stepping, bounded execution, address and source-line breakpoints with one-time bypass, read-only side-effect-free memory inspection with 16-bit address wrapping, ADR-001 stack frame inspection, bounded execution tracing with fault capture, and source location resolution.
-- **Qt 6 Desktop GUI Workbench (`bitforge_gui`):** Professional desktop IDE featuring an assembly code editor with line numbers, clickable breakpoint gutter with tooltips, current PC execution indicator, context menu toggling, syntax highlighting, streamlined non-redundant execution toolbar (`Assemble`, `Run from Entry`, `Continue`, `Step`, `Pause`, `Reset`), execution speed throttling (`Slow 2 Hz`, `Normal 10 Hz`, `Fast 100 Hz`, `Turbo Full Speed`), configurable step budget, CPU register/flag panel with diff highlighting and bit-level LED visualization (`BitViewWidget`), side-effect-free 64 KiB memory viewer, ADR-001 stack viewer, virtual devices (Text console, vector 3-digit Seven-Segment display, Port 0x00 input FIFO status, 8-bit LEDs), 4-column Breakpoints table with double-click line navigation, instruction inspector decoding upcoming instruction and last executed step, bounded chronological trace, and clickable diagnostics.
+- **Professional Qt 6 Desktop Workbench (`bitforge_gui`):** Modern desktop IDE featuring:
+  - **Cohesive Dark Design System:** Centralized charcoal palette (`#181a1f`/`#21252b`), teal accents (`#4ec9b0`), emerald green states (`#98c379`), warm amber mutation highlights (`#ffd54f`/`#3e3520`), and crimson fault indicators (`#e06c75`).
+  - **Welcome Dashboard (`WelcomeWidget`):** Quick action cards (`New`, `Open`, `Browse Examples`, `Interactive Tutorial`), bounded recent-files manager with automatic pruning for deleted files, and quick reference shortcuts.
+  - **Polished Assembly Editor (`CodeEditor`):** High-contrast syntax highlighting, inline search bar (`FindReplaceBar` with `Ctrl+F`, `F3`, `Shift+F3`, match count), smooth font zooming (`Ctrl++`, `Ctrl+-`, `Ctrl+0`), Go to line (`Ctrl+G`), cursor position tracking (`Ln X, Col Y`), and amber execution pointer.
+  - **CPU & Memory Visualizations:** Bit-level register LED rows (`BitViewWidget`), vector 3-digit 7-segment display (Port 0x02), virtual LEDs (Port 0x10), memory viewer with cell mutation diff highlighting, ADR-001 downward-growing stack viewer with explicit empty sentinel explanation, and instruction inspector previewing disassembly, operands, and branch outcomes.
+  - **Educational Experience:** 9-stage interactive debugging tutorial (`TutorialGuide`) guiding users through real assembly, stepping, and inspection on live emulator state; categorized example library browser (`ExamplesDialog`) with preview.
+  - **Workspace & Layout Management:** State-dependent action enablement, comprehensive shortcuts, layout persistence across launches via `QSettings`, and one-click layout restoration.
 - **Comprehensive Assembly Example Library (`examples/`):** 51 fully tested and verified assembly programs organized across 10 functional categories (Fundamentals, Arithmetic & Logic, Control Flow, Memory & Pointers, Stack & Subroutines, Virtual I/O Devices, Algorithms & ADS Benchmarks, Comprehensive Demonstrations, Edge Cases & Boundary Conditions, and Architectural Fault Demonstrations), achieving 100% ISA mnemonic coverage (all 31 canonical instructions) and validating all architectural invariants.
-- **Automated Test Suites:** 220 unit and regression tests (`BitForgeTests`) across 11 test suites plus 41 automated GUI integration test methods in `BitForgeGuiTests`, delivering 261 passing tests in the GUI preset covering core CPU/ALU execution, stack/memory invariants, 31-mnemonic ISA coverage, debugger sessions, file lifecycle, startup argument loading, seven-segment display vector rendering, bit visualization, instruction inspector, execution speed throttling, fresh-run memory and I/O reset contracts, and all 51 assembly example programs.
+- **Automated Test Suites:** 220 unit and regression tests (`BitForgeTests`) across 11 test suites plus 48 automated GUI integration test methods in `BitForgeGuiTests`, delivering 268 passing tests in the GUI preset and 220 passing tests in headless Debug and strict CI presets.
 
 ---
 

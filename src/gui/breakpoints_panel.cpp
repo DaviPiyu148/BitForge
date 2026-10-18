@@ -35,9 +35,13 @@ BreakpointsPanel::BreakpointsPanel(QWidget* parent)
     auto* button_bar = new QHBoxLayout();
     remove_btn_ = new QPushButton("Remove Selected", this);
     clear_all_btn_ = new QPushButton("Clear All", this);
+    empty_label_ = new QLabel("No breakpoints configured. Click editor gutter or press F9 to toggle.", this);
+    empty_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; }");
 
     button_bar->addWidget(remove_btn_);
     button_bar->addWidget(clear_all_btn_);
+    button_bar->addSpacing(12);
+    button_bar->addWidget(empty_label_);
     button_bar->addStretch();
 
     main_layout->addLayout(button_bar);
@@ -112,6 +116,12 @@ void BreakpointsPanel::refresh() {
         item_status->setForeground(QColor(40, 167, 69));
         table_->setItem(row, 3, item_status);
     }
+
+    if (empty_label_ != nullptr) {
+        empty_label_->setVisible(bps.empty());
+    }
+    remove_btn_->setEnabled(!bps.empty());
+    clear_all_btn_->setEnabled(!bps.empty());
 }
 
 void BreakpointsPanel::onRemoveSelected() {

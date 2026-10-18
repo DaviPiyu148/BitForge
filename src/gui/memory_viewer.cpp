@@ -1,5 +1,6 @@
 #include "bitforge/gui/memory_viewer.hpp"
 #include "bitforge/gui/execution_controller.hpp"
+#include "bitforge/gui/theme.hpp"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -16,11 +17,13 @@ MemoryViewer::MemoryViewer(QWidget* parent)
     main_layout->setContentsMargins(4, 4, 4, 4);
     main_layout->setSpacing(4);
 
-    const QFont mono_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    const QFont mono_font = theme::monoFont(10);
 
     // Top control bar
     auto* top_bar = new QHBoxLayout();
-    top_bar->addWidget(new QLabel("Address:", this));
+    auto* addr_lbl = new QLabel("Address:", this);
+    addr_lbl->setStyleSheet("QLabel { color: #abb2bf; font-weight: 500; }");
+    top_bar->addWidget(addr_lbl);
 
     address_input_ = new QLineEdit("0x0200", this);
     address_input_->setMaximumWidth(90);
@@ -30,13 +33,15 @@ MemoryViewer::MemoryViewer(QWidget* parent)
     go_button_ = new QPushButton("Go", this);
     top_bar->addWidget(go_button_);
 
-    auto* btn_prev = new QPushButton("< Prev 256B", this);
-    auto* btn_next = new QPushButton("Next 256B >", this);
+    auto* btn_prev = new QPushButton("◀ Prev 256B", this);
+    auto* btn_next = new QPushButton("Next 256B ▶", this);
     top_bar->addWidget(btn_prev);
     top_bar->addWidget(btn_next);
 
-    auto* btn_pc = new QPushButton("Goto PC", this);
-    auto* btn_sp = new QPushButton("Goto SP", this);
+    auto* btn_pc = new QPushButton("Jump to PC", this);
+    auto* btn_sp = new QPushButton("Jump to SP", this);
+    btn_pc->setStyleSheet("QPushButton { color: #61afef; font-weight: bold; }");
+    btn_sp->setStyleSheet("QPushButton { color: #4ec9b0; font-weight: bold; }");
     top_bar->addWidget(btn_pc);
     top_bar->addWidget(btn_sp);
 
@@ -129,21 +134,39 @@ void MemoryViewer::updateTable() {
         return;
     }
 
+    const bool has_diff = (prev_base_address_ == base_address_ && prev_data_.size() == range.data.size());
+
     for (int r = 0; r < kRowsPerPage; ++r) {
         const word_t row_addr = static_cast<word_t>((base_address_ + r * kBytesPerRow) & 0xFFFF);
         auto* addr_item = new QTableWidgetItem(
             QString("0x%1").arg(row_addr, 4, 16, QLatin1Char('0')).toUpper()
         );
         addr_item->setTextAlignment(Qt::AlignCenter);
+        addr_item->setForeground(QColor(0x61, 0xaf, 0xef)); // Soft blue address
         table_->setItem(r, 0, addr_item);
 
         QString ascii_str;
         for (int c = 0; c < kBytesPerRow; ++c) {
-            const byte_t b = range.data[static_cast<std::size_t>(r * kBytesPerRow + c)];
+            const std::size_t idx = static_cast<std::size_t>(r * kBytesPerRow + c);
+            const byte_t b = range.data[idx];
             auto* byte_item = new QTableWidgetItem(
                 QString("%1").arg(b, 2, 16, QLatin1Char('0')).toUpper()
             );
             byte_item->setTextAlignment(Qt::AlignCenter);
+
+            // Highlight recently changed memory bytes with warm amber
+            if (has_diff && b != prev_data_[idx]) {
+                byte_item->setBackground(theme::kChangedBg);
+                byte_item->setForeground(theme::kChangedText);
+                QFont f = table_->font();
+                f.setBold(true);
+                byte_item->setFont(f);
+            } else if (b == 0x00) {
+                byte_item->setForeground(QColor(0x5c, 0x63, 0x70)); // Dim zero bytes
+            } else {
+                byte_item->setForeground(QColor(0xdc, 0xdc, 0xdc));
+            }
+
             table_->setItem(r, c + 1, byte_item);
 
             if (std::isprint(static_cast<unsigned char>(b))) {
@@ -154,8 +177,12 @@ void MemoryViewer::updateTable() {
         }
 
         auto* ascii_item = new QTableWidgetItem(ascii_str);
+        ascii_item->setForeground(QColor(0x98, 0xc3, 0x79)); // Green ASCII representation
         table_->setItem(r, 17, ascii_item);
     }
+
+    prev_data_ = range.data;
+    prev_base_address_ = base_address_;
 }
 
 } // namespace bitforge::gui

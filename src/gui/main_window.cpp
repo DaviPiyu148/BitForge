@@ -5,41 +5,129 @@
 #include <QStatusBar>
 #include <QDockWidget>
 #include <QTabWidget>
+#include <QStackedWidget>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QInputDialog>
 #include <QCloseEvent>
 #include <QFile>
 #include <QTextStream>
 #include <QFileInfo>
 #include <QSignalBlocker>
+#include <QSettings>
+#include <QApplication>
 
 namespace bitforge::gui {
+
+namespace {
+
+QString resolveExamplePath(const QString& relPath) {
+    if (QFile::exists(relPath)) return QFileInfo(relPath).absoluteFilePath();
+    if (QFile::exists("../" + relPath)) return QFileInfo("../" + relPath).absoluteFilePath();
+    if (QFile::exists("../../" + relPath)) return QFileInfo("../../" + relPath).absoluteFilePath();
+    QString appPath = QCoreApplication::applicationDirPath() + "/" + relPath;
+    if (QFile::exists(appPath)) return QFileInfo(appPath).absoluteFilePath();
+    QString appParentPath = QCoreApplication::applicationDirPath() + "/../" + relPath;
+    if (QFile::exists(appParentPath)) return QFileInfo(appParentPath).absoluteFilePath();
+    return relPath;
+}
+
+} // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       controller_(new ExecutionController(this)) {
+    // Apply centralized dark design system stylesheet across application
+    if (qApp) {
+        qApp->setStyleSheet(theme::applicationStyleSheet());
+    }
+
     setupUi();
     setupMenusAndToolbars();
     setupStatusBar();
 
+    loadSettings();
+
     setCurrentFile(QString());
     updateUiState();
 
-    resize(1200, 800);
+    if (size().width() < 600 || size().height() < 400) {
+        resize(1240, 820);
+    }
 }
 
 void MainWindow::setupUi() {
-    // Central Source Editor
-    editor_ = new CodeEditor(this);
+    // Central Stack: Page 0 = Welcome Dashboard, Page 1 = Code Editor + Find/Replace Bar
+    central_stack_ = new QStackedWidget(this);
+
+    welcome_widget_ = new WelcomeWidget(central_stack_);
+    central_stack_->addWidget(welcome_widget_); // Page 0
+
+    editor_container_ = new QWidget(central_stack_);
+    auto* editor_layout = new QVBoxLayout(editor_container_);
+    editor_layout->setContentsMargins(0, 0, 0, 0);
+    editor_layout->setSpacing(0);
+
+    find_bar_ = new FindReplaceBar(editor_container_);
+    find_bar_->setVisible(false);
+    editor_layout->addWidget(find_bar_);
+
+    editor_ = new CodeEditor(editor_container_);
     editor_->setController(controller_);
-    setCentralWidget(editor_);
+    editor_layout->addWidget(editor_);
+
+    central_stack_->addWidget(editor_container_); // Page 1
+    central_stack_->setCurrentIndex(0); // Start on welcome screen by default
+    setCentralWidget(central_stack_);
+
+    // Wire WelcomeWidget actions
+    connect(welcome_widget_, &WelcomeWidget::newFileRequested, this, [this]() {
+        newFile();
+        showEditor();
+    });
+    connect(welcome_widget_, &WelcomeWidget::openFileRequested, this, &MainWindow::openFile);
+    connect(welcome_widget_, &WelcomeWidget::openRecentRequested, this, [this](const QString& path) {
+        if (loadFile(path)) {
+            showEditor();
+        }
+    });
+    connect(welcome_widget_, &WelcomeWidget::browseExamplesRequested, this, &MainWindow::onBrowseExamples);
+    connect(welcome_widget_, &WelcomeWidget::startTutorialRequested, this, &MainWindow::onStartTutorial);
+    connect(welcome_widget_, &WelcomeWidget::openEditorRequested, this, &MainWindow::showEditor);
+
+    // Wire FindReplaceBar actions to editor
+    connect(find_bar_, &FindReplaceBar::findNext, this, [this](const QString& query, bool match_case) {
+        int match_idx = 0;
+        int total_matches = 0;
+        editor_->findText(query, true, match_case, &match_idx, &total_matches);
+        find_bar_->setMatchStatus(match_idx, total_matches);
+    });
+    connect(find_bar_, &FindReplaceBar::findPrevious, this, [this](const QString& query, bool match_case) {
+        int match_idx = 0;
+        int total_matches = 0;
+        editor_->findText(query, false, match_case, &match_idx, &total_matches);
+        find_bar_->setMatchStatus(match_idx, total_matches);
+    });
+    connect(find_bar_, &FindReplaceBar::closed, this, [this]() {
+        editor_->clearFindMatches();
+        editor_->setFocus();
+    });
+
+    // Wire editor cursor position changes to status bar
+    connect(editor_, &CodeEditor::cursorLineColumnChanged, this, [this](int line, int col) {
+        if (status_cursor_label_) {
+            status_cursor_label_->setText(QString("Ln %1, Col %2").arg(line).arg(col));
+        }
+    });
 
     // Right Dock: CPU Registers & Status + Virtual Devices
-    auto* right_dock = new QDockWidget("Registers && Virtual Devices", this);
-    right_dock->setObjectName("RightDock");
-    right_dock->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
+    right_dock_ = new QDockWidget("Registers && Virtual Devices", this);
+    right_dock_->setObjectName("RightDock");
+    right_dock_->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
 
-    auto* right_tabs = new QTabWidget(right_dock);
+    auto* right_tabs = new QTabWidget(right_dock_);
     registers_panel_ = new RegistersPanel(right_tabs);
     registers_panel_->setController(controller_);
     right_tabs->addTab(registers_panel_, "CPU Registers && Flags");
@@ -48,15 +136,15 @@ void MainWindow::setupUi() {
     devices_panel_->setController(controller_);
     right_tabs->addTab(devices_panel_, "Virtual Devices");
 
-    right_dock->setWidget(right_tabs);
-    addDockWidget(Qt::RightDockWidgetArea, right_dock);
+    right_dock_->setWidget(right_tabs);
+    addDockWidget(Qt::RightDockWidgetArea, right_dock_);
 
     // Bottom Dock: Memory Viewer, Stack Viewer, Breakpoints, Trace, and Instruction Inspector
-    auto* bottom_dock = new QDockWidget("Memory, Stack && Debug Inspection", this);
-    bottom_dock->setObjectName("BottomDock");
-    bottom_dock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
+    bottom_dock_ = new QDockWidget("Memory, Stack && Debug Inspection", this);
+    bottom_dock_->setObjectName("BottomDock");
+    bottom_dock_->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
 
-    auto* bottom_tabs = new QTabWidget(bottom_dock);
+    auto* bottom_tabs = new QTabWidget(bottom_dock_);
     memory_viewer_ = new MemoryViewer(bottom_tabs);
     memory_viewer_->setController(controller_);
     bottom_tabs->addTab(memory_viewer_, "Memory (64 KiB)");
@@ -77,8 +165,8 @@ void MainWindow::setupUi() {
     instruction_inspector_->setController(controller_);
     bottom_tabs->addTab(instruction_inspector_, "Instruction Inspector");
 
-    bottom_dock->setWidget(bottom_tabs);
-    addDockWidget(Qt::BottomDockWidgetArea, bottom_dock);
+    bottom_dock_->setWidget(bottom_tabs);
+    addDockWidget(Qt::BottomDockWidgetArea, bottom_dock_);
 
     // Wire controller signals
     connect(controller_, &ExecutionController::stateChanged, this, &MainWindow::updateUiState);
@@ -107,10 +195,14 @@ void MainWindow::setupUi() {
     });
 
     // Wire diagnostic click to navigate editor
-    connect(devices_panel_, &DevicesPanel::diagnosticClicked, editor_, &CodeEditor::gotoLine);
+    connect(devices_panel_, &DevicesPanel::diagnosticClicked, this, [this](std::size_t line, std::size_t col) {
+        showEditor();
+        editor_->gotoLine(line, col);
+    });
 
     // Wire breakpoint double-click to navigate editor
-    connect(breakpoints_panel_, &BreakpointsPanel::breakpointDoubleClicked, editor_, [this](std::size_t line) {
+    connect(breakpoints_panel_, &BreakpointsPanel::breakpointDoubleClicked, this, [this](std::size_t line) {
+        showEditor();
         editor_->gotoLine(line, 1);
     });
 }
@@ -143,6 +235,89 @@ void MainWindow::setupMenusAndToolbars() {
     exit_act_->setShortcut(QKeySequence::Quit);
     exit_act_->setStatusTip("Exit BitForge application");
     connect(exit_act_, &QAction::triggered, this, &MainWindow::close);
+
+    // -----------------------------------------------------------------
+    // Actions: Edit
+    // -----------------------------------------------------------------
+    undo_act_ = new QAction("&Undo", this);
+    undo_act_->setShortcut(QKeySequence::Undo);
+    undo_act_->setStatusTip("Undo last source edit (Ctrl+Z)");
+    connect(undo_act_, &QAction::triggered, editor_, &CodeEditor::undo);
+
+    redo_act_ = new QAction("&Redo", this);
+    redo_act_->setShortcut(QKeySequence::Redo);
+    redo_act_->setStatusTip("Redo last undone source edit (Ctrl+Y)");
+    connect(redo_act_, &QAction::triggered, editor_, &CodeEditor::redo);
+
+    cut_act_ = new QAction("Cu&t", this);
+    cut_act_->setShortcut(QKeySequence::Cut);
+    cut_act_->setStatusTip("Cut selected text to clipboard (Ctrl+X)");
+    connect(cut_act_, &QAction::triggered, editor_, &CodeEditor::cut);
+
+    copy_act_ = new QAction("&Copy", this);
+    copy_act_->setShortcut(QKeySequence::Copy);
+    copy_act_->setStatusTip("Copy selected text to clipboard (Ctrl+C)");
+    connect(copy_act_, &QAction::triggered, editor_, &CodeEditor::copy);
+
+    paste_act_ = new QAction("&Paste", this);
+    paste_act_->setShortcut(QKeySequence::Paste);
+    paste_act_->setStatusTip("Paste text from clipboard (Ctrl+V)");
+    connect(paste_act_, &QAction::triggered, editor_, &CodeEditor::paste);
+
+    select_all_act_ = new QAction("Select &All", this);
+    select_all_act_->setShortcut(QKeySequence::SelectAll);
+    select_all_act_->setStatusTip("Select all text in editor (Ctrl+A)");
+    connect(select_all_act_, &QAction::triggered, editor_, &CodeEditor::selectAll);
+
+    find_act_ = new QAction("&Find...", this);
+    find_act_->setShortcut(QKeySequence::Find);
+    find_act_->setStatusTip("Find text in the assembly source editor (Ctrl+F)");
+    connect(find_act_, &QAction::triggered, this, &MainWindow::onFind);
+
+    find_next_act_ = new QAction("Find &Next", this);
+    find_next_act_->setShortcut(QKeySequence::FindNext);
+    find_next_act_->setStatusTip("Jump to next match (F3)");
+    connect(find_next_act_, &QAction::triggered, this, &MainWindow::onFindNext);
+
+    find_prev_act_ = new QAction("Find &Previous", this);
+    find_prev_act_->setShortcut(QKeySequence::FindPrevious);
+    find_prev_act_->setStatusTip("Jump to previous match (Shift+F3)");
+    connect(find_prev_act_, &QAction::triggered, this, &MainWindow::onFindPrevious);
+
+    goto_line_act_ = new QAction("&Go to Line...", this);
+    goto_line_act_->setShortcut(QKeySequence(tr("Ctrl+G")));
+    goto_line_act_->setStatusTip("Go to specified line number (Ctrl+G)");
+    connect(goto_line_act_, &QAction::triggered, this, &MainWindow::onGoToLine);
+
+    zoom_in_act_ = new QAction("Zoom &In", this);
+    zoom_in_act_->setShortcut(QKeySequence::ZoomIn);
+    zoom_in_act_->setStatusTip("Increase editor font size (Ctrl++)");
+    connect(zoom_in_act_, &QAction::triggered, editor_, &CodeEditor::zoomIn);
+
+    zoom_out_act_ = new QAction("Zoom &Out", this);
+    zoom_out_act_->setShortcut(QKeySequence::ZoomOut);
+    zoom_out_act_->setStatusTip("Decrease editor font size (Ctrl+-)");
+    connect(zoom_out_act_, &QAction::triggered, editor_, &CodeEditor::zoomOut);
+
+    reset_zoom_act_ = new QAction("&Reset Zoom", this);
+    reset_zoom_act_->setShortcut(QKeySequence(tr("Ctrl+0")));
+    reset_zoom_act_->setStatusTip("Reset editor font size to default (Ctrl+0)");
+    connect(reset_zoom_act_, &QAction::triggered, editor_, &CodeEditor::resetZoom);
+
+    // -----------------------------------------------------------------
+    // Actions: View
+    // -----------------------------------------------------------------
+    welcome_screen_act_ = new QAction("&Welcome Screen", this);
+    welcome_screen_act_->setStatusTip("Show the Welcome dashboard with recent files and quick start options");
+    connect(welcome_screen_act_, &QAction::triggered, this, &MainWindow::showWelcomeScreen);
+
+    show_editor_act_ = new QAction("Code &Editor", this);
+    show_editor_act_->setStatusTip("Switch view to the main assembly code editor");
+    connect(show_editor_act_, &QAction::triggered, this, &MainWindow::showEditor);
+
+    restore_default_layout_act_ = new QAction("&Restore Default Layout", this);
+    restore_default_layout_act_->setStatusTip("Reset window docks and proportions to default workbench layout");
+    connect(restore_default_layout_act_, &QAction::triggered, this, &MainWindow::onRestoreDefaultLayout);
 
     // -----------------------------------------------------------------
     // Actions: Execution & Debug
@@ -226,6 +401,27 @@ void MainWindow::setupMenusAndToolbars() {
     });
 
     // -----------------------------------------------------------------
+    // Actions: Help
+    // -----------------------------------------------------------------
+    tutorial_act_ = new QAction("Interactive &Tutorial...", this);
+    tutorial_act_->setStatusTip("Take a step-by-step interactive guided tour of BitForge features");
+    connect(tutorial_act_, &QAction::triggered, this, &MainWindow::onStartTutorial);
+
+    browse_examples_act_ = new QAction("&Browse Example Library...", this);
+    browse_examples_act_->setStatusTip("Browse 51 categorized assembly programs with syntax previews");
+    connect(browse_examples_act_, &QAction::triggered, this, &MainWindow::onBrowseExamples);
+
+    about_act_ = new QAction("&About BitForge", this);
+    about_act_->setStatusTip("About BitForge educational emulator");
+    connect(about_act_, &QAction::triggered, this, [this]() {
+        QMessageBox::about(this, "About BitForge",
+                           "<b>BitForge</b> — Educational 8-Bit Computer Workbench<br>"
+                           "Version 0.1.0<br><br>"
+                           "Emulated 8-bit CPU, 64 KiB memory, virtual I/O devices, "
+                           "two-pass assembler, and native Qt 6 desktop debugger.");
+    });
+
+    // -----------------------------------------------------------------
     // Menus
     // -----------------------------------------------------------------
     auto* file_menu = menuBar()->addMenu("&File");
@@ -235,6 +431,33 @@ void MainWindow::setupMenusAndToolbars() {
     file_menu->addAction(save_as_act_);
     file_menu->addSeparator();
     file_menu->addAction(exit_act_);
+
+    auto* edit_menu = menuBar()->addMenu("&Edit");
+    edit_menu->addAction(undo_act_);
+    edit_menu->addAction(redo_act_);
+    edit_menu->addSeparator();
+    edit_menu->addAction(cut_act_);
+    edit_menu->addAction(copy_act_);
+    edit_menu->addAction(paste_act_);
+    edit_menu->addAction(select_all_act_);
+    edit_menu->addSeparator();
+    edit_menu->addAction(find_act_);
+    edit_menu->addAction(find_next_act_);
+    edit_menu->addAction(find_prev_act_);
+    edit_menu->addAction(goto_line_act_);
+    edit_menu->addSeparator();
+    edit_menu->addAction(zoom_in_act_);
+    edit_menu->addAction(zoom_out_act_);
+    edit_menu->addAction(reset_zoom_act_);
+
+    auto* view_menu = menuBar()->addMenu("&View");
+    view_menu->addAction(welcome_screen_act_);
+    view_menu->addAction(show_editor_act_);
+    view_menu->addSeparator();
+    view_menu->addAction(right_dock_->toggleViewAction());
+    view_menu->addAction(bottom_dock_->toggleViewAction());
+    view_menu->addSeparator();
+    view_menu->addAction(restore_default_layout_act_);
 
     auto* exec_menu = menuBar()->addMenu("&Execution");
     exec_menu->addAction(assemble_act_);
@@ -261,15 +484,12 @@ void MainWindow::setupMenusAndToolbars() {
     exec_menu->addAction(shortcuts_act_);
 
     auto* help_menu = menuBar()->addMenu("&Help");
+    help_menu->addAction(tutorial_act_);
+    help_menu->addAction(browse_examples_act_);
+    help_menu->addSeparator();
     help_menu->addAction(shortcuts_act_);
     help_menu->addSeparator();
-    help_menu->addAction("&About BitForge", this, [this]() {
-        QMessageBox::about(this, "About BitForge",
-                           "<b>BitForge</b> — Educational 8-Bit Computer Workbench<br>"
-                           "Version 0.1.0<br><br>"
-                           "Emulated 8-bit CPU, 64 KiB memory, virtual I/O devices, "
-                           "two-pass assembler, and native Qt 6 desktop debugger.");
-    });
+    help_menu->addAction(about_act_);
 
     // -----------------------------------------------------------------
     // Toolbar: Primary Execution Controls
@@ -330,23 +550,155 @@ void MainWindow::setupMenusAndToolbars() {
     toolbar->addWidget(spacer);
 
     state_badge_ = new QLabel(" READY ", toolbar);
-    state_badge_->setStyleSheet(
-        "QLabel { background-color: #28a745; color: white; font-weight: bold; "
-        "border-radius: 4px; padding: 3px 8px; }"
-    );
+    state_badge_->setStyleSheet(theme::stateBadgeStyle(MachineState::Ready, false, false));
     toolbar->addWidget(state_badge_);
 }
 
 void MainWindow::setupStatusBar() {
     status_file_label_ = new QLabel("[Untitled]", this);
+    status_cursor_label_ = new QLabel("Ln 1, Col 1", this);
     status_state_label_ = new QLabel("READY", this);
     status_pc_label_ = new QLabel("PC: 0x0200", this);
     status_steps_label_ = new QLabel("Steps: 0", this);
 
     statusBar()->addWidget(status_file_label_, 1);
+    statusBar()->addPermanentWidget(status_cursor_label_);
     statusBar()->addPermanentWidget(status_state_label_);
     statusBar()->addPermanentWidget(status_pc_label_);
     statusBar()->addPermanentWidget(status_steps_label_);
+}
+
+void MainWindow::loadSettings() {
+    QSettings settings("BitForge", "BitForge");
+    if (settings.contains("geometry")) {
+        restoreGeometry(settings.value("geometry").toByteArray());
+    }
+    if (settings.contains("windowState")) {
+        restoreState(settings.value("windowState").toByteArray());
+    }
+    QStringList recents = settings.value("recentFiles").toStringList();
+    QStringList valid_recents;
+    for (const auto& path : recents) {
+        if (QFile::exists(path)) {
+            valid_recents.append(path);
+        }
+    }
+    if (welcome_widget_) {
+        welcome_widget_->setRecentFiles(valid_recents);
+    }
+}
+
+void MainWindow::saveSettings() {
+    QSettings settings("BitForge", "BitForge");
+    settings.setValue("geometry", saveGeometry());
+    settings.setValue("windowState", saveState());
+}
+
+void MainWindow::updateRecentFilesList(const QString& filePath) {
+    if (filePath.isEmpty() || !QFile::exists(filePath)) return;
+    QSettings settings("BitForge", "BitForge");
+    QStringList recents = settings.value("recentFiles").toStringList();
+    QString abs_path = QFileInfo(filePath).absoluteFilePath();
+    recents.removeAll(abs_path);
+    recents.prepend(abs_path);
+    while (recents.size() > 10) {
+        recents.removeLast();
+    }
+    settings.setValue("recentFiles", recents);
+    if (welcome_widget_) {
+        welcome_widget_->setRecentFiles(recents);
+    }
+}
+
+void MainWindow::showWelcomeScreen() {
+    central_stack_->setCurrentWidget(welcome_widget_);
+}
+
+void MainWindow::showEditor() {
+    central_stack_->setCurrentWidget(editor_container_);
+    editor_->setFocus();
+}
+
+void MainWindow::onFind() {
+    showEditor();
+    find_bar_->showAndFocus();
+    QTextCursor cursor = editor_->textCursor();
+    if (cursor.hasSelection() && !cursor.selectedText().isEmpty()) {
+        find_bar_->searchInput()->setText(cursor.selectedText());
+    }
+    find_bar_->searchInput()->setFocus();
+    find_bar_->searchInput()->selectAll();
+}
+
+void MainWindow::onFindNext() {
+    if (!find_bar_->isVisible()) {
+        onFind();
+    } else {
+        find_bar_->triggerFindNext();
+    }
+}
+
+void MainWindow::onFindPrevious() {
+    if (!find_bar_->isVisible()) {
+        onFind();
+    } else {
+        find_bar_->triggerFindPrevious();
+    }
+}
+
+void MainWindow::onGoToLine() {
+    showEditor();
+    int total_lines = std::max(1, editor_->document()->blockCount());
+    int current_line = editor_->textCursor().blockNumber() + 1;
+    bool ok = false;
+    int target = QInputDialog::getInt(
+        this, "Go to Line",
+        QString("Enter line number (1 - %1):").arg(total_lines),
+        current_line, 1, total_lines, 1, &ok
+    );
+    if (ok) {
+        editor_->gotoLine(static_cast<std::size_t>(target), 1);
+    }
+}
+
+void MainWindow::onRestoreDefaultLayout() {
+    addDockWidget(Qt::RightDockWidgetArea, right_dock_);
+    addDockWidget(Qt::BottomDockWidgetArea, bottom_dock_);
+    right_dock_->show();
+    bottom_dock_->show();
+    right_dock_->setFloating(false);
+    bottom_dock_->setFloating(false);
+    resize(1240, 820);
+    showEditor();
+    statusBar()->showMessage("Workbench layout restored to default proportions.", 3000);
+}
+
+void MainWindow::onBrowseExamples() {
+    ExamplesDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        QString path = dialog.selectedExamplePath();
+        if (!path.isEmpty()) {
+            if (loadFile(path)) {
+                showEditor();
+            }
+        }
+    }
+}
+
+void MainWindow::onStartTutorial() {
+    if (!active_tutorial_) {
+        active_tutorial_ = new TutorialGuide(this);
+        active_tutorial_->setController(controller_);
+        connect(active_tutorial_, &TutorialGuide::loadTutorialExampleRequested, this, [this]() {
+            QString path = resolveExamplePath("examples/01_arithmetic.asm");
+            if (loadFile(path)) {
+                showEditor();
+            }
+        });
+    }
+    active_tutorial_->show();
+    active_tutorial_->raise();
+    active_tutorial_->activateWindow();
 }
 
 void MainWindow::updateUiState() {
@@ -382,49 +734,26 @@ void MainWindow::updateUiState() {
     // Update state badge
     if (is_executing) {
         state_badge_->setText(" EXECUTING ");
-        state_badge_->setStyleSheet(
-            "QLabel { background-color: #007bff; color: white; font-weight: bold; "
-            "border-radius: 4px; padding: 3px 8px; }"
-        );
     } else if (is_stale) {
         state_badge_->setText(" STALE (Reassemble) ");
-        state_badge_->setStyleSheet(
-            "QLabel { background-color: #fd7e14; color: white; font-weight: bold; "
-            "border-radius: 4px; padding: 3px 8px; }"
-        );
     } else {
         switch (st) {
             case MachineState::Ready:
                 state_badge_->setText(" READY ");
-                state_badge_->setStyleSheet(
-                    "QLabel { background-color: #28a745; color: white; font-weight: bold; "
-                    "border-radius: 4px; padding: 3px 8px; }"
-                );
                 break;
             case MachineState::Running:
             case MachineState::Paused:
                 state_badge_->setText(" PAUSED ");
-                state_badge_->setStyleSheet(
-                    "QLabel { background-color: #ffc107; color: black; font-weight: bold; "
-                    "border-radius: 4px; padding: 3px 8px; }"
-                );
                 break;
             case MachineState::Halted:
                 state_badge_->setText(" HALTED ");
-                state_badge_->setStyleSheet(
-                    "QLabel { background-color: #6c757d; color: white; font-weight: bold; "
-                    "border-radius: 4px; padding: 3px 8px; }"
-                );
                 break;
             case MachineState::Faulted:
                 state_badge_->setText(" FAULTED ");
-                state_badge_->setStyleSheet(
-                    "QLabel { background-color: #dc3545; color: white; font-weight: bold; "
-                    "border-radius: 4px; padding: 3px 8px; }"
-                );
                 break;
         }
     }
+    state_badge_->setStyleSheet(theme::stateBadgeStyle(st, is_executing, is_stale));
 
     // Update status bar
     status_state_label_->setText(state_badge_->text().trimmed());
@@ -461,6 +790,7 @@ void MainWindow::newFile() {
         editor_->clear();
         setCurrentFile(QString());
         controller_->unloadProgram();
+        showEditor();
     }
 }
 
@@ -490,6 +820,8 @@ bool MainWindow::loadFile(const QString& filePath) {
     editor_->setPlainText(in.readAll());
     setCurrentFile(filePath);
     controller_->unloadProgram();
+    updateRecentFilesList(filePath);
+    showEditor();
     statusBar()->showMessage(QString("Loaded %1").arg(filePath), 3000);
     return true;
 }
@@ -549,6 +881,7 @@ bool MainWindow::saveFile(const QString& filePath) {
     QTextStream out(&file);
     out << editor_->toPlainText();
     setCurrentFile(filePath);
+    updateRecentFilesList(filePath);
     statusBar()->showMessage(QString("Saved %1").arg(filePath), 3000);
     return true;
 }
@@ -572,6 +905,7 @@ bool MainWindow::maybeSave() {
 
 void MainWindow::closeEvent(QCloseEvent* event) {
     if (maybeSave()) {
+        saveSettings();
         event->accept();
     } else {
         event->ignore();
@@ -579,6 +913,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::onAssemble() {
+    showEditor();
     const QString code = editor_->toPlainText();
     bool ok = controller_->assemble(code);
     if (ok) {
@@ -589,6 +924,7 @@ void MainWindow::onAssemble() {
 }
 
 void MainWindow::onRun() {
+    showEditor();
     if (controller_->isStale()) {
         statusBar()->showMessage("Source modified since last assembly. Please reassemble (F7) before running.", 5000);
         return;
@@ -598,6 +934,7 @@ void MainWindow::onRun() {
 }
 
 void MainWindow::onContinue() {
+    showEditor();
     if (controller_->isStale()) {
         statusBar()->showMessage("Source modified since last assembly. Please reassemble (F7) before continuing.", 5000);
         return;
@@ -612,6 +949,7 @@ void MainWindow::onContinue() {
 }
 
 void MainWindow::onStep() {
+    showEditor();
     if (controller_->isStale()) {
         statusBar()->showMessage("Source modified since last assembly. Please reassemble (F7) before stepping.", 5000);
         return;
@@ -620,6 +958,7 @@ void MainWindow::onStep() {
 }
 
 void MainWindow::onReset() {
+    showEditor();
     controller_->reset();
     statusBar()->showMessage("Execution reset to entry point.", 3000);
 }
@@ -640,6 +979,7 @@ void MainWindow::onSpeedComboChanged(int index) {
 }
 
 void MainWindow::onToggleBreakpoint() {
+    showEditor();
     editor_->toggleBreakpointAtCursor();
 }
 
@@ -669,6 +1009,11 @@ void MainWindow::showKeyboardShortcuts() {
         "<tr><td><b>Ctrl+O</b></td><td>Open File</td><td>Opens an existing assembly file</td></tr>"
         "<tr><td><b>Ctrl+S</b></td><td>Save</td><td>Saves the current file to disk</td></tr>"
         "<tr><td><b>Ctrl+Shift+S</b></td><td>Save As</td><td>Saves current file to a new path</td></tr>"
+        "<tr><td><b>Ctrl+F</b></td><td>Find</td><td>Opens the inline find/search bar</td></tr>"
+        "<tr><td><b>F3 / Shift+F3</b></td><td>Find Next / Prev</td><td>Navigates between search matches</td></tr>"
+        "<tr><td><b>Ctrl+G</b></td><td>Go to Line</td><td>Jump directly to a line number</td></tr>"
+        "<tr><td><b>Ctrl++ / Ctrl+-</b></td><td>Zoom In / Out</td><td>Adjust editor font size</td></tr>"
+        "<tr><td><b>Ctrl+0</b></td><td>Reset Zoom</td><td>Restore default editor font size</td></tr>"
         "</table>"
     );
 }

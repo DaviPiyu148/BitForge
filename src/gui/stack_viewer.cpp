@@ -23,8 +23,8 @@ StackViewer::StackViewer(QWidget* parent)
     header_label_->setFont(mono_font);
     top_layout->addWidget(header_label_);
 
-    status_label_ = new QLabel("Empty stack (SP = 0xFFFF)", this);
-    status_label_->setStyleSheet("QLabel { color: #6c757d; font-style: italic; }");
+    status_label_ = new QLabel("Empty stack (SP = 0xFFFF sentinel per ADR-001; no items pushed)", this);
+    status_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; }");
     top_layout->addWidget(status_label_);
     top_layout->addStretch();
 
@@ -74,8 +74,8 @@ void StackViewer::refresh() {
     }
 
     if (stack_info.is_empty) {
-        status_label_->setText("Empty stack (SP = 0xFFFF)");
-        status_label_->setStyleSheet("QLabel { color: #6c757d; font-style: italic; }");
+        status_label_->setText("Empty stack (SP = 0xFFFF sentinel per ADR-001; no items pushed)");
+        status_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; }");
         table_->setRowCount(0);
         return;
     }

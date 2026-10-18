@@ -167,6 +167,11 @@ if (BITFORGE_BUILD_GUI)
         include/bitforge/gui/breakpoints_panel.hpp
         include/bitforge/gui/trace_panel.hpp
         include/bitforge/gui/instruction_inspector.hpp
+        include/bitforge/gui/theme.hpp
+        include/bitforge/gui/find_replace_bar.hpp
+        include/bitforge/gui/welcome_widget.hpp
+        include/bitforge/gui/examples_dialog.hpp
+        include/bitforge/gui/tutorial_guide.hpp
         include/bitforge/gui/main_window.hpp
     )
 
@@ -185,6 +190,11 @@ if (BITFORGE_BUILD_GUI)
         src/gui/trace_panel.cpp
         src/gui/instruction_inspector.cpp
         src/gui/execution_controller.cpp
+        src/gui/theme.cpp
+        src/gui/find_replace_bar.cpp
+        src/gui/welcome_widget.cpp
+        src/gui/examples_dialog.cpp
+        src/gui/tutorial_guide.cpp
         ${BITFORGE_GUI_HEADERS}
     )
 

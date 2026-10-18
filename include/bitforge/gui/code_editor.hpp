@@ -12,7 +12,7 @@ namespace bitforge::gui {
 
 class ExecutionController;
 
-// Source code editor with line numbers, breakpoint gutter, execution indicators, and syntax highlighting
+// Source code editor with line numbers, breakpoint gutter, execution indicators, syntax highlighting, and zoom
 class CodeEditor : public QPlainTextEdit {
     Q_OBJECT
 
@@ -35,17 +35,33 @@ public:
     void toggleBreakpointAtCursor();
     [[nodiscard]] std::size_t currentCursorLine() const noexcept;
 
+    // Zooming
+    void zoomIn(int delta = 1);
+    void zoomOut(int delta = 1);
+    void resetZoom();
+    [[nodiscard]] int currentFontSize() const noexcept { return current_font_size_; }
+
+    // Search
+    bool findText(const QString& text, bool forward, bool caseSensitive, int* matchIdx = nullptr, int* totalMatches = nullptr);
+    void clearFindMatches();
+
+signals:
+    void cursorLineColumnChanged(int line, int column);
+
 public slots:
     void updateBreakpoints();
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 private slots:
     void updateLineNumberAreaWidth(int newBlockCount);
     void updateLineNumberArea(const QRect& rect, int dy);
     void highlightLines();
+    void onCursorPositionChanged();
 
 private:
     LineNumberArea* line_number_area_;
@@ -54,6 +70,8 @@ private:
 
     std::size_t current_pc_line_{0};
     std::set<std::size_t> active_breakpoint_lines_;
+    int default_font_size_{10};
+    int current_font_size_{10};
 };
 
 } // namespace bitforge::gui

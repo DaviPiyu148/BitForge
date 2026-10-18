@@ -1,6 +1,7 @@
 #include "bitforge/gui/registers_panel.hpp"
 #include "bitforge/gui/execution_controller.hpp"
 #include "bitforge/gui/bit_view_widget.hpp"
+#include "bitforge/gui/theme.hpp"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -22,31 +23,11 @@ QString formatHexByte(byte_t val) {
 }
 
 void applyFlagStyle(QLabel* label, bool active) {
-    if (active) {
-        label->setStyleSheet(
-            "QLabel { background-color: #28a745; color: white; font-weight: bold; "
-            "border-radius: 3px; padding: 2px 6px; }"
-        );
-    } else {
-        label->setStyleSheet(
-            "QLabel { background-color: #e9ecef; color: #adb5bd; font-weight: normal; "
-            "border-radius: 3px; padding: 2px 6px; }"
-        );
-    }
+    label->setStyleSheet(theme::flagBadgeStyle(active));
 }
 
 void applyValueStyle(QLabel* label, bool changed) {
-    if (changed) {
-        label->setStyleSheet(
-            "QLabel { background-color: #fff3cd; color: #856404; font-weight: bold; "
-            "border: 1px solid #ffeeba; border-radius: 2px; padding: 1px 4px; }"
-        );
-    } else {
-        label->setStyleSheet(
-            "QLabel { background-color: transparent; color: inherit; font-weight: normal; "
-            "border: 1px solid transparent; padding: 1px 4px; }"
-        );
-    }
+    label->setStyleSheet(theme::changedRegisterStyle(changed));
 }
 
 } // namespace
@@ -209,23 +190,23 @@ void RegistersPanel::refresh() {
     switch (st) {
         case MachineState::Ready:
             state_label_->setText("READY");
-            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #28a745; }");
+            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #98c379; }");
             break;
         case MachineState::Running:
             state_label_->setText("RUNNING");
-            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #007bff; }");
+            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #61afef; }");
             break;
         case MachineState::Paused:
             state_label_->setText("PAUSED");
-            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #fd7e14; }");
+            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #e5c07b; }");
             break;
         case MachineState::Halted:
             state_label_->setText("HALTED");
-            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #6c757d; }");
+            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #7f848e; }");
             break;
         case MachineState::Faulted:
             state_label_->setText("FAULTED");
-            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #dc3545; }");
+            state_label_->setStyleSheet("QLabel { font-weight: bold; color: #e06c75; }");
             break;
     }
 

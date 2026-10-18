@@ -120,6 +120,11 @@ DevicesPanel::DevicesPanel(QWidget* parent)
     diag_table_->horizontalHeader()->setStretchLastSection(true);
 
     diag_layout->addWidget(diag_table_);
+
+    diag_empty_label_ = new QLabel("No assembler diagnostics or runtime faults reported.", diag_tab);
+    diag_empty_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; padding: 4px; }");
+    diag_layout->addWidget(diag_empty_label_);
+
     tabs->addTab(diag_tab, "Diagnostics");
 
     connect(diag_table_, &QTableWidget::cellDoubleClicked, this, &DevicesPanel::onDiagnosticTableClicked);
@@ -271,6 +276,10 @@ void DevicesPanel::showDiagnostics() {
         QString fault_msg = QString("%1: %2").arg(to_string(fault.type).data()).arg(QString::fromStdString(fault.message));
         auto* item_msg = new QTableWidgetItem(fault_msg);
         diag_table_->setItem(row, 3, item_msg);
+    }
+
+    if (diag_empty_label_ != nullptr) {
+        diag_empty_label_->setVisible(diag_table_->rowCount() == 0);
     }
 }
 
