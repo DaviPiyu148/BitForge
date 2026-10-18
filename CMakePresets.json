@@ -127,6 +127,16 @@
       "output": {
         "outputOnFailure": true
       }
+    },
+    {
+      "name": "gui-release",
+      "displayName": "GUI Release Tests",
+      "description": "Run unit and GUI test suites for GUI Release configuration",
+      "configurePreset": "gui-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }
