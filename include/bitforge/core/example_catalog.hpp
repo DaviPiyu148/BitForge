@@ -42,7 +42,7 @@ inline constexpr std::array<ExampleEntry, 51> kExampleCatalog = {{
     {"examples/01_arithmetic.asm", "Quick Starts", "01 Arithmetic & Memory", ExampleKind::Runnable,
      "Fundamental addition and memory store to 0x8000.", "Halted", "R0=0x1E (30), Memory[0x8000]=0x1E", ""},
     {"examples/02_io_demo.asm", "Quick Starts", "02 Virtual I/O Demo", ExampleKind::Runnable,
-     "Demonstrates text console, numeric display, and LED peripheral output.", "Halted", "Text: 'HI!', Num: 42, LEDs: 0xAA", ""},
+     "Demonstrates text console, numeric display, and LED peripheral output.", "Halted", "Text: 'HI!', Num: 42, LEDs: 0x55", ""},
 
     // 1. Fundamentals
     {"examples/fundamentals/01_nop_halt.asm", "Fundamentals", "01 NOP and HALT", ExampleKind::Runnable,

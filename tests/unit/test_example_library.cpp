@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <set>
 #include <memory>
 
 using namespace bitforge;
@@ -731,6 +732,32 @@ TEST(ExampleLibrary, Audit_VirtualPortAssignmentsAndLedDevice) {
 TEST(ExampleLibrary, ComprehensiveCatalogRegression51) {
     EXPECT_EQ(kExampleCatalog.size(), 51u);
 
+    // 1. Recursive filesystem discovery of all .asm files under examples/
+    const std::filesystem::path examples_dir = resolve_path("examples");
+    ASSERT_TRUE(std::filesystem::exists(examples_dir));
+    ASSERT_TRUE(std::filesystem::is_directory(examples_dir));
+
+    std::set<std::string> disk_files;
+    for (const auto& dir_entry : std::filesystem::recursive_directory_iterator(examples_dir)) {
+        if (dir_entry.is_regular_file() && dir_entry.path().extension() == ".asm") {
+            std::filesystem::path rel_to_examples = std::filesystem::relative(dir_entry.path(), examples_dir);
+            std::string rel_str = "examples/" + rel_to_examples.generic_string();
+            disk_files.insert(rel_str);
+        }
+    }
+
+    // 2. Catalog duplicate and set verification
+    std::set<std::string> catalog_files;
+    for (const auto& entry : kExampleCatalog) {
+        EXPECT_EQ(catalog_files.count(std::string(entry.relative_path)), 0u);
+        catalog_files.insert(std::string(entry.relative_path));
+    }
+
+    // Strict 1:1 parity assertions
+    EXPECT_EQ(catalog_files.size(), 51u);
+    EXPECT_EQ(disk_files.size(), 51u);
+    EXPECT_EQ(catalog_files, disk_files);
+
     std::size_t passed_count = 0;
     std::vector<std::string> report_lines;
 
@@ -743,6 +770,7 @@ TEST(ExampleLibrary, ComprehensiveCatalogRegression51) {
         Assembler as;
 
         if (entry.kind == ExampleKind::InvalidAssembly) {
+            EXPECT_EQ(entry.expected_stop, "AssemblyError");
             auto res = as.assemble(source);
             EXPECT_FALSE(res.success);
             EXPECT_FALSE(res.diagnostics.empty());
@@ -751,6 +779,7 @@ TEST(ExampleLibrary, ComprehensiveCatalogRegression51) {
                 report_lines.push_back(std::string("[InvalidAssembly] ") + std::string(entry.title) + " -> rejected as expected: " + res.diagnostics.front().message);
             }
         } else if (entry.kind == ExampleKind::RuntimeFault) {
+            EXPECT_EQ(entry.expected_stop, "Faulted");
             auto res = as.assemble(source);
             ASSERT_TRUE(res.success);
 
@@ -765,6 +794,17 @@ TEST(ExampleLibrary, ComprehensiveCatalogRegression51) {
             EXPECT_EQ(exec_res.stop_reason, StopReason::Faulted);
             EXPECT_EQ(session.state(), MachineState::Faulted);
             EXPECT_TRUE(cpu.last_fault().has_fault());
+
+            // Specific architectural fault type matching
+            if (path_str == "examples/faults/01_invalid_opcode_fault.asm") {
+                EXPECT_EQ(cpu.last_fault().type, FaultType::InvalidOpcode);
+            } else if (path_str == "examples/faults/02_stack_underflow_fault.asm") {
+                EXPECT_EQ(cpu.last_fault().type, FaultType::StackUnderflow);
+            } else if (path_str == "examples/faults/03_stack_overflow_fault.asm") {
+                EXPECT_EQ(cpu.last_fault().type, FaultType::StackOverflow);
+            } else if (path_str == "examples/faults/04_invalid_port_fault.asm") {
+                EXPECT_EQ(cpu.last_fault().type, FaultType::InvalidPort);
+            }
 
             if (exec_res.stop_reason == StopReason::Faulted && session.state() == MachineState::Faulted) {
                 passed_count++;
@@ -797,6 +837,7 @@ TEST(ExampleLibrary, ComprehensiveCatalogRegression51) {
                     report_lines.push_back(std::string("[DebuggerDemo] ") + std::string(entry.title) + " -> BreakpointHit as expected");
                 }
             } else {
+                EXPECT_EQ(entry.expected_stop, "Halted");
                 auto exec_res = session.run(100000);
                 EXPECT_EQ(exec_res.stop_reason, StopReason::Halted);
                 if (exec_res.stop_reason == StopReason::Halted) {
@@ -806,6 +847,7 @@ TEST(ExampleLibrary, ComprehensiveCatalogRegression51) {
             }
         } else {
             // Runnable
+            EXPECT_EQ(entry.expected_stop, "Halted");
             auto res = as.assemble(source);
             ASSERT_TRUE(res.success);
 

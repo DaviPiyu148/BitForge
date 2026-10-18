@@ -44,10 +44,12 @@ void print_help(std::ostream& os) {
     os << "BitForge — 8-Bit Computer Emulator, Assembler, and Execution Runner\n\n"
        << "Usage:\n"
        << "  bitforge help | -h | --help\n"
+       << "  bitforge version | -v | --version\n"
        << "  bitforge assemble <source.asm>\n"
        << "  bitforge run <source.asm> [--max-steps N] [--dump-regs]\n\n"
        << "Commands:\n"
        << "  help                     Display this help text\n"
+       << "  version                  Display version and architectural baseline\n"
        << "  assemble <source.asm>    Assemble a source file and display segment information\n"
        << "  run <source.asm>         Assemble and execute a source file on the emulated CPU\n\n"
        << "Options for 'run':\n"
@@ -71,6 +73,11 @@ CliOptions parse_arguments(int argc, const char* const argv[]) {
     std::string_view cmd = argv[1];
     if (cmd == "help" || cmd == "-h" || cmd == "--help") {
         options.command = Subcommand::Help;
+        return options;
+    }
+
+    if (cmd == "version" || cmd == "-v" || cmd == "--version") {
+        options.command = Subcommand::Version;
         return options;
     }
 
@@ -328,6 +335,9 @@ ExitCode run_cli(int argc, const char* const argv[], std::ostream& out, std::ost
     switch (options.command) {
         case Subcommand::Help:
             print_help(out);
+            return ExitCode::Success;
+        case Subcommand::Version:
+            out << "BitForge 0.1.0 (Architecture Specification v1.7)\n";
             return ExitCode::Success;
         case Subcommand::Assemble:
             return execute_assemble(options, out, err);

@@ -26,6 +26,7 @@ enum class ExitCode : int {
 enum class Subcommand {
     None,
     Help,
+    Version,
     Assemble,
     Run
 };

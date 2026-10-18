@@ -72,6 +72,7 @@ New-Item -ItemType Directory -Path $StagingDir -Force | Out-Null
 Write-Host "`n[3/6] Copying executables..." -ForegroundColor Yellow
 Copy-Item -Path $GuiExe -Destination (Join-Path $StagingDir "bitforge_gui.exe") -Force
 if (Test-Path $CliExe) {
+    Copy-Item -Path $CliExe -Destination (Join-Path $StagingDir "bitforge.exe") -Force
     Copy-Item -Path $CliExe -Destination (Join-Path $StagingDir "bitforge_cli.exe") -Force
 }
 
@@ -89,11 +90,36 @@ if ($WinDeployQt -and (Test-Path $WinDeployQt)) {
     Write-Warning "windeployqt.exe not found; relying on manual DLL deployment."
 }
 
-# Guarantee MinGW/UCRT runtimes and critical plugins are present
+# Guarantee MinGW/UCRT runtimes, Qt6 shared dependencies, and critical plugins are present
 $RequiredDlls = @(
     "libstdc++-6.dll",
     "libgcc_s_seh-1.dll",
-    "libwinpthread-1.dll"
+    "libwinpthread-1.dll",
+    "libb2-1.dll",
+    "libdouble-conversion.dll",
+    "libicuin78.dll",
+    "libicuuc78.dll",
+    "libicudt78.dll",
+    "libpcre2-16-0.dll",
+    "zlib1.dll",
+    "libzstd.dll",
+    "libfreetype-6.dll",
+    "libharfbuzz-0.dll",
+    "libmd4c.dll",
+    "libpng16-16.dll",
+    "libbrotlidec.dll",
+    "libjpeg-8.dll",
+    "libgio-2.0-0.dll",
+    "libgobject-2.0-0.dll",
+    "libbz2-1.dll",
+    "libglib-2.0-0.dll",
+    "libgraphite2.dll",
+    "libbrotlicommon.dll",
+    "libintl-8.dll",
+    "libgmodule-2.0-0.dll",
+    "libffi-8.dll",
+    "libpcre2-8-0.dll",
+    "libiconv-2.dll"
 )
 foreach ($dll in $RequiredDlls) {
     $targetPath = Join-Path $StagingDir $dll
@@ -108,20 +134,26 @@ foreach ($dll in $RequiredDlls) {
     }
 }
 
-# Verify platform plugin
-$PlatformPlugin = Join-Path $StagingDir "platforms\qwindows.dll"
-if (-not (Test-Path $PlatformPlugin)) {
-    $SourcePlugin = "C:\msys64\ucrt64\share\qt6\plugins\platforms\qwindows.dll"
-    if (-not (Test-Path $SourcePlugin)) {
-        $SourcePlugin = "C:\msys64\ucrt64\lib\qt6\plugins\platforms\qwindows.dll"
-    }
-    if (Test-Path $SourcePlugin) {
-        $PlatformDir = Join-Path $StagingDir "platforms"
-        New-Item -ItemType Directory -Path $PlatformDir -Force | Out-Null
-        Copy-Item -Path $SourcePlugin -Destination $PlatformPlugin -Force
-        Write-Host "Copied platforms\qwindows.dll manually." -ForegroundColor Gray
-    } else {
-        Write-Warning "qwindows.dll not found in standard paths!"
+# Verify and deploy Qt platform plugins
+$PlatformDir = Join-Path $StagingDir "platforms"
+New-Item -ItemType Directory -Path $PlatformDir -Force | Out-Null
+
+$PlatformPluginsToDeploy = @("qwindows.dll", "qoffscreen.dll", "qminimal.dll")
+foreach ($pName in $PlatformPluginsToDeploy) {
+    $pTarget = Join-Path $PlatformDir $pName
+    if (-not (Test-Path $pTarget)) {
+        $SourcePlugin = "C:\msys64\ucrt64\share\qt6\plugins\platforms\$pName"
+        if (-not (Test-Path $SourcePlugin)) {
+            $SourcePlugin = "C:\msys64\ucrt64\lib\qt6\plugins\platforms\$pName"
+        }
+        if (Test-Path $SourcePlugin) {
+            Copy-Item -Path $SourcePlugin -Destination $pTarget -Force
+            Write-Host "Copied platforms\$pName." -ForegroundColor Gray
+        } else {
+            if ($pName -eq "qwindows.dll") {
+                Write-Warning "$pName not found in standard paths!"
+            }
+        }
     }
 }
 
@@ -174,9 +206,12 @@ if ($Validate) {
 
     $PackagedGui = Join-Path $TestSpaceDir "bitforge_gui.exe"
     $PackagedCli = Join-Path $TestSpaceDir "bitforge_cli.exe"
+    $PackagedCliAlt = Join-Path $TestSpaceDir "bitforge.exe"
     $PackagedPlugin = Join-Path $TestSpaceDir "platforms\qwindows.dll"
 
     if (-not (Test-Path $PackagedGui)) { throw "Validation failed: bitforge_gui.exe missing." }
+    if (-not (Test-Path $PackagedCli)) { throw "Validation failed: bitforge_cli.exe missing." }
+    if (-not (Test-Path $PackagedCliAlt)) { throw "Validation failed: bitforge.exe missing." }
     if (-not (Test-Path $PackagedPlugin)) { throw "Validation failed: platforms\qwindows.dll missing." }
 
     Write-Host "Validating execution under sanitized PATH (C:\Windows\System32;C:\Windows)..." -ForegroundColor Yellow
@@ -185,23 +220,63 @@ if ($Validate) {
         # Strict isolation: only standard Windows system paths
         $env:PATH = "C:\Windows\System32;C:\Windows;C:\Windows\System32\Wbem"
 
-        if (Test-Path $PackagedCli) {
-            $TestAsm = Join-Path $TestSpaceDir "examples\01_arithmetic.asm"
-            $cliOutput = & $PackagedCli run $TestAsm 2>&1
-            Write-Host "Packaged CLI Output:`n$cliOutput" -ForegroundColor Gray
-            if ($LASTEXITCODE -ne 0) {
-                throw "Packaged CLI execution failed with code $LASTEXITCODE under sanitized PATH."
-            }
-            Write-Host "Packaged CLI executed cleanly under sanitized PATH!" -ForegroundColor Green
+        # 1. Validate CLI version command
+        $verOutput = (& $PackagedCli --version 2>&1) -join "`n"
+        Write-Host "CLI --version output: $verOutput" -ForegroundColor Gray
+        if ($LASTEXITCODE -ne 0 -or ($verOutput -notmatch "BitForge 0\.1\.0")) {
+            throw "Packaged CLI --version failed (code: $LASTEXITCODE, output: $verOutput)"
         }
+        Write-Host "Packaged CLI --version passed!" -ForegroundColor Green
 
-        # Check GUI executable starts up without missing DLL dialogs
-        $proc = Start-Process -FilePath $PackagedGui -ArgumentList "--help" -PassThru -NoNewWindow
-        Start-Sleep -Milliseconds 800
-        if (-not $proc.HasExited) {
-            $proc.Kill()
+        # 2. Validate CLI help command
+        $helpOutput = (& $PackagedCli --help 2>&1) -join "`n"
+        if ($LASTEXITCODE -ne 0 -or ($helpOutput -notmatch "Usage:")) {
+            throw "Packaged CLI --help failed (code: $LASTEXITCODE)"
         }
-        Write-Host "Packaged GUI launched successfully without missing DLL errors!" -ForegroundColor Green
+        Write-Host "Packaged CLI --help passed!" -ForegroundColor Green
+
+        # 3. Validate CLI example execution
+        $TestAsm = Join-Path $TestSpaceDir "examples\01_arithmetic.asm"
+        $cliOutput = (& $PackagedCli run $TestAsm --max-steps 1000 --dump-regs 2>&1) -join "`n"
+        Write-Host "Packaged CLI Run Output:`n$cliOutput" -ForegroundColor Gray
+        if ($LASTEXITCODE -ne 0) {
+            throw "Packaged CLI execution failed with code $LASTEXITCODE under sanitized PATH."
+        }
+        Write-Host "Packaged CLI executed cleanly under sanitized PATH!" -ForegroundColor Green
+
+        # 4. Reliable GUI startup and panel initialization verification in offscreen mode
+        Write-Host "Running packaged GUI smoke test with -platform offscreen --smoke-test..." -ForegroundColor Yellow
+        $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+        $pinfo.FileName = $PackagedGui
+        $pinfo.Arguments = "-platform offscreen --smoke-test"
+        $pinfo.RedirectStandardOutput = $true
+        $pinfo.RedirectStandardError = $true
+        $pinfo.UseShellExecute = $false
+        $pinfo.CreateNoWindow = $true
+
+        $guiProc = [System.Diagnostics.Process]::Start($pinfo)
+        $stdoutTask = $guiProc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $guiProc.StandardError.ReadToEndAsync()
+
+        $finished = $guiProc.WaitForExit(10000)
+        if (-not $finished) {
+            $guiProc.Kill()
+            throw "Packaged GUI smoke test timed out after 10000ms."
+        }
+        $stdout = $stdoutTask.Result
+        $stderr = $stderrTask.Result
+
+        Write-Host "Packaged GUI exit code: $($guiProc.ExitCode)" -ForegroundColor Gray
+        if ($stdout) { Write-Host "Packaged GUI stdout:`n$stdout" -ForegroundColor Gray }
+        if ($stderr) { Write-Host "Packaged GUI stderr:`n$stderr" -ForegroundColor Yellow }
+
+        if ($guiProc.ExitCode -ne 0) {
+            throw "Packaged GUI smoke test failed with exit code $($guiProc.ExitCode). Error: $stderr"
+        }
+        if ($stdout -notmatch "\[BitForge Smoke Test\] SUCCESS") {
+            throw "Packaged GUI smoke test did not output expected success message. Output: $stdout"
+        }
+        Write-Host "Packaged GUI smoke test passed cleanly under sanitized PATH!" -ForegroundColor Green
     } finally {
         $env:PATH = $OriginalPath
         # Clean up test space

@@ -1151,4 +1151,197 @@ TEST(Debugger, ExecutionDeltaCapture) {
     EXPECT_NE(str3.find("Port 0x10: output 0x2A"), std::string::npos);
 }
 
+// 13. Architectural Fault Atomicity & Write Journaling Verification
+TEST(Debugger, FaultAtomicity_InvalidOpcode) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    .BYTE 0x03\n"
+    );
+
+    const auto pc_before = ctx.session->pc();
+    const auto sp_before = ctx.session->sp();
+    const auto r0_before = ctx.session->r(0);
+    const auto flags_before = ctx.session->flags();
+
+    auto res = ctx.session->step();
+    EXPECT_EQ(res.stop_reason, StopReason::Faulted);
+    EXPECT_EQ(ctx.session->state(), MachineState::Faulted);
+    EXPECT_TRUE(ctx.cpu.last_fault().has_fault());
+    EXPECT_EQ(ctx.cpu.last_fault().type, FaultType::InvalidOpcode);
+
+    // Architectural Atomicity: PC remains at faulting instruction, registers and flags unchanged
+    EXPECT_EQ(ctx.session->pc(), pc_before);
+    EXPECT_EQ(ctx.session->sp(), sp_before);
+    EXPECT_EQ(ctx.session->r(0), r0_before);
+    EXPECT_EQ(ctx.session->flags().z, flags_before.z);
+    EXPECT_EQ(ctx.session->flags().c, flags_before.c);
+    EXPECT_EQ(ctx.session->flags().n, flags_before.n);
+    EXPECT_EQ(ctx.session->flags().v, flags_before.v);
+
+    // Delta journaling: zero memory writes, zero IO events, no changes
+    auto delta = ctx.session->last_delta();
+    ASSERT_TRUE(delta.has_value());
+    EXPECT_FALSE(delta->has_changes());
+    EXPECT_TRUE(delta->memory_writes.empty());
+    EXPECT_TRUE(delta->io_events.empty());
+    EXPECT_TRUE(delta->register_changes.empty());
+    EXPECT_TRUE(delta->flag_changes.empty());
+}
+
+TEST(Debugger, FaultAtomicity_StackUnderflow) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    POP R0\n"
+    );
+
+    EXPECT_EQ(ctx.session->sp(), 0xFFFF);
+    const auto pc_before = ctx.session->pc();
+    const auto sp_before = ctx.session->sp();
+    const auto r0_before = ctx.session->r(0);
+
+    auto res = ctx.session->step();
+    EXPECT_EQ(res.stop_reason, StopReason::Faulted);
+    EXPECT_EQ(ctx.session->state(), MachineState::Faulted);
+    EXPECT_EQ(ctx.cpu.last_fault().type, FaultType::StackUnderflow);
+
+    // Architectural Atomicity: SP remains 0xFFFF, R0 unchanged, PC unchanged
+    EXPECT_EQ(ctx.session->pc(), pc_before);
+    EXPECT_EQ(ctx.session->sp(), sp_before);
+    EXPECT_EQ(ctx.session->r(0), r0_before);
+
+    // Delta journaling: zero memory writes, zero IO events
+    auto delta = ctx.session->last_delta();
+    ASSERT_TRUE(delta.has_value());
+    EXPECT_FALSE(delta->has_changes());
+    EXPECT_TRUE(delta->memory_writes.empty());
+    EXPECT_TRUE(delta->io_events.empty());
+}
+
+TEST(Debugger, FaultAtomicity_StackOverflow_Push) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    PUSH R0\n"
+        "    JMP start\n"
+    );
+
+    // 4095 pushes brings SP from 0xFFFF down to 0xF000 (last valid stack byte)
+    // 4095 pushes + 4095 jumps = 8190 instructions to reach SP=0xF000 with PC at start
+    for (int i = 0; i < 8190; ++i) {
+        auto r = ctx.session->step();
+        ASSERT_EQ(r.stop_reason, StopReason::StepCompleted);
+    }
+    EXPECT_EQ(ctx.session->sp(), 0xF000);
+    EXPECT_EQ(ctx.session->pc(), 0x0200);
+
+    const auto pc_before = ctx.session->pc();
+    const auto sp_before = ctx.session->sp();
+    const byte_t mem_before = ctx.memory.read_byte(0xEFFF);
+
+    // Next instruction is PUSH R0 at SP=0xF000. It must fault with StackOverflow!
+    auto res = ctx.session->step();
+    EXPECT_EQ(res.stop_reason, StopReason::Faulted);
+    EXPECT_EQ(ctx.session->state(), MachineState::Faulted);
+    EXPECT_EQ(ctx.cpu.last_fault().type, FaultType::StackOverflow);
+
+    // Architectural Atomicity: SP not decremented, memory not written
+    EXPECT_EQ(ctx.session->pc(), pc_before);
+    EXPECT_EQ(ctx.session->sp(), sp_before);
+    EXPECT_EQ(ctx.memory.read_byte(0xEFFF), mem_before);
+
+    // Delta journaling: zero memory writes, no changes committed
+    auto delta = ctx.session->last_delta();
+    ASSERT_TRUE(delta.has_value());
+    EXPECT_FALSE(delta->has_changes());
+    EXPECT_TRUE(delta->memory_writes.empty());
+    EXPECT_TRUE(delta->io_events.empty());
+}
+
+TEST(Debugger, FaultAtomicity_StackOverflow_Call) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    CALL start\n"
+    );
+
+    // Each CALL consumes 2 bytes. From 0xFFFF to 0xF001 takes 2047 CALLs.
+    for (int i = 0; i < 2047; ++i) {
+        auto r = ctx.session->step();
+        ASSERT_EQ(r.stop_reason, StopReason::StepCompleted);
+    }
+    EXPECT_EQ(ctx.session->sp(), 0xF001);
+    EXPECT_EQ(ctx.session->pc(), 0x0200);
+
+    const auto pc_before = ctx.session->pc();
+    const auto sp_before = ctx.session->sp();
+    const byte_t mem_f000 = ctx.memory.read_byte(0xF000);
+    const byte_t mem_efff = ctx.memory.read_byte(0xEFFF);
+
+    // SP is 0xF001 (< 0xF002). This CALL must fault with StackOverflow.
+    auto res = ctx.session->step();
+    EXPECT_EQ(res.stop_reason, StopReason::Faulted);
+    EXPECT_EQ(ctx.session->state(), MachineState::Faulted);
+    EXPECT_EQ(ctx.cpu.last_fault().type, FaultType::StackOverflow);
+
+    // Architectural Atomicity: no return address written, SP unchanged, PC unchanged
+    EXPECT_EQ(ctx.session->pc(), pc_before);
+    EXPECT_EQ(ctx.session->sp(), sp_before);
+    EXPECT_EQ(ctx.memory.read_byte(0xF000), mem_f000);
+    EXPECT_EQ(ctx.memory.read_byte(0xEFFF), mem_efff);
+
+    auto delta = ctx.session->last_delta();
+    ASSERT_TRUE(delta.has_value());
+    EXPECT_FALSE(delta->has_changes());
+    EXPECT_TRUE(delta->memory_writes.empty());
+    EXPECT_TRUE(delta->io_events.empty());
+}
+
+TEST(Debugger, FaultAtomicity_InvalidPort) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 0x55\n"
+        "    OUT 0x30, R0\n"
+    );
+
+    // Step 1: LDI
+    auto res1 = ctx.session->step();
+    EXPECT_EQ(res1.stop_reason, StopReason::StepCompleted);
+    EXPECT_EQ(ctx.session->r(0), 0x55);
+
+    const auto pc_before = ctx.session->pc();
+    const auto sp_before = ctx.session->sp();
+    const auto r0_before = ctx.session->r(0);
+
+    // Step 2: OUT to unmapped port 0x30
+    auto res2 = ctx.session->step();
+    EXPECT_EQ(res2.stop_reason, StopReason::Faulted);
+    EXPECT_EQ(ctx.session->state(), MachineState::Faulted);
+    EXPECT_EQ(ctx.cpu.last_fault().type, FaultType::InvalidPort);
+
+    // Architectural Atomicity: PC unchanged, registers unchanged
+    EXPECT_EQ(ctx.session->pc(), pc_before);
+    EXPECT_EQ(ctx.session->sp(), sp_before);
+    EXPECT_EQ(ctx.session->r(0), r0_before);
+
+    // Delta journaling: 0 IO events, 0 memory writes
+    auto delta = ctx.session->last_delta();
+    ASSERT_TRUE(delta.has_value());
+    EXPECT_FALSE(delta->has_changes());
+    EXPECT_TRUE(delta->io_events.empty());
+    EXPECT_TRUE(delta->memory_writes.empty());
+}
+
 

@@ -59,6 +59,40 @@ TEST(Cli, HelpSubcommand) {
     EXPECT_NE(out.str().find("Exit Codes:"), std::string::npos);
 }
 
+TEST(Cli, VersionFlag) {
+    std::ostringstream out;
+    std::ostringstream err;
+    const char* argv[] = {"bitforge", "--version"};
+    auto code = run_cli(2, argv, out, err);
+
+    EXPECT_EQ(code, ExitCode::Success);
+    EXPECT_TRUE(err.str().empty());
+    EXPECT_NE(out.str().find("BitForge 0.1.0"), std::string::npos);
+    EXPECT_NE(out.str().find("Architecture Specification v1.7"), std::string::npos);
+}
+
+TEST(Cli, VersionShortFlag) {
+    std::ostringstream out;
+    std::ostringstream err;
+    const char* argv[] = {"bitforge", "-v"};
+    auto code = run_cli(2, argv, out, err);
+
+    EXPECT_EQ(code, ExitCode::Success);
+    EXPECT_TRUE(err.str().empty());
+    EXPECT_NE(out.str().find("BitForge 0.1.0"), std::string::npos);
+}
+
+TEST(Cli, VersionSubcommand) {
+    std::ostringstream out;
+    std::ostringstream err;
+    const char* argv[] = {"bitforge", "version"};
+    auto code = run_cli(2, argv, out, err);
+
+    EXPECT_EQ(code, ExitCode::Success);
+    EXPECT_TRUE(err.str().empty());
+    EXPECT_NE(out.str().find("BitForge 0.1.0"), std::string::npos);
+}
+
 TEST(Cli, UsageErrorsNoArguments) {
     std::ostringstream out;
     std::ostringstream err;
