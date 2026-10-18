@@ -1,5 +1,6 @@
 #include "bitforge/gui/trace_panel.hpp"
 #include "bitforge/gui/execution_controller.hpp"
+#include "bitforge/gui/theme.hpp"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -45,7 +46,7 @@ TracePanel::TracePanel(QWidget* parent)
     auto* button_bar = new QHBoxLayout();
     clear_btn_ = new QPushButton("Clear Trace", this);
     empty_label_ = new QLabel("Execution trace empty. Assemble and run/step to record instruction history.", this);
-    empty_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; }");
+    empty_label_->setStyleSheet(theme::emptyStateStyle(true));
 
     button_bar->addWidget(clear_btn_);
     button_bar->addSpacing(12);

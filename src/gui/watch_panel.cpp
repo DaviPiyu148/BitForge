@@ -55,7 +55,7 @@ WatchPanel::WatchPanel(QWidget* parent)
 
     // Empty state label
     empty_label_ = new QLabel("No watch expressions active. Add registers, flags, or memory addresses above.", this);
-    empty_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; padding: 4px; }");
+    empty_label_->setStyleSheet(theme::emptyStateStyle(true));
     main_layout->addWidget(empty_label_);
 
     // Signals & connections
@@ -215,7 +215,7 @@ void WatchPanel::onAddClicked() {
             expr_input_->setStyleSheet("");
             expr_input_->setToolTip("");
         } else {
-            expr_input_->setStyleSheet("QLineEdit { border: 1px solid #e06c75; background-color: #2e2024; }");
+            expr_input_->setStyleSheet(theme::inputStyle(true));
             expr_input_->setToolTip("Invalid watch expression. Supported: R0-R3, IX, PC, SP, Z, C, N, V, [0x8000], 0x8000");
         }
     }

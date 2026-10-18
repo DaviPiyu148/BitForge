@@ -103,12 +103,12 @@ ExamplesDialog::ExamplesDialog(QWidget* parent)
     prev_layout->setSpacing(6);
 
     info_label_ = new QLabel("Program Preview:", prev_container);
-    info_label_->setStyleSheet("QLabel { font-weight: bold; font-size: 13px; color: #61afef; }");
+    info_label_->setStyleSheet(QString("QLabel { font-weight: bold; font-size: 13px; color: %1; }").arg(theme::kAccentBlue.name()));
     prev_layout->addWidget(info_label_);
 
     details_banner_ = new QLabel("", prev_container);
     details_banner_->setTextFormat(Qt::RichText);
-    details_banner_->setStyleSheet("QLabel { background-color: #21252b; color: #abb2bf; border: 1px solid #3e4451; border-radius: 4px; padding: 6px 10px; font-size: 11px; }");
+    details_banner_->setStyleSheet(theme::infoBannerStyle(theme::kBgDark, theme::kTextSecondary, theme::kBorderMedium));
     details_banner_->setWordWrap(true);
     prev_layout->addWidget(details_banner_);
 
@@ -129,7 +129,7 @@ ExamplesDialog::ExamplesDialog(QWidget* parent)
     btn_bar->addStretch();
 
     open_btn_ = new QPushButton("Open in Editor", this);
-    open_btn_->setStyleSheet("QPushButton { background-color: #00adb5; color: white; font-weight: bold; padding: 6px 16px; border-radius: 4px; } QPushButton:disabled { background-color: #2b313a; color: #5c6370; }");
+    open_btn_->setStyleSheet(theme::primaryButtonStyle());
     cancel_btn_ = new QPushButton("Cancel", this);
 
     btn_bar->addWidget(cancel_btn_);

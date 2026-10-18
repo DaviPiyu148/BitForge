@@ -49,8 +49,8 @@ MemoryViewer::MemoryViewer(QWidget* parent)
 
     auto* btn_pc = new QPushButton("Jump to PC", this);
     auto* btn_sp = new QPushButton("Jump to SP", this);
-    btn_pc->setStyleSheet("QPushButton { color: #61afef; font-weight: bold; }");
-    btn_sp->setStyleSheet("QPushButton { color: #4ec9b0; font-weight: bold; }");
+    btn_pc->setStyleSheet(QString("QPushButton { color: %1; font-weight: bold; }").arg(theme::kAccentBlue.name()));
+    btn_sp->setStyleSheet(QString("QPushButton { color: %1; font-weight: bold; }").arg(theme::kAccentTeal.name()));
     top_bar->addWidget(btn_pc);
     top_bar->addWidget(btn_sp);
 

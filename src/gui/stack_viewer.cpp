@@ -1,5 +1,6 @@
 #include "bitforge/gui/stack_viewer.hpp"
 #include "bitforge/gui/execution_controller.hpp"
+#include "bitforge/gui/theme.hpp"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -36,7 +37,7 @@ StackViewer::StackViewer(QWidget* parent)
     top_layout->addWidget(header_label_);
 
     status_label_ = new QLabel("Empty stack (SP = 0xFFFF; no items pushed)", this);
-    status_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; }");
+    status_label_->setStyleSheet(QString("QLabel { color: %1; font-style: italic; }").arg(theme::kTextMuted.name()));
     top_layout->addWidget(status_label_);
     top_layout->addStretch();
 
@@ -80,20 +81,20 @@ void StackViewer::refresh() {
 
     if (stack_info.overflow_or_corrupt) {
         status_label_->setText("CORRUPT / OVERFLOW: Stack pointer out of bounds [0xF000, 0xFFFE]");
-        status_label_->setStyleSheet("QLabel { color: #dc3545; font-weight: bold; }");
+        status_label_->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(theme::kStateFaulted.name()));
         table_->setRowCount(0);
         return;
     }
 
     if (stack_info.is_empty) {
         status_label_->setText("Empty stack (SP = 0xFFFF; no items pushed)");
-        status_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; }");
+        status_label_->setStyleSheet(QString("QLabel { color: %1; font-style: italic; }").arg(theme::kTextMuted.name()));
         table_->setRowCount(0);
         return;
     }
 
     status_label_->setText(QString("Occupied (%1 byte(s))").arg(stack_info.depth));
-    status_label_->setStyleSheet("QLabel { color: #28a745; font-weight: bold; }");
+    status_label_->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(theme::kStateReady.name()));
 
     table_->setRowCount(static_cast<int>(stack_info.entries.size()));
 

@@ -1,5 +1,6 @@
 #include "bitforge/gui/bit_view_widget.hpp"
 #include "bitforge/gui/execution_controller.hpp"
+#include "bitforge/gui/theme.hpp"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -22,20 +23,20 @@ QString formatHexByte(byte_t val) {
 
 void applyBitStyle(QLabel* dot, bool is_set, bool is_16bit) {
     if (is_set) {
-        const QString bg = is_16bit ? "#007bff" : "#28a745";
-        const QString border = is_16bit ? "#0056b3" : "#1e7e34";
+        const QString bg = is_16bit ? theme::kAccentBlue.name() : theme::kStateReady.name();
+        const QString border = is_16bit ? "#4080bf" : "#2e7d32";
         dot->setStyleSheet(QString(
-            "QLabel { background-color: %1; color: white; font-weight: bold; font-size: 9px; "
-            "border-radius: 3px; border: 1px solid %2; min-width: 13px; max-width: 13px; "
+            "QLabel { background-color: %1; color: #181a1f; font-weight: bold; font-size: 9px; "
+            "border-radius: %2px; border: 1px solid %3; min-width: 13px; max-width: 13px; "
             "min-height: 14px; max-height: 14px; text-align: center; }"
-        ).arg(bg, border));
+        ).arg(bg).arg(theme::kRadiusSmall).arg(border));
         dot->setText("1");
     } else {
-        dot->setStyleSheet(
-            "QLabel { background-color: #343a40; color: #6c757d; font-weight: normal; font-size: 9px; "
-            "border-radius: 3px; border: 1px solid #495057; min-width: 13px; max-width: 13px; "
+        dot->setStyleSheet(QString(
+            "QLabel { background-color: %1; color: %2; font-weight: normal; font-size: 9px; "
+            "border-radius: %3px; border: 1px solid %4; min-width: 13px; max-width: 13px; "
             "min-height: 14px; max-height: 14px; text-align: center; }"
-        );
+        ).arg(theme::kBgMedium.name(), theme::kTextMuted.name()).arg(theme::kRadiusSmall).arg(theme::kBorderMedium.name()));
         dot->setText("0");
     }
 }
@@ -195,7 +196,10 @@ void BitViewWidget::updateBitRow16(BitRow16& row, word_t val, bool changed) {
     }
     if (changed) {
         row.container->setStyleSheet(
-            "QWidget { background-color: #3b3218; border-radius: 4px; border: 1px solid #d4a017; }"
+            QString("QWidget { background-color: %1; border-radius: %2px; border: 1px solid %3; }")
+                .arg(theme::kChangedBg.name())
+                .arg(theme::kRadiusControl)
+                .arg(theme::kChangedBorder.name())
         );
     } else {
         row.container->setStyleSheet("QWidget { background-color: transparent; border: 1px solid transparent; }");
@@ -209,7 +213,10 @@ void BitViewWidget::updateBitRow8(BitRow8& row, byte_t val, bool changed) {
     }
     if (changed) {
         row.container->setStyleSheet(
-            "QWidget { background-color: #3b3218; border-radius: 4px; border: 1px solid #d4a017; }"
+            QString("QWidget { background-color: %1; border-radius: %2px; border: 1px solid %3; }")
+                .arg(theme::kChangedBg.name())
+                .arg(theme::kRadiusControl)
+                .arg(theme::kChangedBorder.name())
         );
     } else {
         row.container->setStyleSheet("QWidget { background-color: transparent; border: 1px solid transparent; }");

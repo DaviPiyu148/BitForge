@@ -419,6 +419,20 @@ QString applicationStyleSheet() {
             font-size: 11px;
         }
 
+        /* Progress Bar */
+        QProgressBar {
+            background-color: #282c34;
+            border: 1px solid #3b4048;
+            border-radius: 3px;
+            text-align: center;
+            color: #dcdcdc;
+            font-size: 10px;
+        }
+        QProgressBar::chunk {
+            background-color: #4ec9b0;
+            border-radius: 2px;
+        }
+
         /* Splitter */
         QSplitter::handle {
             background-color: #181a1f;
@@ -426,47 +440,232 @@ QString applicationStyleSheet() {
     )");
 }
 
+QString primaryButtonStyle() {
+    return QString(
+        "QPushButton {"
+        "  background-color: #4ec9b0;"
+        "  color: #181a1f;"
+        "  font-weight: bold;"
+        "  border: 1px solid #4ec9b0;"
+        "  border-radius: %1px;"
+        "  padding: 6px 14px;"
+        "  min-height: %2px;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #5cd8be;"
+        "  border-color: #5cd8be;"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: #3ba28c;"
+        "  border-color: #3ba28c;"
+        "}"
+        "QPushButton:disabled {"
+        "  background-color: #21252b;"
+        "  color: #7f848e;"
+        "  border-color: #2c313a;"
+        "}"
+    ).arg(kRadiusControl).arg(kControlMinHeight);
+}
+
+QString secondaryButtonStyle() {
+    return QString(
+        "QPushButton {"
+        "  background-color: #282c34;"
+        "  color: #dcdcdc;"
+        "  border: 1px solid #3b4048;"
+        "  border-radius: %1px;"
+        "  padding: 5px 12px;"
+        "  min-height: %2px;"
+        "  font-weight: 500;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #3e4451;"
+        "  border-color: #4ec9b0;"
+        "  color: #ffffff;"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: #1b1d23;"
+        "}"
+        "QPushButton:disabled {"
+        "  background-color: #21252b;"
+        "  color: #7f848e;"
+        "  border-color: #2c313a;"
+        "}"
+    ).arg(kRadiusControl).arg(kControlMinHeight);
+}
+
+QString dangerButtonStyle() {
+    return QString(
+        "QPushButton {"
+        "  background-color: #282c34;"
+        "  color: #e06c75;"
+        "  border: 1px solid #e06c75;"
+        "  border-radius: %1px;"
+        "  padding: 5px 12px;"
+        "  min-height: %2px;"
+        "  font-weight: 500;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #3e2023;"
+        "  color: #ffffff;"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: #181a1f;"
+        "}"
+        "QPushButton:disabled {"
+        "  background-color: #21252b;"
+        "  color: #7f848e;"
+        "  border-color: #2c313a;"
+        "}"
+    ).arg(kRadiusControl).arg(kControlMinHeight);
+}
+
+QString compactButtonStyle() {
+    return QString(
+        "QPushButton {"
+        "  background-color: #282c34;"
+        "  color: #dcdcdc;"
+        "  border: 1px solid #3b4048;"
+        "  border-radius: %1px;"
+        "  padding: 3px 8px;"
+        "  font-size: 11px;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #3e4451;"
+        "  border-color: #4ec9b0;"
+        "  color: #ffffff;"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: #1b1d23;"
+        "}"
+    ).arg(kRadiusSmall);
+}
+
+QString inputStyle(bool has_error) {
+    if (has_error) {
+        return QString(
+            "QLineEdit {"
+            "  background-color: #2e2024;"
+            "  color: #ffffff;"
+            "  border: 1px solid #e06c75;"
+            "  border-radius: %1px;"
+            "  padding: 4px 8px;"
+            "  min-height: %2px;"
+            "}"
+        ).arg(kRadiusControl).arg(kControlMinHeight);
+    }
+    return QString(
+        "QLineEdit {"
+        "  background-color: #1e1e1e;"
+        "  color: #dcdcdc;"
+        "  border: 1px solid #3b4048;"
+        "  border-radius: %1px;"
+        "  padding: 4px 8px;"
+        "  min-height: %2px;"
+        "}"
+        "QLineEdit:focus {"
+        "  border: 1px solid #4ec9b0;"
+        "}"
+    ).arg(kRadiusControl).arg(kControlMinHeight);
+}
+
+QString infoBannerStyle(const QColor& bg, const QColor& text, const QColor& border) {
+    return QString(
+        "QLabel {"
+        "  background-color: %1;"
+        "  color: %2;"
+        "  border: 1px solid %3;"
+        "  border-radius: %4px;"
+        "  padding: 6px 10px;"
+        "  font-size: 11px;"
+        "}"
+    ).arg(bg.name(), text.name(), border.name()).arg(kRadiusPanel);
+}
+
+QString welcomeActionCardStyle(const QString& customBg) {
+    const QString bg = customBg.isEmpty() ? "#282c34" : customBg;
+    return QString(
+        "QPushButton {"
+        "  background-color: %1;"
+        "  border: 1px solid #3b4048;"
+        "  border-radius: %2px;"
+        "  text-align: left;"
+        "  padding: 6px 12px;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #3e4451;"
+        "  border-color: #4ec9b0;"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: #181a1f;"
+        "}"
+    ).arg(bg).arg(kRadiusLarge);
+}
+
 QString stateBadgeStyle(bitforge::MachineState state, bool is_executing, bool is_stale) {
+    QString bg;
+    QString fg = "#ffffff";
     if (is_executing) {
-        return "QLabel { background-color: #007acc; color: #ffffff; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 11px; }";
+        bg = kStateRunning.name();
+        fg = "#181a1f";
+    } else if (is_stale) {
+        bg = kStateStale.name();
+        fg = "#181a1f";
+    } else {
+        switch (state) {
+            case MachineState::Ready:
+                bg = kStateReady.name();
+                fg = "#181a1f";
+                break;
+            case MachineState::Running:
+                bg = kStateRunning.name();
+                fg = "#181a1f";
+                break;
+            case MachineState::Paused:
+                bg = kStatePaused.name();
+                fg = "#181a1f";
+                break;
+            case MachineState::Halted:
+                bg = kStateHalted.name();
+                fg = "#dcdcdc";
+                break;
+            case MachineState::Faulted:
+                bg = kStateFaulted.name();
+                fg = "#ffffff";
+                break;
+        }
     }
-    if (is_stale) {
-        return "QLabel { background-color: #d19a66; color: #181a1f; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 11px; }";
-    }
-    switch (state) {
-        case MachineState::Ready:
-            return "QLabel { background-color: #28a745; color: #ffffff; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 11px; }";
-        case MachineState::Running:
-        case MachineState::Paused:
-            return "QLabel { background-color: #e5c07b; color: #181a1f; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 11px; }";
-        case MachineState::Halted:
-            return "QLabel { background-color: #495057; color: #dcdcdc; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 11px; }";
-        case MachineState::Faulted:
-            return "QLabel { background-color: #dc3545; color: #ffffff; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 11px; }";
-    }
-    return "QLabel { background-color: #495057; color: #dcdcdc; border-radius: 4px; padding: 3px 10px; }";
+    return QString(
+        "QLabel { background-color: %1; color: %2; font-weight: bold; border-radius: %3px; padding: 3px 10px; font-size: 11px; }"
+    ).arg(bg, fg).arg(kRadiusPill);
 }
 
 QString flagBadgeStyle(bool active) {
     if (active) {
-        return "QLabel { background-color: #28a745; color: #ffffff; font-weight: bold; border-radius: 3px; padding: 2px 7px; min-width: 14px; }";
+        return QString("QLabel { background-color: %1; color: #181a1f; font-weight: bold; border-radius: %2px; padding: 2px 7px; min-width: 14px; }")
+            .arg(kStateReady.name()).arg(kRadiusSmall);
     }
-    return "QLabel { background-color: #2c313a; color: #5c6370; font-weight: normal; border: 1px solid #3b4048; border-radius: 3px; padding: 2px 7px; min-width: 14px; }";
+    return QString("QLabel { background-color: #2c313a; color: %1; font-weight: normal; border: 1px solid #3b4048; border-radius: %2px; padding: 2px 7px; min-width: 14px; }")
+        .arg(kTextMuted.name()).arg(kRadiusSmall);
 }
 
 QString changedRegisterStyle(bool changed) {
     if (changed) {
-        return "QLabel { background-color: #3e3520; color: #ffd54f; font-weight: bold; border: 1px solid #b28900; border-radius: 3px; padding: 1px 5px; }";
+        return QString("QLabel { background-color: %1; color: %2; font-weight: bold; border: 1px solid %3; border-radius: %4px; padding: 1px 5px; }")
+            .arg(kChangedBg.name(), kChangedText.name(), kChangedBorder.name()).arg(kRadiusSmall);
     }
     return "QLabel { background-color: transparent; color: #dcdcdc; font-weight: normal; border: 1px solid transparent; padding: 1px 5px; }";
 }
 
 QString changedMemoryCellStyle() {
-    return "background-color: #3e3520; color: #ffd54f; font-weight: bold;";
+    return QString("background-color: %1; color: %2; font-weight: bold;")
+        .arg(kChangedBg.name(), kChangedText.name());
 }
 
-QString emptyStateStyle() {
-    return "QLabel { color: #7f848e; font-style: italic; font-size: 12px; padding: 16px; background-color: transparent; }";
+QString emptyStateStyle(bool compact) {
+    const int padding = compact ? 4 : 16;
+    return QString("QLabel { color: %1; font-style: italic; font-size: 11px; padding: %2px; background-color: transparent; }")
+        .arg(kTextMuted.name()).arg(padding);
 }
 
 } // namespace bitforge::gui::theme

@@ -1,6 +1,7 @@
 #include "bitforge/gui/breakpoints_panel.hpp"
 #include "bitforge/gui/execution_controller.hpp"
 #include "bitforge/gui/instruction_inspector.hpp"
+#include "bitforge/gui/theme.hpp"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -36,7 +37,7 @@ BreakpointsPanel::BreakpointsPanel(QWidget* parent)
     remove_btn_ = new QPushButton("Remove Selected", this);
     clear_all_btn_ = new QPushButton("Clear All", this);
     empty_label_ = new QLabel("No breakpoints configured. Click editor gutter or press F9 to toggle.", this);
-    empty_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; }");
+    empty_label_->setStyleSheet(theme::emptyStateStyle(true));
 
     button_bar->addWidget(remove_btn_);
     button_bar->addWidget(clear_all_btn_);

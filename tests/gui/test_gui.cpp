@@ -3,6 +3,16 @@
 #include "bitforge/gui/devices_panel.hpp"
 #include "bitforge/gui/seven_segment_display.hpp"
 #include "bitforge/gui/examples_dialog.hpp"
+#include "bitforge/gui/tutorial_guide.hpp"
+#include "bitforge/gui/instruction_inspector.hpp"
+#include "bitforge/gui/breakpoints_panel.hpp"
+#include "bitforge/gui/trace_panel.hpp"
+#include "bitforge/gui/memory_viewer.hpp"
+#include "bitforge/gui/stack_viewer.hpp"
+#include "bitforge/gui/watch_panel.hpp"
+#include "bitforge/gui/registers_panel.hpp"
+#include "bitforge/gui/welcome_widget.hpp"
+#include "bitforge/gui/find_replace_bar.hpp"
 
 #include <QTest>
 #include <QSignalSpy>
@@ -141,6 +151,7 @@ private slots:
     void testExamplesDialogFilterAndOpenButtonState();
     void testMaxStepsSpinBoxSubcontrolsAndMouseClicks();
     void testNoNegativePointSizeWarningOnFaultOrStartup();
+    void testVisualDesignSystemTokensAndHierarchy();
     void cleanupTestCase();
 };
 
@@ -3548,6 +3559,144 @@ void GuiTest::testNoNegativePointSizeWarningOnFaultOrStartup() {
     // Restore message handler
     qInstallMessageHandler(s_previous_handler);
     s_previous_handler = nullptr;
+}
+
+void GuiTest::testVisualDesignSystemTokensAndHierarchy() {
+    // 1. Verify canonical corner-radius scale constants
+    QCOMPARE(theme::kRadiusNone, 0);
+    QCOMPARE(theme::kRadiusSmall, 3);
+    QCOMPARE(theme::kRadiusControl, 4);
+    QCOMPARE(theme::kRadiusPanel, 6);
+    QCOMPARE(theme::kRadiusLarge, 8);
+    QCOMPARE(theme::kRadiusPill, 12);
+
+    // 2. Sizing & Metric tokens
+    QCOMPARE(theme::kControlHeight, 28);
+    QCOMPARE(theme::kControlMinHeight, 20);
+    QCOMPARE(theme::kButtonMinHeight, 26);
+    QCOMPARE(theme::kIconButtonSize, 22);
+    QCOMPARE(theme::kCloseButtonSize, 18);
+    QCOMPARE(theme::kSpinButtonWidth, 18);
+
+    // 3. Spacing & Border tokens
+    QCOMPARE(theme::kSpacingTight, 4);
+    QCOMPARE(theme::kSpacingStandard, 8);
+    QCOMPARE(theme::kSpacingCard, 12);
+    QCOMPARE(theme::kSpacingLarge, 16);
+    QCOMPARE(theme::kBorderWidth, 1);
+    QCOMPARE(theme::kFocusBorderWidth, 1);
+
+    // 4. Central Application Stylesheet verification
+    const QString app_qss = theme::applicationStyleSheet();
+    QVERIFY(!app_qss.isEmpty());
+    QVERIFY(app_qss.contains("border-radius: 4px;")); // QPushButton, QLineEdit, QComboBox, QSpinBox
+    QVERIFY(app_qss.contains("border-radius: 6px;")); // QGroupBox, QMenu
+    QVERIFY(app_qss.contains("border-radius: 3px;")); // Close button, Spinbox subcontrols, QProgressBar
+    QVERIFY(app_qss.contains("width: 18px;"));        // Tab close button & spinbox buttons
+    QVERIFY(app_qss.contains("height: 18px;"));       // Tab close button
+
+    // 5. Component Style Helpers verification
+    const QString primary_btn_qss = theme::primaryButtonStyle();
+    QVERIFY(primary_btn_qss.contains("border-radius: 4px;"));
+    QVERIFY(primary_btn_qss.contains("#4ec9b0")); // Teal accent
+    QVERIFY(primary_btn_qss.contains(":hover"));
+    QVERIFY(primary_btn_qss.contains(":pressed"));
+    QVERIFY(primary_btn_qss.contains(":disabled"));
+
+    const QString sec_btn_qss = theme::secondaryButtonStyle();
+    QVERIFY(sec_btn_qss.contains("border-radius: 4px;"));
+    QVERIFY(sec_btn_qss.contains("#282c34"));
+
+    const QString danger_btn_qss = theme::dangerButtonStyle();
+    QVERIFY(danger_btn_qss.contains("border-radius: 4px;"));
+    QVERIFY(danger_btn_qss.contains("#e06c75"));
+
+    const QString compact_btn_qss = theme::compactButtonStyle();
+    QVERIFY(compact_btn_qss.contains("border-radius: 3px;"));
+
+    const QString normal_input_qss = theme::inputStyle(false);
+    QVERIFY(normal_input_qss.contains("border-radius: 4px;"));
+    QVERIFY(normal_input_qss.contains("#3b4048"));
+
+    const QString error_input_qss = theme::inputStyle(true);
+    QVERIFY(error_input_qss.contains("border-radius: 4px;"));
+    QVERIFY(error_input_qss.contains("#e06c75"));
+    QVERIFY(error_input_qss.contains("#2e2024"));
+
+    const QString info_banner_qss = theme::infoBannerStyle();
+    QVERIFY(info_banner_qss.contains("border-radius: 6px;"));
+
+    const QString card_qss = theme::welcomeActionCardStyle();
+    QVERIFY(card_qss.contains("border-radius: 8px;"));
+    QVERIFY(card_qss.contains(":hover"));
+    QVERIFY(card_qss.contains(":pressed"));
+
+    // State badge pill verification across all MachineState values
+    for (auto st : {MachineState::Ready, MachineState::Running, MachineState::Paused, MachineState::Halted, MachineState::Faulted}) {
+        QString badge_qss = theme::stateBadgeStyle(st, false, false);
+        QVERIFY(badge_qss.contains("border-radius: 12px;"));
+        QVERIFY(!badge_qss.contains("#28a745")); // No Bootstrap green
+        QVERIFY(!badge_qss.contains("#dc3545")); // No Bootstrap red
+        QVERIFY(!badge_qss.contains("#007acc")); // No alien blue
+    }
+    QVERIFY(theme::stateBadgeStyle(MachineState::Running, true, false).contains("border-radius: 12px;"));
+    QVERIFY(theme::stateBadgeStyle(MachineState::Ready, false, true).contains("border-radius: 12px;"));
+
+    // Flag badge verification
+    QVERIFY(theme::flagBadgeStyle(true).contains("border-radius: 3px;"));
+    QVERIFY(theme::flagBadgeStyle(true).contains(theme::kStateReady.name()));
+    QVERIFY(theme::flagBadgeStyle(false).contains("border-radius: 3px;"));
+    QVERIFY(theme::flagBadgeStyle(false).contains(theme::kTextMuted.name()));
+
+    // 6. Live widget consistency and screen captures
+    MainWindow window;
+    window.resize(1280, 800);
+    window.show();
+    QVERIFY(window.loadFile(resolveExamplePath("examples/01_arithmetic.asm")));
+    window.onAssemble();
+    window.onStep();
+
+    const QString artifact_dir = "C:/Users/Piyush/.gemini/antigravity/brain/3b875d0c-8f06-4ff1-9305-0a2eefba0b93";
+
+    if (window.registersPanel()) {
+        window.registersPanel()->grab().save(artifact_dir + "/gui_smoke_registers_panel.png");
+    }
+    if (window.memoryViewer()) {
+        window.memoryViewer()->grab().save(artifact_dir + "/gui_smoke_memory_viewer.png");
+    }
+    if (window.stackViewer()) {
+        window.stackViewer()->grab().save(artifact_dir + "/gui_smoke_stack_viewer.png");
+    }
+    if (window.breakpointsPanel()) {
+        window.breakpointsPanel()->grab().save(artifact_dir + "/gui_smoke_breakpoints_panel.png");
+    }
+    if (window.tracePanel()) {
+        window.tracePanel()->grab().save(artifact_dir + "/gui_smoke_trace_panel.png");
+    }
+    if (window.instructionInspector()) {
+        window.instructionInspector()->grab().save(artifact_dir + "/gui_smoke_instruction_inspector.png");
+    }
+    if (window.watchPanel()) {
+        window.watchPanel()->grab().save(artifact_dir + "/gui_smoke_watch_panel.png");
+    }
+
+    // Capture ExamplesDialog
+    {
+        ExamplesDialog dlg(&window);
+        dlg.resize(1080, 680);
+        dlg.show();
+        dlg.grab().save(artifact_dir + "/gui_smoke_examples_dialog.png");
+        dlg.close();
+    }
+
+    // Capture TutorialGuide
+    {
+        TutorialGuide guide(&window);
+        guide.resize(520, 400);
+        guide.show();
+        guide.grab().save(artifact_dir + "/gui_smoke_tutorial_guide_dialog.png");
+        guide.close();
+    }
 }
 
 QTEST_MAIN(GuiTest)

@@ -1,5 +1,6 @@
 #include "bitforge/gui/instruction_inspector.hpp"
 #include "bitforge/gui/execution_controller.hpp"
+#include "bitforge/gui/theme.hpp"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -70,7 +71,7 @@ InstructionInspector::InstructionInspector(QWidget* parent)
     current_grid->addWidget(new QLabel("Instruction:", current_group), 1, 0);
     pc_mnemonic_label_ = new QLabel("NOP", current_group);
     pc_mnemonic_label_->setFont(QFont("Segoe UI", 10, QFont::Bold));
-    pc_mnemonic_label_->setStyleSheet("QLabel { color: #007bff; }");
+    pc_mnemonic_label_->setStyleSheet(QString("QLabel { color: %1; }").arg(theme::kAccentBlue.name()));
     current_grid->addWidget(pc_mnemonic_label_, 1, 1);
 
     current_grid->addWidget(new QLabel("Raw Bytes:", current_group), 1, 2);
@@ -411,9 +412,9 @@ void InstructionInspector::refresh() {
 
     // Colorize branch preview
     if (decoded.branch_evaluation.contains("TAKEN")) {
-        pc_branch_label_->setStyleSheet("QLabel { color: #28a745; font-weight: bold; }");
+        pc_branch_label_->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(theme::kStateReady.name()));
     } else if (decoded.branch_evaluation.contains("NOT taken")) {
-        pc_branch_label_->setStyleSheet("QLabel { color: #fd7e14; }");
+        pc_branch_label_->setStyleSheet(QString("QLabel { color: %1; }").arg(theme::kStatePaused.name()));
     } else {
         pc_branch_label_->setStyleSheet("QLabel { color: inherit; }");
     }
@@ -452,18 +453,18 @@ void InstructionInspector::refresh() {
             last_effect_label_->setText(QString("Fault at %1: %2")
                                             .arg(formatHexWord(last.fault->instruction_address))
                                             .arg(last.fault->message.c_str()));
-            last_effect_label_->setStyleSheet("QLabel { color: #dc3545; }");
+            last_effect_label_->setStyleSheet(QString("QLabel { color: %1; }").arg(theme::kStateFaulted.name()));
         } else if (last.state_after == MachineState::Halted) {
             QString note = "HALT executed. Execution complete.";
             if (last.delta.has_value() && last.delta->has_changes()) {
                 note += " (" + QString::fromStdString(last.delta->to_string()) + ")";
             }
             last_effect_label_->setText(note);
-            last_effect_label_->setStyleSheet("QLabel { color: #6c757d; }");
+            last_effect_label_->setStyleSheet(QString("QLabel { color: %1; }").arg(theme::kTextMuted.name()));
         } else {
             if (last.delta.has_value() && last.delta->has_changes()) {
                 last_effect_label_->setText(QString::fromStdString(last.delta->to_string()));
-                last_effect_label_->setStyleSheet("QLabel { color: #61afef; font-weight: bold; }");
+                last_effect_label_->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(theme::kAccentBlue.name()));
             } else {
                 last_effect_label_->setText(QString("No state changes. Flags: [Z=%1, C=%2, N=%3, V=%4]")
                                                 .arg(last.flags_after.z ? 1 : 0)

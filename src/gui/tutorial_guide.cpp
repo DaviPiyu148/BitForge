@@ -106,7 +106,11 @@ TutorialGuide::TutorialGuide(QWidget* parent)
     header_layout->addWidget(stage_title_label_, 1);
 
     step_badge_label_ = new QLabel("Step 1 of 9", this);
-    step_badge_label_->setStyleSheet("QLabel { font-size: 11px; font-weight: bold; color: #61afef; background: #282c34; border: 1px solid #3b4048; border-radius: 4px; padding: 2px 8px; }");
+    step_badge_label_->setStyleSheet(
+        QString("QLabel { font-size: 11px; font-weight: bold; color: %1; background: %2; border: 1px solid %3; border-radius: %4px; padding: 2px 8px; }")
+            .arg(theme::kAccentBlue.name(), theme::kBgMedium.name(), theme::kBorderMedium.name())
+            .arg(theme::kRadiusControl)
+    );
     header_layout->addWidget(step_badge_label_);
     layout->addLayout(header_layout);
 
@@ -116,20 +120,23 @@ TutorialGuide::TutorialGuide(QWidget* parent)
     progress_bar_->setTextVisible(false);
     progress_bar_->setFixedHeight(6);
     progress_bar_->setStyleSheet(
-        "QProgressBar { background: #282c34; border: none; border-radius: 3px; }"
-        "QProgressBar::chunk { background: #4ec9b0; border-radius: 3px; }"
+        QString("QProgressBar { background: %1; border: none; border-radius: %2px; }"
+                "QProgressBar::chunk { background: %3; border-radius: %2px; }")
+            .arg(theme::kBgMedium.name())
+            .arg(theme::kRadiusSmall)
+            .arg(theme::kAccentTeal.name())
     );
     layout->addWidget(progress_bar_);
 
     // Body text
     stage_body_label_ = new QLabel(this);
     stage_body_label_->setWordWrap(true);
-    stage_body_label_->setStyleSheet("QLabel { font-size: 12px; line-height: 1.4; color: #dcdcdc; }");
+    stage_body_label_->setStyleSheet(QString("QLabel { font-size: 12px; line-height: 1.4; color: %1; }").arg(theme::kTextPrimary.name()));
     layout->addWidget(stage_body_label_, 1);
 
     // Contextual Action Button (e.g. "Load Example")
     action_btn_ = new QPushButton(this);
-    action_btn_->setStyleSheet("QPushButton { background-color: #00adb5; color: white; font-weight: bold; padding: 7px 14px; }");
+    action_btn_->setStyleSheet(theme::primaryButtonStyle());
     connect(action_btn_, &QPushButton::clicked, this, [this]() {
         if (current_stage_ == 0) {
             emit loadTutorialExampleRequested();
@@ -140,13 +147,18 @@ TutorialGuide::TutorialGuide(QWidget* parent)
 
     // Real-time status feedback label
     status_feedback_label_ = new QLabel(this);
-    status_feedback_label_->setStyleSheet("QLabel { color: #abb2bf; font-size: 11px; padding: 4px; border-radius: 4px; background: #21252b; }");
+    status_feedback_label_->setStyleSheet(
+        QString("QLabel { color: %1; font-size: 11px; padding: 4px 8px; border-radius: %2px; background: %3; border: 1px solid %4; }")
+            .arg(theme::kTextSecondary.name())
+            .arg(theme::kRadiusControl)
+            .arg(theme::kBgDark.name(), theme::kBorderMedium.name())
+    );
     layout->addWidget(status_feedback_label_);
 
     // Navigation buttons
     auto* btn_layout = new QHBoxLayout();
     restart_btn_ = new QPushButton("Restart", this);
-    restart_btn_->setStyleSheet("QPushButton { color: #e06c75; font-size: 11px; }");
+    restart_btn_->setStyleSheet(theme::dangerButtonStyle());
     btn_layout->addWidget(restart_btn_);
 
     btn_layout->addStretch();
@@ -212,54 +224,62 @@ void TutorialGuide::updateStageUi() {
 void TutorialGuide::checkEmulatorState() {
     if (!controller_) return;
 
+    auto makeFeedbackStyle = [](const QColor& textCol, bool bold) {
+        return QString("QLabel { color: %1; %2 padding: 4px 8px; border-radius: %3px; background: %4; border: 1px solid %5; }")
+            .arg(textCol.name())
+            .arg(bold ? "font-weight: bold;" : "")
+            .arg(theme::kRadiusControl)
+            .arg(theme::kBgDark.name(), theme::kBorderMedium.name());
+    };
+
     switch (current_stage_) {
         case 1: { // Assemble
             if (controller_->isAssembled()) {
                 status_feedback_label_->setText("✔ Program assembled successfully! Click Next to proceed.");
-                status_feedback_label_->setStyleSheet("QLabel { color: #98c379; font-weight: bold; padding: 4px; border-radius: 4px; background: #21252b; }");
+                status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kStateReady, true));
             } else {
                 status_feedback_label_->setText("Waiting for assembly (Press F7)...");
-                status_feedback_label_->setStyleSheet("QLabel { color: #e5c07b; padding: 4px; border-radius: 4px; background: #21252b; }");
+                status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kStatePaused, false));
             }
             break;
         }
         case 2: { // Set breakpoint
             if (!controller_->session().breakpoints().empty()) {
                 status_feedback_label_->setText("✔ Breakpoint detected! Click Next to proceed.");
-                status_feedback_label_->setStyleSheet("QLabel { color: #98c379; font-weight: bold; padding: 4px; border-radius: 4px; background: #21252b; }");
+                status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kStateReady, true));
             } else {
                 status_feedback_label_->setText("Waiting for breakpoint on line 10 (Press F9)...");
-                status_feedback_label_->setStyleSheet("QLabel { color: #e5c07b; padding: 4px; border-radius: 4px; background: #21252b; }");
+                status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kStatePaused, false));
             }
             break;
         }
         case 3: { // Run to breakpoint
             if (controller_->lastStopReason() == debugger::StopReason::BreakpointHit) {
                 status_feedback_label_->setText("✔ Breakpoint hit! Execution paused at Line 6. Click Next.");
-                status_feedback_label_->setStyleSheet("QLabel { color: #98c379; font-weight: bold; padding: 4px; border-radius: 4px; background: #21252b; }");
+                status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kStateReady, true));
             } else {
                 status_feedback_label_->setText("Waiting to run to breakpoint (Press F5)...");
-                status_feedback_label_->setStyleSheet("QLabel { color: #e5c07b; padding: 4px; border-radius: 4px; background: #21252b; }");
+                status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kStatePaused, false));
             }
             break;
         }
         case 5: { // Step
             if (controller_->session().total_steps_executed() >= 3) {
                 status_feedback_label_->setText("✔ Instruction stepped! R0 is now 30 (0x1E). Click Next.");
-                status_feedback_label_->setStyleSheet("QLabel { color: #98c379; font-weight: bold; padding: 4px; border-radius: 4px; background: #21252b; }");
+                status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kStateReady, true));
             } else {
                 status_feedback_label_->setText("Waiting for single step (Press F10)...");
-                status_feedback_label_->setStyleSheet("QLabel { color: #e5c07b; padding: 4px; border-radius: 4px; background: #21252b; }");
+                status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kStatePaused, false));
             }
             break;
         }
         case 7: { // Continue to halt
             if (controller_->session().state() == MachineState::Halted) {
                 status_feedback_label_->setText("✔ CPU Halted! Click Next to review trace and memory.");
-                status_feedback_label_->setStyleSheet("QLabel { color: #98c379; font-weight: bold; padding: 4px; border-radius: 4px; background: #21252b; }");
+                status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kStateReady, true));
             } else {
                 status_feedback_label_->setText("Waiting for program completion (Press F8)...");
-                status_feedback_label_->setStyleSheet("QLabel { color: #e5c07b; padding: 4px; border-radius: 4px; background: #21252b; }");
+                status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kStatePaused, false));
             }
             break;
         }
@@ -270,7 +290,7 @@ void TutorialGuide::checkEmulatorState() {
                      controller_->session().state() == MachineState::Running ? "Running" : "Paused")
                 .arg(controller_->session().pc(), 4, 16, QLatin1Char('0')).toUpper()
                 .arg(controller_->session().total_steps_executed()));
-            status_feedback_label_->setStyleSheet("QLabel { color: #abb2bf; padding: 4px; border-radius: 4px; background: #21252b; }");
+            status_feedback_label_->setStyleSheet(makeFeedbackStyle(theme::kTextSecondary, false));
             break;
         }
     }

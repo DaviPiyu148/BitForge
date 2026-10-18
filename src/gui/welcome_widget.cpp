@@ -320,7 +320,9 @@ WelcomeWidget::WelcomeWidget(QWidget* parent)
     // 2. Multi-Section Tab Widget (Quick Start, Curriculum, First Program)
     welcome_tabs_ = new QTabWidget(this);
     welcome_tabs_->setStyleSheet(
-        "QTabWidget::pane { border: 1px solid #282c34; background-color: #21252b; border-radius: 4px; }"
+        QString("QTabWidget::pane { border: 1px solid %1; background-color: %2; border-radius: %3px; }")
+            .arg(theme::kBorderSubtle.name(), theme::kBgDark.name())
+            .arg(theme::kRadiusControl)
     );
 
     setupQuickStartTab();
@@ -347,11 +349,7 @@ void WelcomeWidget::setupQuickStartTab() {
         btn->setCursor(Qt::PointingHandCursor);
         btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         btn->setMinimumHeight(34);
-        btn->setStyleSheet(QString(
-            "QPushButton { background-color: %1; border: 1px solid #3b4048; border-radius: 6px; text-align: left; padding: 4px 10px; }"
-            "QPushButton:hover { background-color: #3e4451; border-color: #4ec9b0; }"
-            "QPushButton:pressed { background-color: #181a1f; }"
-        ).arg(color));
+        btn->setStyleSheet(theme::welcomeActionCardStyle(color));
 
         auto* btn_layout = new QVBoxLayout(btn);
         btn_layout->setContentsMargins(0, 0, 0, 0);
@@ -362,7 +360,7 @@ void WelcomeWidget::setupQuickStartTab() {
         btn_layout->addWidget(t_lbl);
 
         auto* s_lbl = new QLabel(subtitle, btn);
-        s_lbl->setStyleSheet("QLabel { color: #8a93a0; font-size: 11px; }");
+        s_lbl->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; }").arg(theme::kTextMuted.name()));
         s_lbl->setAttribute(Qt::WA_TransparentForMouseEvents);
         btn_layout->addWidget(s_lbl);
 
@@ -405,7 +403,7 @@ void WelcomeWidget::setupQuickStartTab() {
     auto* recent_btn_bar = new QHBoxLayout();
     recent_btn_bar->addStretch();
     clear_recent_btn_ = new QPushButton("Clear Recent", recent_box);
-    clear_recent_btn_->setStyleSheet("QPushButton { font-size: 11px; padding: 3px 8px; }");
+    clear_recent_btn_->setStyleSheet(theme::compactButtonStyle());
     recent_btn_bar->addWidget(clear_recent_btn_);
     recent_layout->addLayout(recent_btn_bar);
 
@@ -620,11 +618,7 @@ void WelcomeWidget::setupCurriculumTab() {
 
     open_lesson_example_btn_ = new QPushButton(lesson_action_bar_);
     open_lesson_example_btn_->setCursor(Qt::PointingHandCursor);
-    open_lesson_example_btn_->setStyleSheet(
-        "QPushButton { background-color: #00adb5; color: white; font-weight: bold; padding: 7px 16px; border-radius: 4px; border: none; font-size: 12px; }"
-        "QPushButton:hover { background-color: #00c4cc; }"
-        "QPushButton:pressed { background-color: #00969d; }"
-    );
+    open_lesson_example_btn_->setStyleSheet(theme::primaryButtonStyle());
     connect(open_lesson_example_btn_, &QPushButton::clicked, this, [this]() {
         if (current_lesson_idx_ >= 0 && current_lesson_idx_ < 11) {
             const QString path = kLessons[current_lesson_idx_].examplePath;
@@ -678,11 +672,7 @@ void WelcomeWidget::setupFirstProgramTab() {
 
     first_program_btn_ = new QPushButton("🚀 Open First Program in Editor (tutorial_first_program.asm)", fp_page);
     first_program_btn_->setCursor(Qt::PointingHandCursor);
-    first_program_btn_->setStyleSheet(
-        "QPushButton { background-color: #4ec9b0; color: #1e1e1e; font-size: 13px; font-weight: bold; padding: 10px 16px; border-radius: 6px; }"
-        "QPushButton:hover { background-color: #5edbb8; }"
-        "QPushButton:pressed { background-color: #3cb89a; }"
-    );
+    first_program_btn_->setStyleSheet(theme::primaryButtonStyle());
     connect(first_program_btn_, &QPushButton::clicked, this, &WelcomeWidget::openFirstProgramTutorialRequested);
     fp_layout->addWidget(first_program_btn_, 0, Qt::AlignLeft);
 

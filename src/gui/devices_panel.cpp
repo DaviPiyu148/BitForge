@@ -1,5 +1,6 @@
 #include "bitforge/gui/devices_panel.hpp"
 #include "bitforge/gui/execution_controller.hpp"
+#include "bitforge/gui/theme.hpp"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -141,14 +142,19 @@ DevicesPanel::DevicesPanel(QWidget* parent)
 
     fifo_underflow_label_ = new QLabel("Underflows: 0 (OK)", fifo_group);
     fifo_underflow_label_->setFont(mono_font);
-    fifo_underflow_label_->setStyleSheet("QLabel { color: #8a93a0; font-size: 11px; }");
+    fifo_underflow_label_->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; }").arg(theme::kTextMuted.name()));
     status_row->addWidget(fifo_underflow_label_);
     fifo_layout->addLayout(status_row);
 
     // Row 3: Queued Bytes Display
     fifo_contents_label_ = new QLabel("Queue: [ Empty ]", fifo_group);
     fifo_contents_label_->setFont(mono_font);
-    fifo_contents_label_->setStyleSheet("QLabel { color: #98c379; background-color: #21252b; padding: 4px 6px; border-radius: 4px; }");
+    fifo_contents_label_->setStyleSheet(
+        QString("QLabel { color: %1; background-color: %2; padding: 4px 8px; border-radius: %3px; border: 1px solid %4; }")
+            .arg(theme::kStateReady.name(), theme::kBgDark.name())
+            .arg(theme::kRadiusControl)
+            .arg(theme::kBorderMedium.name())
+    );
     fifo_contents_label_->setWordWrap(true);
     fifo_layout->addWidget(fifo_contents_label_);
 
@@ -213,7 +219,7 @@ DevicesPanel::DevicesPanel(QWidget* parent)
     diag_layout->addWidget(diag_table_);
 
     diag_empty_label_ = new QLabel("No assembler diagnostics or runtime faults reported.", diag_tab);
-    diag_empty_label_->setStyleSheet("QLabel { color: #8a93a0; font-style: italic; padding: 4px; }");
+    diag_empty_label_->setStyleSheet(theme::emptyStateStyle(true));
     diag_layout->addWidget(diag_empty_label_);
 
     tabs->addTab(diag_tab, "Diagnostics");
@@ -294,10 +300,10 @@ void DevicesPanel::refresh() {
         if (fifo_underflow_label_ != nullptr) {
             if (underflows == 0) {
                 fifo_underflow_label_->setText("Underflows: 0 (OK)");
-                fifo_underflow_label_->setStyleSheet("QLabel { color: #8a93a0; font-size: 11px; }");
+                fifo_underflow_label_->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; }").arg(theme::kTextMuted.name()));
             } else {
                 fifo_underflow_label_->setText(QString("Underflows: %1 (Read Empty)").arg(underflows));
-                fifo_underflow_label_->setStyleSheet("QLabel { color: #e06c75; font-weight: bold; font-size: 11px; }");
+                fifo_underflow_label_->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; font-size: 11px; }").arg(theme::kStateFaulted.name()));
             }
         }
 

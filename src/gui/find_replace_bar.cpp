@@ -1,4 +1,5 @@
 #include "bitforge/gui/find_replace_bar.hpp"
+#include "bitforge/gui/theme.hpp"
 
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -12,11 +13,12 @@ FindReplaceBar::FindReplaceBar(QWidget* parent)
     layout->setSpacing(6);
 
     setStyleSheet(
-        "FindReplaceBar { background-color: #21252b; border-bottom: 1px solid #3b4048; }"
+        QString("FindReplaceBar { background-color: %1; border-bottom: 1px solid %2; }")
+            .arg(theme::kBgDark.name(), theme::kBorderMedium.name())
     );
 
     auto* search_label = new QLabel("Find:", this);
-    search_label->setStyleSheet("QLabel { color: #4ec9b0; font-weight: bold; }");
+    search_label->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(theme::kAccentTeal.name()));
     layout->addWidget(search_label);
 
     search_input_ = new QLineEdit(this);
@@ -39,17 +41,19 @@ FindReplaceBar::FindReplaceBar(QWidget* parent)
 
     match_label_ = new QLabel(this);
     match_label_->setMinimumWidth(64);
-    match_label_->setStyleSheet("QLabel { color: #abb2bf; font-size: 11px; margin-left: 4px; }");
+    match_label_->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; margin-left: 4px; }").arg(theme::kTextSecondary.name()));
     layout->addWidget(match_label_);
 
     layout->addStretch();
 
     close_btn_ = new QPushButton("✕", this);
     close_btn_->setToolTip("Close Find Bar (Escape)");
-    close_btn_->setFixedSize(22, 22);
+    close_btn_->setFixedSize(theme::kIconButtonSize, theme::kIconButtonSize);
     close_btn_->setStyleSheet(
-        "QPushButton { background: transparent; border: none; font-weight: bold; color: #abb2bf; }"
-        "QPushButton:hover { color: #e06c75; background: #282c34; border-radius: 3px; }"
+        QString("QPushButton { background: transparent; border: none; font-weight: bold; color: %1; }"
+                "QPushButton:hover { color: %2; background: %3; border-radius: %4px; }")
+            .arg(theme::kTextSecondary.name(), theme::kStateFaulted.name(), theme::kBgMedium.name())
+            .arg(theme::kRadiusSmall)
     );
     layout->addWidget(close_btn_);
 
@@ -115,10 +119,10 @@ void FindReplaceBar::triggerFindPrevious() {
 void FindReplaceBar::setMatchStatus(int current, int total) {
     if (total == 0) {
         match_label_->setText("No matches");
-        match_label_->setStyleSheet("QLabel { color: #e06c75; font-size: 11px; font-weight: bold; }");
+        match_label_->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; font-weight: bold; }").arg(theme::kStateFaulted.name()));
     } else {
         match_label_->setText(QString("%1 of %2").arg(current).arg(total));
-        match_label_->setStyleSheet("QLabel { color: #4ec9b0; font-size: 11px; }");
+        match_label_->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; }").arg(theme::kAccentTeal.name()));
     }
 }
 
