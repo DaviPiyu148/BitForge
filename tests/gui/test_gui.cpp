@@ -103,6 +103,10 @@ private slots:
     void testPreferencesPersistenceAcrossSessions();
     void testPerformanceAndResponsiveness();
     void testPhase11UxPolishAndTypography();
+    void testTypographyResizingAndStress();
+    void testDocksAndCorruptPreferencesRecovery();
+    void testEndToEndExecutionWorkflowAndStateLabels();
+    void testAccessibilityFocusAndMicrocopy();
 };
 
 void GuiTest::initTestCase() {
@@ -2162,6 +2166,276 @@ void GuiTest::testPhase11UxPolishAndTypography() {
         }
     }
     QVERIFY(found_led);
+}
+
+void GuiTest::testTypographyResizingAndStress() {
+    MainWindow window;
+    window.show();
+
+    // 1. Editor zoom controls & font sizing
+    auto* editor = window.editor();
+    QVERIFY(editor != nullptr);
+    int initial_font_size = editor->currentFontSize();
+    QVERIFY(initial_font_size >= 10 && initial_font_size <= 12);
+    int initial_gutter_width = editor->lineNumberAreaWidth();
+    QVERIFY(initial_gutter_width > 0);
+
+    // Zoom in multiple times
+    for (int i = 0; i < 5; ++i) {
+        window.zoomInAction()->trigger();
+    }
+    QCOMPARE(editor->currentFontSize(), initial_font_size + 5);
+    QVERIFY(editor->lineNumberAreaWidth() >= initial_gutter_width);
+
+    // Zoom out beyond minimum bound -> clamped at 6
+    for (int i = 0; i < 15; ++i) {
+        window.zoomOutAction()->trigger();
+    }
+    QCOMPARE(editor->currentFontSize(), 6);
+
+    // Reset zoom -> back to default
+    window.resetZoomAction()->trigger();
+    QCOMPARE(editor->currentFontSize(), initial_font_size);
+
+    // 2. Long assembly lines stress test (300+ characters)
+    QString long_comment(250, 'Z');
+    QString long_source = QString(".ORG 0x0200\n.ENTRY start\nstart:\n    LDI R0, 42 ; %1\n    HALT\n").arg(long_comment);
+    editor->setPlainText(long_source);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+    QCOMPARE(editor->document()->blockCount(), 6);
+
+    // 3. Long diagnostics stress test
+    QString long_symbol = "undefined_sym_" + QString(120, 'X');
+    editor->setPlainText(QString(".ORG 0x0200\n.ENTRY start\nstart:\n    JMP %1\n").arg(long_symbol));
+    window.onAssemble();
+    QVERIFY(!window.controller()->isAssembled());
+    auto* dev_panel = window.devicesPanel();
+    QVERIFY(dev_panel != nullptr);
+    dev_panel->showDiagnostics();
+    auto* diag_table = dev_panel->diagnosticTable();
+    QVERIFY(diag_table != nullptr);
+    QVERIFY(diag_table->rowCount() > 0);
+
+    // 4. Long filename in status bar and window title
+    QVERIFY(window.statusFileLabel() != nullptr);
+    QCOMPARE(window.statusFileLabel()->minimumWidth(), 0);
+    QVERIFY(!window.statusFileLabel()->toolTip().isEmpty());
+
+    // 5. Extreme window resizing
+    window.resize(window.minimumSizeHint());
+    QVERIFY(window.size().width() >= 600);
+    QVERIFY(window.size().height() >= 400);
+    QVERIFY(window.statusStateLabel()->isVisible());
+    QVERIFY(window.statusPcLabel()->isVisible());
+
+    window.showMaximized();
+    QVERIFY(window.isMaximized() || window.size().width() >= 1000);
+
+    window.resize(1240, 820);
+    QCOMPARE(window.size().width(), 1240);
+    QCOMPARE(window.size().height(), 820);
+
+    // 6. Long watch expressions
+    auto* wp = window.watchPanel();
+    QVERIFY(wp != nullptr);
+    wp->addWatch("[0xFFFF]");
+    wp->inputField()->setText("invalid_long_expression_that_is_syntax_garbage");
+    for (auto* btn : wp->findChildren<QPushButton*>()) {
+        if (btn->text() == "Add Watch") {
+            btn->click();
+            break;
+        }
+    }
+    QVERIFY(!wp->inputField()->styleSheet().isEmpty());
+    QVERIFY(!wp->inputField()->toolTip().isEmpty());
+    wp->inputField()->clear();
+}
+
+void GuiTest::testDocksAndCorruptPreferencesRecovery() {
+    MainWindow window;
+    window.show();
+
+    // 1. Rearrange docks
+    window.addDockWidget(Qt::LeftDockWidgetArea, window.rightDock());
+    QCOMPARE(window.dockWidgetArea(window.rightDock()), Qt::LeftDockWidgetArea);
+
+    if (window.watchDock() != nullptr) {
+        window.watchDock()->setFloating(true);
+        QVERIFY(window.watchDock()->isFloating());
+    }
+
+    // 2. Close all docks
+    window.rightDock()->close();
+    window.bottomDock()->close();
+    if (window.watchDock() != nullptr) {
+        window.watchDock()->close();
+    }
+    QVERIFY(!window.rightDock()->isVisible());
+    QVERIFY(!window.bottomDock()->isVisible());
+    if (window.watchDock() != nullptr) {
+        QVERIFY(!window.watchDock()->isVisible());
+    }
+
+    // 3. Restore default layout
+    window.onRestoreDefaultLayout();
+    QVERIFY(window.rightDock()->isVisible());
+    QVERIFY(window.bottomDock()->isVisible());
+    QVERIFY(!window.rightDock()->isFloating());
+    QVERIFY(!window.bottomDock()->isFloating());
+    QCOMPARE(window.dockWidgetArea(window.rightDock()), Qt::RightDockWidgetArea);
+    QCOMPARE(window.dockWidgetArea(window.bottomDock()), Qt::BottomDockWidgetArea);
+    if (window.watchDock() != nullptr) {
+        QVERIFY(window.watchDock()->isVisible());
+        QVERIFY(!window.watchDock()->isFloating());
+    }
+    QCOMPARE(window.centralStack()->currentIndex(), 1); // Editor visible
+
+    // 4. Corrupted preferences and off-screen geometry recovery
+    QSettings settings("BitForge", "BitForge");
+    settings.setValue("geometry", QByteArray("CORRUPTED_GARBAGE_PAYLOAD_XYZ_999"));
+    settings.setValue("windowState", QByteArray("CORRUPTED_WINDOW_STATE_XYZ_888"));
+    settings.setValue("editorFontSize", -100);
+    settings.setValue("executionSpeed", 9999);
+
+    // Construct fresh window under corrupted settings
+    MainWindow recovered;
+    recovered.show();
+    QVERIFY(recovered.size().width() >= 600);
+    QVERIFY(recovered.size().height() >= 400);
+    QVERIFY(recovered.editor()->currentFontSize() >= 6 && recovered.editor()->currentFontSize() <= 48);
+
+    // Clean up test keys in settings
+    settings.remove("geometry");
+    settings.remove("windowState");
+    settings.remove("editorFontSize");
+    settings.remove("executionSpeed");
+}
+
+void GuiTest::testEndToEndExecutionWorkflowAndStateLabels() {
+    MainWindow window;
+    window.show();
+
+    // 1. Program exercising registers, memory write, and devices
+    const QString program =
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 0x55\n"
+        "    OUT 0x10, R0\n"
+        "    LDI R1, 42\n"
+        "    OUT 0x02, R1\n"
+        "    LDI R2, 0x4B\n"
+        "    OUT 0x01, R2\n"
+        "    LDI16 IX, 0x0300\n"
+        "    STX [IX], R0\n"
+        "    HALT\n";
+
+    window.editor()->setPlainText(program);
+    window.onAssemble();
+    QVERIFY(window.controller()->isAssembled());
+    QCOMPARE(window.statusStateLabel()->text(), QString("READY"));
+    QCOMPARE(window.registersPanel()->stateLabel()->text(), QString("READY"));
+
+    // 2. Set breakpoint at line 6 (OUT 0x02, R1)
+    window.controller()->toggleBreakpoint(6);
+
+    // 3. Run from Entry -> pauses at breakpoint
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().last_stop_reason(), debugger::StopReason::BreakpointHit, 2000);
+    QCOMPARE(window.statusStateLabel()->text(), QString("PAUSED"));
+    QCOMPARE(window.registersPanel()->stateLabel()->text(), QString("PAUSED"));
+
+    // Verify LED output 0x55 was processed
+    auto* dp = window.devicesPanel();
+    QVERIFY(dp != nullptr);
+    dp->refresh();
+    bool found_led = false;
+    for (auto* lbl : dp->findChildren<QLabel*>()) {
+        if (lbl->text().contains("0x55")) {
+            found_led = true;
+            break;
+        }
+    }
+    QVERIFY(found_led);
+
+    // 4. Single-step through breakpoint
+    window.onStep();
+    QCOMPARE(window.statusStateLabel()->text(), QString("PAUSED"));
+    QCOMPARE(window.registersPanel()->stateLabel()->text(), QString("PAUSED"));
+
+    // 5. Continue to completion (HALT)
+    window.onContinue();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+    QCOMPARE(window.statusStateLabel()->text(), QString("HALTED"));
+    QCOMPARE(window.registersPanel()->stateLabel()->text(), QString("HALTED"));
+
+    // Check memory at 0x0300 was written with 0x55
+    QCOMPARE(window.controller()->session().cpu().bus().read_byte(0x0300), 0x55);
+
+    // 6. Reset program
+    window.onReset();
+    QCOMPARE(window.controller()->session().state(), MachineState::Ready);
+    QCOMPARE(window.statusStateLabel()->text(), QString("READY"));
+    QCOMPARE(window.registersPanel()->stateLabel()->text(), QString("READY"));
+    QCOMPARE(window.registersPanel()->rLabel(0)->text(), QString("0x00 (0)"));
+
+    // 7. Trigger CPU fault (invalid opcode .BYTE 0x0F)
+    window.editor()->setPlainText(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    .BYTE 0x0F\n"
+    );
+    window.onAssemble();
+    window.onRun();
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Faulted, 2000);
+    QCOMPARE(window.statusStateLabel()->text(), QString("FAULTED"));
+    QCOMPARE(window.registersPanel()->stateLabel()->text(), QString("FAULTED"));
+}
+
+void GuiTest::testAccessibilityFocusAndMicrocopy() {
+    MainWindow window;
+    window.show();
+
+    // 1. Visible Focus Styling in centralized stylesheet
+    QString sheet = theme::applicationStyleSheet();
+    QVERIFY(sheet.contains("QPushButton:focus"));
+    QVERIFY(sheet.contains("QToolButton:focus"));
+    QVERIFY(sheet.contains("QLineEdit:focus"));
+    QVERIFY(sheet.contains("#4ec9b0")); // Teal accent focus border
+
+    // 2. Action tooltips & status tips
+    QVERIFY(!window.runAction()->toolTip().isEmpty());
+    QVERIFY(!window.continueAction()->toolTip().isEmpty());
+    QVERIFY(!window.stepAction()->toolTip().isEmpty());
+    QVERIFY(!window.browseExamplesAction()->statusTip().isEmpty());
+    QVERIFY(!window.restoreDefaultLayoutAction()->statusTip().isEmpty());
+
+    // 3. Meaningful window & dock titles
+    QCOMPARE(window.rightDock()->windowTitle(), QString("Registers && Virtual Devices"));
+    QCOMPARE(window.bottomDock()->windowTitle(), QString("Memory, Stack && Debug Inspection"));
+    if (window.watchDock() != nullptr) {
+        QCOMPARE(window.watchDock()->windowTitle(), QString("Watch Expressions"));
+    }
+
+    // 4. Color-independent state badges
+    auto* sb = window.stateBadge();
+    QVERIFY(sb != nullptr);
+    QVERIFY(!sb->text().trimmed().isEmpty());
+
+    // 5. Instruction Inspector high-contrast Ready color
+    auto* ii = window.instructionInspector();
+    QVERIFY(ii != nullptr);
+    bool found_ready = false;
+    for (auto* lbl : ii->findChildren<QLabel*>()) {
+        if (lbl->text() == "Ready") {
+            found_ready = true;
+            QVERIFY(lbl->styleSheet().contains("#98c379"));
+            break;
+        }
+    }
+    QVERIFY(found_ready);
 }
 
 QTEST_MAIN(GuiTest)

@@ -1,165 +1,156 @@
-# BitForge — Phase 11: Comprehensive UI/UX, Typography, Terminology, and Usability Audit Report
+# BitForge — Phase 11 & 11.1: Comprehensive UI/UX, Typography, Terminology, and Usability Audit Report
 
-**Status:** Complete & Verified  
-**Document Version:** 1.0  
-**Phase:** 11 (UI/UX, Typography, Terminology, and Usability Audit)  
-**Governing Architecture:** BitForge Architecture Specification v1.7  
+**Status:** Complete, Mathematically Reconciled & Verified  
+**Document Version:** 1.1 (Phase 11.1 Verification & Reconciliation)  
+**Governing Architecture:** BitForge Architecture Specification v1.7 (frozen & untouched)  
 **Date:** 2026-10-18  
-**Baseline HEAD Commit:** `1680914`  
+**Baseline HEAD Commit:** `4c60c9e`  
 
 ---
 
 ## 1. Executive Summary
 
-As part of **BitForge Phase 11**, an evidence-driven, comprehensive audit was conducted across the entire BitForge Qt 6 desktop workbench, focusing on:
-- **Visual Design & Contrast:** Theme consistency, dark theme contrast ratios, WCAG 2.1 AA/AAA compliance.
-- **Typography & Formatting:** Hexadecimal notation, binary formatting, decimal spacing, font hierarchy.
-- **Terminology & Microcopy:** Aligning all user-facing names with the frozen architecture specification (`v1.7`) and eliminating internal software engineering acronym leaks (e.g. `ADR-001`).
-- **Interactive State & Feedback:** Synchronizing engine status badges across panels, providing visual feedback on invalid inputs, and eliminating layout clipping.
-- **Empty States & Accessibility:** Clear instructional copy and high-contrast color choices.
-
-Every identified defect was investigated against rendered screenshot evidence and source code, cataloged with severity rankings, and directly resolved in the codebase. All automated regression suites passed 100% across all build presets (`debug`, `ci`, `gui`, `gui-release`).
-
----
-
-## 2. Terminology Standardization & Inventory
-
-A dedicated companion deliverable, [`docs/PHASE11_TERMINOLOGY_GLOSSARY.md`](file:///d:/BitForge/docs/PHASE11_TERMINOLOGY_GLOSSARY.md), was authored to establish an authoritative standard across all documentation, UI panels, tooltips, dialogs, and tests.
-
-### Key Vocabulary Standardizations
-1. **Hardware Stack:** Replaced internal architecture decision record reference `"Stack (ADR-001)"` with `"Hardware Stack"` on workbench tab headers and status indicators.
-2. **Empty Stack Sentinel:** Updated empty stack banner to `"Empty stack (SP = 0xFFFF; no items pushed)"`.
-3. **Values & Bits Tabs:** Replaced `"Hex && Dec"` with `"Values"` (eliminating ampersand rendering artifacts and width clipping) and shortened `"Bit Visualization"` to `"Bits"` to provide breathing room in narrow side docks.
-4. **Execution Controls:**
-   - **`Run from Entry (F5)`**: Fresh execution lifecycle (resets CPU, clears memory variables to static-data image, resets stack pointer to `0xFFFF`, clears peripherals).
-   - **`Continue (F8)`**: Resume execution from current `PC` without resetting registers, memory, or peripheral state.
-   - **`Step (F10)`**: Execute exactly one instruction from `PC`.
-   - **`Pause`**: Temporarily suspend continuous execution slice.
-   - **`Reset (F6)`**: Restore CPU, stack, and peripherals to power-on state.
-5. **Hexadecimal & Binary Notation:**
-   - All hexadecimal values standardized to lowercase `0x` followed by uppercase hex digits (`0x0200`, `0x0A`, `0x10`). Capital `0X` is prohibited.
-   - All binary values standardized to lowercase `0b` followed by bits (`0b01010101`). Capital `0B` is prohibited.
-   - Decimal values in secondary annotations formatted with natural spacing (`0x0A (10)` instead of `0x0A ( 10)`).
+As part of **BitForge Phase 11 and 11.1**, an evidence-driven, comprehensive audit and verification review was conducted across the entire BitForge Qt 6 desktop workbench (`D:\BitForge`), focusing on:
+- **Contrast Accuracy & WCAG Mathematical Verification:** Recalculating relative luminance ($L$) and contrast ratios for all UI surfaces using the standard WCAG 2.1 algorithm, debunking previously exaggerated AAA claims, and documenting precise AA/AAA status.
+- **Test Count Reconciliation:** Thoroughly reconciling historical counts between Phase 10.2 (233 core, 27 GUI) and Phase 11 (reported as 220 core, 272 checks), demonstrating that zero tests were lost, and establishing the exact current count: **233 core tests + 55 GUI test slots = 288 tests** (57 QTest pass points).
+- **Typography, Resizing & Layout Elasticity:** Auditing behavior under default (10pt), zoomed (up to 15pt), and shrunk (6pt) editor fonts, narrow and short window sizes, long assembly lines (250+ characters), long diagnostics, 150+ character filenames, and complex watch expressions.
+- **Dock State & Corrupt Preferences Recovery:** Testing docking, tabifying, closing all docks, restoring default layout, and validating recovery from corrupted or off-screen `QSettings` geometry.
+- **Real Workflows & State Integrity:** Exercising complete lifecycle execution (assemble, run, breakpoint hit, step, pause, reset, memory mutation, and fault handling), verifying synchronization of state labels and badges across all panels.
+- **Accessibility & Focus Rings:** Adding visible keyboard focus styling (`:focus`) to buttons and inputs, verifying tooltips and action status tips, and enforcing color-independent state indicators.
 
 ---
 
-## 3. Severity-Ranked Audit Findings & Remediations
+## 2. WCAG 2.1 Contrast Accuracy & Mathematical Audit
 
-### Finding 1: Severe Trace Table Row Contrast Failure (WCAG 2.1 AA/AAA Violation)
-- **Severity:** High / Usability Critical
-- **Affected Surface:** `src/gui/trace_panel.cpp` (Execution Trace table)
-- **Defect Description:**
-  When an instruction reached `MachineState::Halted` or faulted, the trace table highlighted all row cells using pastel light green `QColor(230, 244, 234)` or pastel pink `QColor(252, 232, 230)` without setting the item foreground color. In the dark theme workbench, item text defaulted to light grey/white (`#DCDCDC`). This produced a ~1.2:1 contrast ratio, rendering trace text virtually unreadable.
-- **Remediation:**
-  Implemented dark-theme-compliant, high-contrast palette with explicit foreground and background assignments:
-  - **Halted Rows:** Background `QColor(0x1e, 0x33, 0x24)` (dark emerald tint) with foreground `QColor(0x98, 0xc3, 0x79)` (crisp light green text). Contrast ratio > 8.5:1 (exceeds WCAG AAA requirement of 7:1).
-  - **Faulted Rows:** Background `QColor(0x3e, 0x20, 0x24)` (dark wine tint) with foreground `QColor(0xe0, 0x6c, 0x75)` (crisp soft red text). Contrast ratio > 7:1 (exceeds WCAG AAA).
+### 2.1 Standard WCAG Relative Luminance Formula
+Per W3C WCAG 2.1 §1.4.3 and §1.4.6, the relative luminance $L$ of any sRGB color $(R, G, B)$ is defined as:
+$$L = 0.2126 \cdot R_{\text{lin}} + 0.7152 \cdot G_{\text{lin}} + 0.0722 \cdot B_{\text{lin}}$$
+where each 8-bit channel $C \in [0, 255]$ is normalized to $c = C / 255$ and linearized:
+$$c_{\text{lin}} = \begin{cases} \frac{c}{12.92}, & c \le 0.04045 \\ \left(\frac{c + 0.055}{1.055}\right)^{2.4}, & c > 0.04045 \end{cases}$$
+The contrast ratio between two colors with luminances $L_1$ (lighter) and $L_2$ (darker) is:
+$$\text{Contrast Ratio} = \frac{L_1 + 0.05}{L_2 + 0.05}$$
 
-### Finding 2: Unstyled `QListWidget` / `QListView` Dark Theme Discrepancy
-- **Severity:** Moderate / Visual Polish
-- **Affected Surface:** `src/gui/theme.cpp`, `src/gui/welcome_widget.cpp`, `src/gui/examples_dialog.cpp`
-- **Defect Description:**
-  `theme.cpp` contained comprehensive stylesheet rules for tables, buttons, inputs, headers, and tabs, but completely omitted `QListWidget, QListView, QTreeWidget, QTreeView`. On Windows, Qt fell back to the native light theme palette, causing the Recent Files list on the Welcome screen and category list in Examples Dialog to render with a stark white background against dark containers.
-- **Remediation:**
-  Added comprehensive dark theme styling in `theme.cpp` for `QListWidget, QListView, QTreeWidget, QTreeView` with `#1e1e1e` background, `#282c34` border, `#264f78` selection background, and rounded hover states.
+### 2.2 Correction of Phase 11 Contrast Claims
+The initial Phase 11 report claimed that Halted rows achieved `>8.5:1 (WCAG AAA)` and Faulted rows achieved `>7:1 (WCAG AAA)`. Rigorous mathematical calculation using the formula above reveals that **both claims were incorrect**:
 
-### Finding 3: Internal ADR Engineering Acronym Leak in End-User Workbench
-- **Severity:** Moderate / Educational Clarity
-- **Affected Surface:** `src/gui/main_window.cpp`, `src/gui/stack_viewer.cpp`
-- **Defect Description:**
-  The bottom dock tab was titled `"Stack (ADR-001)"` and the empty-stack banner read `"Empty stack (SP = 0xFFFF sentinel per ADR-001; no items pushed)"`. Exposing internal architectural decision record numbers in the main interface confused students and cluttered the header.
-- **Remediation:**
-  Standardized tab header to `"Hardware Stack"` and empty-state label to `"Empty stack (SP = 0xFFFF; no items pushed)"`.
+| Surface | Background | Foreground | $L_{\text{bg}}$ | $L_{\text{fg}}$ | Actual Contrast | WCAG AA ($\ge 4.5:1$) | WCAG AAA ($\ge 7.0:1$) | Prior Claim | Verification Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Trace Table: Halted Row** | `#1e3324` $(30, 51, 36)$ | `#98c379` $(152, 195, 121)$ | $0.0280$ | $0.4727$ | **6.70:1** | **PASS** | **FAIL** | `>8.5:1 (AAA)` | **Corrected to WCAG AA** |
+| **Trace Table: Faulted Row** | `#3e2024` $(62, 32, 36)$ | `#e06c75` $(224, 108, 117)$ | $0.0238$ | $0.2869$ | **4.57:1** | **PASS** | **FAIL** | `>7:1 (AAA)` | **Corrected to WCAG AA** |
+| *Legacy Halted Row (Old)* | `#e6f4ea` $(230, 244, 234)$ | `#dcdcdc` $(220, 220, 220)$ | $0.8872$ | $0.7099$ | **1.21:1** | FAIL | FAIL | N/A | Defect Confirmed |
+| *Legacy Faulted Row (Old)* | `#fce8e6` $(252, 232, 230)$ | `#dcdcdc` $(220, 220, 220)$ | $0.8353$ | $0.7099$ | **1.16:1** | FAIL | FAIL | N/A | Defect Confirmed |
 
-### Finding 4: Inconsistent Hexadecimal Prefix Capitalization (`0X` vs `0x`)
-- **Severity:** Minor / Typographic Consistency
-- **Affected Surface:**
-  - `src/gui/registers_panel.cpp`: `formatHexWord` and `formatHexByte`
-  - `src/gui/bit_view_widget.cpp`: Register title headers
-  - `src/gui/trace_panel.cpp`: PC and raw opcode columns
-  - `src/gui/memory_viewer.cpp`: Address headers and input field
-  - `src/gui/instruction_inspector.cpp`: PC, disassembled operands, branch targets, fault addresses
-  - `src/gui/watch_panel.cpp`: Watch target labels and hex values
-  - `src/gui/devices_panel.cpp`: LED indicator row and FIFO queue
-- **Defect Description:**
-  Calling `.toUpper()` on strings formatted with `"0x%1"` converted the lowercase prefix `"0x"` into capital `"0X"`, resulting in `"0X0200"`, `"0X0A"`, and `"0B01010101"`.
-- **Remediation:**
-  Standardized all hexadecimal formatting helper functions to preserve lowercase `"0x"` and `"0b"` prefixes while rendering hexadecimal digits in uppercase (e.g. `0x0200`, `0x0A`, `0b01010101`).
+> [!IMPORTANT]
+> **Audit Finding:** The new dark palette (`#1e3324` with `#98c379` and `#3e2024` with `#e06c75`) resolves the critical 1.2:1 contrast failure and achieves **full WCAG 2.1 AA compliance** (6.70:1 and 4.57:1, exceeding the 4.5:1 AA threshold). However, it does **not** satisfy the strict 7.0:1 threshold for WCAG AAA. Claims of WCAG AAA compliance have been formally retracted and corrected.
 
-### Finding 5: Awkward Whitespace Padding in Decimal Annotations
-- **Severity:** Minor / Visual Polish
-- **Affected Surface:** `src/gui/registers_panel.cpp` (8-Bit Registers Group)
-- **Defect Description:**
-  Formatting registers as `QString(" (%1)").arg(regs.r[i], 3, 10, ' ')` produced uneven padding with internal spaces, such as `"0x0A ( 10)"` and `"0x00 (  0)"`.
-- **Remediation:**
-  Updated formatting to `QString(" (%1)").arg(regs.r[i])`, producing natural spacing: `"0x0A (10)"` and `"0x00 (0)"`.
+### 2.3 Comprehensive Workbench Color Contrast Audit Matrix
 
-### Finding 6: Engine State Status Mismatch During Stepping
-- **Severity:** Moderate / Usability & State Integrity
-- **Affected Surface:** `src/gui/registers_panel.cpp` (Engine Status Group)
-- **Defect Description:**
-  When single-stepping or paused at a breakpoint, the toolbar badge and status bar correctly showed `"PAUSED"`, but `RegistersPanel`'s Engine Status displayed `"State: RUNNING"` in bright blue because it read raw `session.state()`.
-- **Remediation:**
-  Updated `RegistersPanel::refresh()` to verify `controller_->isExecuting()`. When not executing continuously, `MachineState::Running` and `MachineState::Paused` display as `"PAUSED"` in amber, perfectly synchronized across all panels.
-
-### Finding 7: Silent Rejection of Invalid Watch Expressions
-- **Severity:** Minor / Usability
-- **Affected Surface:** `src/gui/watch_panel.cpp`
-- **Defect Description:**
-  Entering an invalid expression in the Watch panel input field failed silently without user feedback.
-- **Remediation:**
-  Added visual error feedback: invalid entries highlight the input field with a crimson border (`border: 1px solid #e06c75`) and display an informative tooltip listing supported expressions. Modifying or clearing the text immediately resets the styling.
-
-### Finding 8: Find Bar Match Label Truncation on Narrow Viewports
-- **Severity:** Minor / Layout Elasticity
-- **Affected Surface:** `src/gui/find_replace_bar.cpp`
-- **Defect Description:**
-  `search_input_->setMinimumWidth(240)` caused the match counter label (`1 of 5`) to be squeezed and truncated to `1...` on narrower dock widths.
-- **Remediation:**
-  Reduced `search_input_` minimum width to 160px with `QSizePolicy::Expanding` size policy, and set a minimum width of 64px on `match_label_`, ensuring match counts are always fully visible.
-
-### Finding 9: Redundant Header Painting Inside 7-Segment Display Bezel
-- **Severity:** Minor / Visual Redundancy
-- **Affected Surface:** `src/gui/seven_segment_display.cpp`
-- **Defect Description:**
-  Inside the dark bezel, the display painted `"Numeric Display — Port 0x02"`, duplicating the group box title `"Numeric Display (Port 0x02)"` directly above it.
-- **Remediation:**
-  Replaced redundant bezel title with a clean, educational caption: `"DECIMAL READOUT"`.
+| UI Component | FG Color (Hex / Name) | BG Color (Hex / Surface) | $L_{\text{fg}}$ | $L_{\text{bg}}$ | Contrast Ratio | WCAG Compliance | Context & Usage |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Code Editor Body** | `#dcdcdc` (Light Grey) | `#1e1e1e` (Editor Dark) | $0.7099$ | $0.0126$ | **12.14:1** | **WCAG AAA** | Assembly source code text |
+| **Secondary Panel Text** | `#abb2bf` (One Dark Grey) | `#21252b` (Panel Base) | $0.4449$ | $0.0177$ | **7.31:1** | **WCAG AAA** | Labels, table headers, descriptions |
+| **Muted Comments / Hints** | `#5c6370` (Slate Grey) | `#21252b` (Panel Base) | $0.1226$ | $0.0177$ | **2.55:1** | *Fails AA normal text* | Assembly comments, placeholder text (informational only) |
+| **Teal Accent / Titles** | `#4ec9b0` (Teal) | `#21252b` (Panel Base) | $0.4608$ | $0.0177$ | **7.55:1** | **WCAG AAA** | Group box titles, focus borders |
+| **Blue Accent / Status** | `#61afef` (Sky Blue) | `#21252b` (Panel Base) | $0.3905$ | $0.0177$ | **6.51:1** | **WCAG AA** | RUNNING state, active links |
+| **Changed Value Cell** | `#ffd54f` (Amber Highlight) | `#3e3520` (Dark Amber Cell) | $0.6698$ | $0.0340$ | **8.57:1** | **WCAG AAA** | Registers/memory mutated during step |
+| **Table/List Selection** | `#ffffff` (Pure White) | `#264f78` (VS Selection Blue) | $1.0000$ | $0.0735$ | **8.50:1** | **WCAG AAA** | Selected row/item across all tables |
+| **Inspector: Ready State** | `#98c379` (Light Green) | `#21252b` (Panel Base) | $0.4727$ | $0.0177$ | **7.55:1** | **WCAG AAA** | Instruction inspector post-reset state |
+| **Inspector: Paused State**| `#e5c07b` (Light Amber) | `#21252b` (Panel Base) | $0.6326$ | $0.0177$ | **10.08:1** | **WCAG AAA** | Instruction inspector step completed |
+| **Inspector: Halted State**| `#abb2bf` (Light Grey) | `#21252b` (Panel Base) | $0.4449$ | $0.0177$ | **7.31:1** | **WCAG AAA** | Instruction inspector normal halt (improved from `#6c757d`) |
+| **Inspector: Faulted State**| `#e06c75` (Soft Red) | `#21252b` (Panel Base) | $0.2869$ | $0.0177$ | **4.98:1** | **WCAG AA** | Instruction inspector CPU fault text (improved from `#dc3545`) |
+| **Watch Error Border** | `#e06c75` (Soft Red) | `#21252b` (Panel Base) | $0.2869$ | $0.0177$ | **4.98:1** | **Passes Non-Text UI** | Input error border (exceeds 3.0:1 UI component threshold) |
+| **Badge: Ready** | `#ffffff` (White Text) | `#28a745` (Green Badge) | $1.0000$ | $0.2854$ | **3.13:1** | *Passes Large/Bold* | Toolbar badge (bold text $\ge 3.0:1$) |
+| **Badge: Paused** | `#181a1f` (Dark Text) | `#e5c07b` (Amber Badge) | $0.0126$ | $0.6326$ | **10.08:1** | **WCAG AAA** | Toolbar badge (bold amber) |
+| **Badge: Halted** | `#dcdcdc` (Light Grey) | `#495057` (Slate Badge) | $0.7099$ | $0.0776$ | **5.96:1** | **WCAG AA** | Toolbar badge (neutral grey) |
+| **Badge: Faulted** | `#ffffff` (White Text) | `#dc3545` (Red Badge) | $1.0000$ | $0.1818$ | **4.53:1** | **WCAG AA** | Toolbar badge (critical fault) |
 
 ---
 
-## 4. Verification Evidence & Automated Tests
+## 3. Test Count Reconciliation
 
-All fixes are guarded by automated regression tests in [`tests/gui/test_gui.cpp`](file:///d:/BitForge/tests/gui/test_gui.cpp):
-- `testADR001StackViewerEmptySentinelAndBreakpointsEmptyState`: Verifies empty stack sentinel copy and asserts zero ADR references in workbench tab headers.
-- `testPhase11UxPolishAndTypography`: Dedicated comprehensive test verifying:
-  1. RegistersPanel tab titles (`Values` and `Bits`) without ampersand escape artifacts.
-  2. Decimal parentheses formatting without whitespace padding (`0x00 (0)` and `0x0A (10)`).
-  3. RegistersPanel Engine Status synchronization with execution controller (`READY`, `PAUSED`, `HALTED`).
-  4. Trace table Halted row contrast (background `#1e3324`, foreground `#98c379`).
-  5. Trace table Faulted row contrast (background `#3e2024`, foreground `#e06c75`).
-  6. Watch panel invalid expression error border, tooltip feedback, and text change reset.
-  7. Find bar layout elasticity (`Expanding` horizontal policy) and match label minimum width.
-  8. Devices panel LED label format with lowercase `0x` and `0b` prefixes.
+### 3.1 Reconciliation Analysis
+A key mandate of this audit was explaining the numerical divergence between Phase 10.2 ("233 core tests, 27 GUI tests") and Phase 11 ("220 core tests, 272 total checks"):
 
----
+1. **Core GTest Test Suite (`bitforge_tests.exe`):**
+   - In Phase 8.1, the core suite contained 220 tests.
+   - During Phase 10, exactly 13 new test cases were added to validate input FIFO operations, fault atomicity, and instruction metadata (e.g. `BusTest.InputFifoContentsAndInspection`, `IoTest.FaultAtomicityPreservesDeviceState`, `TypesTest.InstructionInfoMetadata`). This brought the core count to **233 test cases**.
+   - Phase 10.2 accurately cited 233 tests.
+   - In Phase 11, the report author inadvertently copied the obsolete pre-Phase 10 number ("220") from an earlier template because running `ctest` without `--verbose` collapses the 233 core tests into a single line (`1/2 Test #1: BitForgeTests ... Passed`). When executed directly or with `--verbose`, `bitforge_tests.exe` outputs:  
+     `Test Summary: 233 passed, 0 failed out of 233 total tests.`
+   - **Zero core tests were ever lost, removed, or disabled.**
 
-## 5. Summary Table of Audit Resolution
+2. **Qt 6 GUI Test Suite (`bitforge_gui_tests.exe`):**
+   - In Phase 10, the GUI test suite had 27 test slots.
+   - Across Phases 10.1, 10.2, and 11, new test slots were incrementally created to cover input FIFO, watch panel, preferences, memory reset, layout, and Phase 11 UX polish, reaching 51 test slots (reported by QTest as 52 passes counting `cleanupTestCase`).
+   - The Phase 11 author derived "272 checks" by adding the outdated 220 to 52 ($220 + 52 = 272$).
+   - In Phase 11.1, four additional comprehensive test slots were added:
+     - `testTypographyResizingAndStress`
+     - `testDocksAndCorruptPreferencesRecovery`
+     - `testEndToEndExecutionWorkflowAndStateLabels`
+     - `testAccessibilityFocusAndMicrocopy`
+   - This expands the GUI test suite to **55 test slots** (reported by QTest as 57 test passes including `initTestCase` and `cleanupTestCase`).
 
-| Component | Issue Identified | Resolution | Test Verification |
-| :--- | :--- | :--- | :--- |
-| **Trace Table** | 1.2:1 contrast failure on Halted/Faulted rows | Dark emerald/wine tints with high-contrast text (>7:1) | `testPhase11UxPolishAndTypography` |
-| **Theme** | Unstyled `QListWidget` on dark workbench | Full dark stylesheet rules added in `theme.cpp` | `gui_smoke_welcome.png` |
-| **Stack Viewer** | Internal `ADR-001` acronym leakage | Renamed to "Hardware Stack" & clean empty state | `testADR001StackViewerEmptySentinel` |
-| **Registers Panel** | Tab name clipping & decimal spacing padding | Tabs: "Values" & "Bits"; natural decimal format | `testPhase11UxPolishAndTypography` |
-| **Engine Status** | Mismatched "RUNNING" state during step | Synchronized with controller to display "PAUSED" | `testPhase11UxPolishAndTypography` |
-| **Hex Notation** | Uppercase `0X` and `0B` prefixes | Lowercase `0x` & `0b` with uppercase hex digits | `testPhase11UxPolishAndTypography` |
-| **Watch Panel** | Silent failure on invalid expression | Crimson border flash & helpful syntax tooltip | `testPhase11UxPolishAndTypography` |
-| **Find Bar** | Match count label truncation (`1...`) | Flexible size policy & minimum label width | `testPhase11UxPolishAndTypography` |
-| **7-Segment Display** | Redundant bezel header duplication | Bezel title updated to "DECIMAL READOUT" | `gui_smoke_devices.png` |
+3. **Current Verified Test Counts:**
+   - **Headless Core Presets (`debug`, `ci`):** **233 passing test cases** (100%).
+   - **GUI Presets (`gui`, `gui-release`):** **233 core tests + 55 GUI test slots = 288 tests** (or 290 total test executions counting fixtures, 100% passing).
 
 ---
 
-## 6. Conclusion
+## 4. Objective Defects Identified and Resolved in Phase 11.1
 
-Phase 11 successfully elevated BitForge's user experience, typographic consistency, accessibility contrast, and terminology rigor. The desktop workbench is intuitive for beginners, comfortable for extended coding sessions, technically precise, and completely aligned with the frozen architecture specification.
+During interactive inspection and programmatic stress testing in Phase 11.1, five objective defects were detected and resolved:
+
+| # | Component | Defect Found | Remediation Applied | Files Modified |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | **Editor Zoom** | **Zoom In / Out Did Nothing:** `QAction::triggered(bool checked)` passed `false` (converted to `int 0`) into `CodeEditor::zoomIn(int delta = 1)`, resulting in a no-op zoom of 0pt. | Connected actions via lambdas explicitly passing `delta = 1`: `[this]() { editor_->zoomIn(1); }`. | [`main_window.cpp`](file:///d:/BitForge/src/gui/main_window.cpp#L324-L333) |
+| **2** | **Status Bar** | **Window Resizing Blocked by Filename:** `status_file_label_` had no minimum width constraint. Opening a long file path caused `QLabel::minimumSizeHint()` to balloon, pushing status widgets offscreen. | Set `status_file_label_->setMinimumWidth(0);` and populated `setToolTip()` with the full path on hover. | [`main_window.cpp`](file:///d:/BitForge/src/gui/main_window.cpp#L590-L600) |
+| **3** | **Registers Panel**| **Initial State Label Case & Color Mismatch:** Initialized in constructor as `"Ready"` with low-contrast `#28a745` (3.13:1), diverging from uppercase `"READY"` with `#98c379` (7.55:1) in `refresh()`. | Initialized as `"READY"` with high-contrast `#98c379` stylesheet styling. | [`registers_panel.cpp`](file:///d:/BitForge/src/gui/registers_panel.cpp#L122-L123) |
+| **4** | **Instruction Inspector**| **Low-Contrast State Indicator:** Used `#28a745` (3.13:1) for Ready and `#6c757d` (3.45:1) for Halted, failing WCAG AA normal text. | Updated Ready to `#98c379` (7.55:1, AAA) and Halted to `#abb2bf` (7.22:1, AAA). | [`instruction_inspector.cpp`](file:///d:/BitForge/src/gui/instruction_inspector.cpp#L430-L448) |
+| **5** | **Design System** | **Missing Visible Keyboard Focus:** `QPushButton` and `QToolButton` had hover and pressed states, but lacked explicit `:focus` rules for Tab navigation. | Added `QPushButton:focus` and `QToolButton:focus` rules with `#4ec9b0` (Teal) 1px border. | [`theme.cpp`](file:///d:/BitForge/src/gui/theme.cpp#L90-L94) |
+
+---
+
+## 5. Subjective UX Observations vs. Objective Defects
+
+To maintain architectural integrity and prevent unnecessary code thrash, observations were strictly categorized:
+
+### 5.1 Objective Defects (Addressed)
+- Functional bugs that prevent user intent (e.g., zoom shortcuts doing nothing).
+- Layout bugs that cause text truncation or prevent window resizing.
+- Contrast failures violating WCAG 2.1 AA (<4.5:1 for normal text).
+- State desynchronizations where two panels display contradictory engine states.
+
+### 5.2 Subjective Observations & Future Polish (Deferred)
+- **Menu Accelerator Styling:** The double-ampersand notation in `QDockWidget("Registers && Virtual Devices")` is technically required so that Qt's auto-generated View menu action does not treat `&` as a mnemonic accelerator. While displaying `&&` in the dock title bar is slightly unusual, stripping it would break the View menu shortcut. Preserved as-is.
+- **Micro-Animations:** Adding smooth animated transitions for register changes was considered, but educational and debugging workbenches benefit more from instant, deterministic state refresh.
+- **Font Selection Dialog:** While editor font size can be scaled (Ctrl++, Ctrl+-, preferences), an arbitrary font family chooser is deliberately omitted to maintain monospace alignment across all assembly columns.
+
+---
+
+## 6. Tested Capabilities vs. Untested Platform Limitations
+
+### 6.1 Verified & Tested
+- [x] Full execution lifecycle: Assemble, Run from Entry, Step, Breakpoint hit, Continue, Pause, Reset, Fault.
+- [x] Extreme window resizing: Clamping to minimum size hints, maximizing, restoring.
+- [x] Font zooming: Clamping between 6pt and 32pt, dynamic line number gutter width recalculation.
+- [x] Layout recovery: Closing all docks, floating, and restoring via `onRestoreDefaultLayout()`.
+- [x] Corrupted preferences: Recovery from corrupt geometry bytes, negative font sizes, and out-of-range execution speeds.
+- [x] Contrast ratios: Computed via standard relative luminance formula across all theme surfaces.
+
+### 6.2 Untested Platform Limitations
+- [ ] **Screen Readers (Assistive Tech):** Testing with active screen readers (e.g. Windows Narrator, NVDA, JAWS) was not performed. While standard Qt Widgets provide accessible roles, custom-painted vector widgets (`SevenSegmentDisplay`, `BitViewWidget`) do not implement `QAccessibleInterface`.
+- [ ] **High-DPI Display Scaling (>150%):** Automated tests were executed in an offscreen framebuffer with 1.0x scaling. Fractional DPI scaling (e.g. 125%, 175%) on physical Windows displays may introduce subpixel rounding differences in custom vector rendering.
+- [ ] **Hardware Color Profiles:** Real-world display contrast depends on monitor gamut, panel calibration (e.g. sRGB vs Display P3), and ambient lighting. Calculations assume calibrated sRGB.
+
+---
+
+## 7. Multi-Preset Verification Matrix
+
+```
+Preset 'debug':        233/233 core tests passed (0.13s)  - 100% Pass
+Preset 'ci':           233/233 core tests passed (0.13s)  - 100% Pass
+Preset 'gui':          288/288 checks passed     (7.10s)  - 100% Pass
+Preset 'gui-release':  288/288 checks passed     (6.61s)  - 100% Pass
+```
+
+**Total Automated Test Count:** 288 distinct test cases (233 core GTest + 55 GUI QTest slots, 57 passes counting QTest fixtures). Zero failures, zero skips across all build presets.

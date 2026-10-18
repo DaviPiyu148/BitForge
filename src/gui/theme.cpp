@@ -88,6 +88,9 @@ QString applicationStyleSheet() {
             border-color: #4ec9b0;
             color: #ffffff;
         }
+        QToolButton:focus {
+            border: 1px solid #4ec9b0;
+        }
         QToolButton:pressed {
             background-color: #181a1f;
         }
@@ -193,6 +196,9 @@ QString applicationStyleSheet() {
             background-color: #3e4451;
             border-color: #4ec9b0;
             color: #ffffff;
+        }
+        QPushButton:focus {
+            border: 1px solid #4ec9b0;
         }
         QPushButton:pressed {
             background-color: #1b1d23;

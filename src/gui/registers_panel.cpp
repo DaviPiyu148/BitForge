@@ -119,8 +119,8 @@ RegistersPanel::RegistersPanel(QWidget* parent)
     status_layout->setContentsMargins(8, 8, 8, 8);
 
     status_layout->addWidget(new QLabel("State:", status_group), 0, 0);
-    state_label_ = new QLabel("Ready", status_group);
-    state_label_->setStyleSheet("QLabel { font-weight: bold; color: #28a745; }");
+    state_label_ = new QLabel("READY", status_group);
+    state_label_->setStyleSheet("QLabel { font-weight: bold; color: #98c379; }");
     status_layout->addWidget(state_label_, 0, 1);
 
     status_layout->addWidget(new QLabel("Stop Reason:", status_group), 1, 0);

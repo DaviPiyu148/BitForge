@@ -120,6 +120,7 @@ InstructionInspector::InstructionInspector(QWidget* parent)
     last_grid->addWidget(new QLabel("Engine State After:", last_group), 1, 2);
     last_state_label_ = new QLabel("Ready", last_group);
     last_state_label_->setFont(mono_font);
+    last_state_label_->setStyleSheet("QLabel { color: #98c379; }");
     last_grid->addWidget(last_state_label_, 1, 3);
 
     last_grid->addWidget(new QLabel("Execution Note / Fault:", last_group), 2, 0);
@@ -428,22 +429,22 @@ void InstructionInspector::refresh() {
         switch (last.state_after) {
             case MachineState::Ready:
                 last_state_label_->setText("Ready");
-                last_state_label_->setStyleSheet("QLabel { color: #28a745; font-weight: bold; }");
+                last_state_label_->setStyleSheet("QLabel { color: #98c379; font-weight: bold; }");
                 break;
             case MachineState::Running:
             case MachineState::Paused:
                 last_state_label_->setText("Paused / Step Completed");
-                last_state_label_->setStyleSheet("QLabel { color: #ffc107; font-weight: bold; }");
+                last_state_label_->setStyleSheet("QLabel { color: #e5c07b; font-weight: bold; }");
                 break;
             case MachineState::Halted:
                 last_state_label_->setText("Halted Normally");
-                last_state_label_->setStyleSheet("QLabel { color: #6c757d; font-weight: bold; }");
+                last_state_label_->setStyleSheet("QLabel { color: #abb2bf; font-weight: bold; }");
                 break;
             case MachineState::Faulted:
                 last_state_label_->setText(last.fault.has_value()
                                                ? QString("Fault: %1").arg(last.fault->message.c_str())
                                                : "Faulted");
-                last_state_label_->setStyleSheet("QLabel { color: #dc3545; font-weight: bold; }");
+                last_state_label_->setStyleSheet("QLabel { color: #e06c75; font-weight: bold; }");
                 break;
         }
 
@@ -485,7 +486,7 @@ void InstructionInspector::refresh() {
         last_pc_label_->setText("-");
         last_mnem_label_->setText("-");
         last_state_label_->setText("Ready");
-        last_state_label_->setStyleSheet("QLabel { color: #28a745; }");
+        last_state_label_->setStyleSheet("QLabel { color: #98c379; }");
         last_effect_label_->setText("Program ready to execute.");
         last_effect_label_->setStyleSheet("QLabel { color: inherit; }");
         last_step_info_ = std::nullopt;

@@ -324,12 +324,12 @@ void MainWindow::setupMenusAndToolbars() {
     zoom_in_act_ = new QAction("Zoom &In", this);
     zoom_in_act_->setShortcut(QKeySequence::ZoomIn);
     zoom_in_act_->setStatusTip("Increase editor font size (Ctrl++)");
-    connect(zoom_in_act_, &QAction::triggered, editor_, &CodeEditor::zoomIn);
+    connect(zoom_in_act_, &QAction::triggered, this, [this]() { editor_->zoomIn(1); });
 
     zoom_out_act_ = new QAction("Zoom &Out", this);
     zoom_out_act_->setShortcut(QKeySequence::ZoomOut);
     zoom_out_act_->setStatusTip("Decrease editor font size (Ctrl+-)");
-    connect(zoom_out_act_, &QAction::triggered, editor_, &CodeEditor::zoomOut);
+    connect(zoom_out_act_, &QAction::triggered, this, [this]() { editor_->zoomOut(1); });
 
     reset_zoom_act_ = new QAction("&Reset Zoom", this);
     reset_zoom_act_->setShortcut(QKeySequence(tr("Ctrl+0")));
@@ -589,6 +589,8 @@ void MainWindow::setupMenusAndToolbars() {
 
 void MainWindow::setupStatusBar() {
     status_file_label_ = new QLabel("[Untitled]", this);
+    status_file_label_->setMinimumWidth(0);
+    status_file_label_->setToolTip("[Untitled]");
     status_cursor_label_ = new QLabel("Ln 1, Col 1", this);
     status_state_label_ = new QLabel("READY", this);
     status_pc_label_ = new QLabel("PC: 0x0200", this);
@@ -860,6 +862,7 @@ void MainWindow::updateWindowTitle() {
     if (editor_->document()->isModified()) {
         status_file_label_->setText(status_file_label_->text() + " [Modified]");
     }
+    status_file_label_->setToolTip(status_file_label_->text());
 }
 
 void MainWindow::setCurrentFile(const QString& filePath) {

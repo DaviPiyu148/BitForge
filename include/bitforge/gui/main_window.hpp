@@ -56,6 +56,12 @@ public:
     [[nodiscard]] QDockWidget* bottomDock() const noexcept { return bottom_dock_; }
     [[nodiscard]] QDockWidget* watchDock() const noexcept { return watch_dock_; }
 
+    [[nodiscard]] QLabel* statusFileLabel() const noexcept { return status_file_label_; }
+    [[nodiscard]] QLabel* statusStateLabel() const noexcept { return status_state_label_; }
+    [[nodiscard]] QLabel* statusPcLabel() const noexcept { return status_pc_label_; }
+    [[nodiscard]] QLabel* statusStepsLabel() const noexcept { return status_steps_label_; }
+    [[nodiscard]] QLabel* stateBadge() const noexcept { return state_badge_; }
+
     [[nodiscard]] QComboBox* speedComboBox() const noexcept { return speed_combo_; }
     [[nodiscard]] QSpinBox* budgetSpinBox() const noexcept { return budget_spinbox_; }
     [[nodiscard]] QAction* runAction() const noexcept { return run_act_; }
