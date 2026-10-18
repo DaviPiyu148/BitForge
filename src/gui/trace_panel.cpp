@@ -57,86 +57,108 @@ void TracePanel::refresh() {
     if (controller_ == nullptr) return;
 
     const auto& trace = controller_->session().trace();
-    table_->setRowCount(static_cast<int>(trace.size()));
-
-    for (int i = 0; i < static_cast<int>(trace.size()); ++i) {
-        const auto& entry = trace[static_cast<std::size_t>(i)];
-
-        // 0: Step #
-        auto* item_step = new QTableWidgetItem(QString::number(entry.step_number));
-        item_step->setTextAlignment(Qt::AlignCenter);
-        table_->setItem(i, 0, item_step);
-
-        // 1: PC
-        auto* item_pc = new QTableWidgetItem(
-            QString("0x%1").arg(entry.instruction_address, 4, 16, QLatin1Char('0')).toUpper()
-        );
-        item_pc->setTextAlignment(Qt::AlignCenter);
-        table_->setItem(i, 1, item_pc);
-
-        // 2: Mnemonic
-        auto* item_mnem = new QTableWidgetItem(
-            entry.mnemonic.empty() ? QString("0x%1").arg(entry.opcode_raw, 2, 16, QLatin1Char('0')).toUpper()
-                                   : QString::fromStdString(entry.mnemonic)
-        );
-        item_mnem->setTextAlignment(Qt::AlignCenter);
-        table_->setItem(i, 2, item_mnem);
-
-        // 3: Raw bytes
-        QString bytes_str;
-        for (std::size_t b = 0; b < entry.instruction_bytes.size(); ++b) {
-            bytes_str.append(QString("%1 ").arg(entry.instruction_bytes[b], 2, 16, QLatin1Char('0')).toUpper());
+    if (trace.empty()) {
+        table_->setRowCount(0);
+        if (empty_label_ != nullptr) {
+            empty_label_->setVisible(true);
         }
-        auto* item_bytes = new QTableWidgetItem(bytes_str.trimmed());
-        item_bytes->setTextAlignment(Qt::AlignCenter);
-        table_->setItem(i, 3, item_bytes);
-
-        // 4: Source
-        QString src_str = "-";
-        if (entry.source_location.has_value()) {
-            src_str = QString("Line %1, Col %2")
-                          .arg(entry.source_location->line)
-                          .arg(entry.source_location->column);
-        }
-        auto* item_src = new QTableWidgetItem(src_str);
-        item_src->setTextAlignment(Qt::AlignCenter);
-        table_->setItem(i, 4, item_src);
-
-        // 5: State After
-        QString state_str = QString::fromStdString(std::string(to_string(entry.state_after)));
-        if (entry.faulted) {
-            state_str = QString("FAULT: %1").arg(entry.fault.has_value() ? to_string(entry.fault->type).data() : "Unknown");
-        }
-        auto* item_state = new QTableWidgetItem(state_str);
-        item_state->setTextAlignment(Qt::AlignCenter);
-        table_->setItem(i, 5, item_state);
-
-        // 6: Execution Delta
-        QString delta_str = "-";
-        if (entry.delta.has_value()) {
-            delta_str = QString::fromStdString(entry.delta->to_string());
-        }
-        auto* item_delta = new QTableWidgetItem(delta_str);
-        item_delta->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        table_->setItem(i, 6, item_delta);
-
-        // Highlight HALT or Fault
-        if (entry.state_after == MachineState::Halted) {
-            for (int col = 0; col < 7; ++col) {
-                auto* it = table_->item(i, col);
-                if (it != nullptr) it->setBackground(QColor(230, 244, 234)); // Soft green
-            }
-        } else if (entry.faulted || entry.state_after == MachineState::Faulted) {
-            for (int col = 0; col < 7; ++col) {
-                auto* it = table_->item(i, col);
-                if (it != nullptr) it->setBackground(QColor(252, 232, 230)); // Soft red
-            }
-        }
+        clear_btn_->setEnabled(false);
+        return;
     }
 
-    if (!trace.empty()) {
+    table_->setUpdatesEnabled(false);
+
+    int start_row = table_->rowCount();
+    // If table has more rows than trace or first row step number doesn't match trace[0], reset
+    if (start_row > static_cast<int>(trace.size()) ||
+        (start_row > 0 && table_->item(0, 0) != nullptr &&
+         table_->item(0, 0)->text().toULongLong() != trace[0].step_number)) {
+        table_->setRowCount(0);
+        start_row = 0;
+    }
+
+    if (start_row < static_cast<int>(trace.size())) {
+        table_->setRowCount(static_cast<int>(trace.size()));
+
+        for (int i = start_row; i < static_cast<int>(trace.size()); ++i) {
+            const auto& entry = trace[static_cast<std::size_t>(i)];
+
+            // 0: Step #
+            auto* item_step = new QTableWidgetItem(QString::number(entry.step_number));
+            item_step->setTextAlignment(Qt::AlignCenter);
+            table_->setItem(i, 0, item_step);
+
+            // 1: PC
+            auto* item_pc = new QTableWidgetItem(
+                QString("0x%1").arg(entry.instruction_address, 4, 16, QLatin1Char('0')).toUpper()
+            );
+            item_pc->setTextAlignment(Qt::AlignCenter);
+            table_->setItem(i, 1, item_pc);
+
+            // 2: Mnemonic
+            auto* item_mnem = new QTableWidgetItem(
+                entry.mnemonic.empty() ? QString("0x%1").arg(entry.opcode_raw, 2, 16, QLatin1Char('0')).toUpper()
+                                       : QString::fromStdString(entry.mnemonic)
+            );
+            item_mnem->setTextAlignment(Qt::AlignCenter);
+            table_->setItem(i, 2, item_mnem);
+
+            // 3: Raw bytes
+            QString bytes_str;
+            for (std::size_t b = 0; b < entry.instruction_bytes.size(); ++b) {
+                bytes_str.append(QString("%1 ").arg(entry.instruction_bytes[b], 2, 16, QLatin1Char('0')).toUpper());
+            }
+            auto* item_bytes = new QTableWidgetItem(bytes_str.trimmed());
+            item_bytes->setTextAlignment(Qt::AlignCenter);
+            table_->setItem(i, 3, item_bytes);
+
+            // 4: Source
+            QString src_str = "-";
+            if (entry.source_location.has_value()) {
+                src_str = QString("Line %1, Col %2")
+                              .arg(entry.source_location->line)
+                              .arg(entry.source_location->column);
+            }
+            auto* item_src = new QTableWidgetItem(src_str);
+            item_src->setTextAlignment(Qt::AlignCenter);
+            table_->setItem(i, 4, item_src);
+
+            // 5: State After
+            QString state_str = QString::fromStdString(std::string(to_string(entry.state_after)));
+            if (entry.faulted) {
+                state_str = QString("FAULT: %1").arg(entry.fault.has_value() ? to_string(entry.fault->type).data() : "Unknown");
+            }
+            auto* item_state = new QTableWidgetItem(state_str);
+            item_state->setTextAlignment(Qt::AlignCenter);
+            table_->setItem(i, 5, item_state);
+
+            // 6: Execution Delta
+            QString delta_str = "-";
+            if (entry.delta.has_value()) {
+                delta_str = QString::fromStdString(entry.delta->to_string());
+            }
+            auto* item_delta = new QTableWidgetItem(delta_str);
+            item_delta->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            table_->setItem(i, 6, item_delta);
+
+            // Highlight HALT or Fault
+            if (entry.state_after == MachineState::Halted) {
+                for (int col = 0; col < 7; ++col) {
+                    auto* it = table_->item(i, col);
+                    if (it != nullptr) it->setBackground(QColor(230, 244, 234)); // Soft green
+                }
+            } else if (entry.faulted || entry.state_after == MachineState::Faulted) {
+                for (int col = 0; col < 7; ++col) {
+                    auto* it = table_->item(i, col);
+                    if (it != nullptr) it->setBackground(QColor(252, 232, 230)); // Soft red
+                }
+            }
+        }
+
         table_->scrollToBottom();
     }
+
+    table_->setUpdatesEnabled(true);
 
     if (empty_label_ != nullptr) {
         empty_label_->setVisible(trace.empty());

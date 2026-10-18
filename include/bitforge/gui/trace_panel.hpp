@@ -20,6 +20,7 @@ public:
 
     void setController(ExecutionController* controller);
     [[nodiscard]] QLabel* emptyLabel() const noexcept { return empty_label_; }
+    [[nodiscard]] QTableWidget* table() const noexcept { return table_; }
 
 public slots:
     void refresh();

@@ -10,6 +10,7 @@
 #include <QDockWidget>
 #include <QTabWidget>
 #include <QSettings>
+#include <QElapsedTimer>
 
 using namespace bitforge;
 using namespace bitforge::gui;
@@ -100,6 +101,7 @@ private slots:
     void testInteractiveInputFifoOperations();
     void testWatchPanelInspectionAndHighlighting();
     void testPreferencesPersistenceAcrossSessions();
+    void testPerformanceAndResponsiveness();
 };
 
 void GuiTest::initTestCase() {
@@ -1975,6 +1977,72 @@ void GuiTest::testPreferencesPersistenceAcrossSessions() {
         settings.remove("executionSpeed");
         settings.remove("watchList");
     }
+}
+
+void GuiTest::testPerformanceAndResponsiveness() {
+    // 1. Benchmark workbench instantiation and initial assemble time
+    QElapsedTimer startup_timer;
+    startup_timer.start();
+
+    MainWindow window;
+    window.resize(1200, 800);
+    window.editor()->setPlainText(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 0\n"
+        "    LDI R1, 100\n"
+        "loop:\n"
+        "    INC R0\n"
+        "    ST [0x8000], R0\n"
+        "    CMP R0, R1\n"
+        "    JNZ loop\n"
+        "    HALT\n"
+    );
+    QVERIFY(window.controller()->assemble(window.editor()->toPlainText()));
+    qint64 startup_ms = startup_timer.elapsed();
+    // Workbench creation and assembly must be prompt (< 2000 ms even in virtualized/debug test environments)
+    QVERIFY(startup_ms < 2000);
+
+    // 2. Optimized MemoryViewer: verify items are reused in-place across steps
+    auto* mem_viewer = window.memoryViewer();
+    QVERIFY(mem_viewer != nullptr);
+    mem_viewer->scrollToAddress(0x8000);
+    mem_viewer->refresh();
+
+    auto* initial_addr_item = mem_viewer->table()->item(0, 0);
+    auto* initial_byte_item = mem_viewer->table()->item(0, 1);
+    QVERIFY(initial_addr_item != nullptr);
+    QVERIFY(initial_byte_item != nullptr);
+
+    // Step 1: LDI R0, 0
+    window.controller()->step();
+    // Item pointers must remain identical (reused in-place, zero allocation churn)
+    QCOMPARE(mem_viewer->table()->item(0, 0), initial_addr_item);
+    QCOMPARE(mem_viewer->table()->item(0, 1), initial_byte_item);
+
+    // 3. Time-sliced Turbo execution responsiveness
+    window.controller()->reset();
+    window.controller()->setSpeed(ExecutionSpeed::Turbo);
+
+    // Execute with a high budget (1,000,000 steps)
+    window.controller()->run(1000000);
+    // Program has 1 + 100 * 4 + 1 = 402 steps to HALT
+    QTRY_COMPARE_WITH_TIMEOUT(window.controller()->session().state(), MachineState::Halted, 2000);
+    QCOMPARE(window.controller()->session().registers().r[0], 100);
+    QVERIFY(!window.controller()->isExecuting());
+
+    // 4. Trace panel incremental efficiency
+    auto* trace_panel = window.tracePanel();
+    QVERIFY(trace_panel != nullptr);
+    QVERIFY(trace_panel->table()->rowCount() > 0);
+    auto* first_trace_item = trace_panel->table()->item(0, 0);
+    QVERIFY(first_trace_item != nullptr);
+
+    // Reset and step once
+    window.controller()->reset();
+    window.controller()->step();
+    QCOMPARE(trace_panel->table()->rowCount(), 1);
 }
 
 QTEST_MAIN(GuiTest)

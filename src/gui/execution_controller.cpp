@@ -1,5 +1,6 @@
 #include "bitforge/gui/execution_controller.hpp"
 
+#include <QElapsedTimer>
 #include <algorithm>
 
 namespace bitforge::gui {
@@ -256,6 +257,63 @@ void ExecutionController::onSliceTimeout() {
         is_continue_mode_ = false;
         last_stop_reason_ = debugger::StopReason::BudgetExhausted;
         emit executionStopped(debugger::StopReason::BudgetExhausted);
+        emit stateChanged();
+        return;
+    }
+
+    if (speed_ == ExecutionSpeed::Turbo) {
+        // Time-sliced Turbo execution: use QElapsedTimer targeting ~10-15 ms slices
+        // so UI stays responsive and event loop processes paint/events smoothly
+        // without dropping instructions or freezing.
+        QElapsedTimer slice_elapsed;
+        slice_elapsed.start();
+        constexpr qint64 kMaxSliceMs = 12; // 12 ms slice preserves ~60 FPS responsiveness
+        constexpr std::uint64_t kTurboBatchChunk = 2000;
+
+        while (is_running_timer_ && remaining_budget_ > 0) {
+            const std::uint64_t chunk = std::min(remaining_budget_, kTurboBatchChunk);
+            debugger::ExecutionResult res;
+            if (is_continue_mode_) {
+                res = session_->continue_execution(chunk);
+                is_continue_mode_ = false;
+            } else {
+                res = session_->run(chunk);
+            }
+
+            if (res.steps_executed >= remaining_budget_) {
+                remaining_budget_ = 0;
+            } else {
+                remaining_budget_ -= res.steps_executed;
+            }
+
+            if (res.stop_reason == debugger::StopReason::BreakpointHit ||
+                res.stop_reason == debugger::StopReason::Halted ||
+                res.stop_reason == debugger::StopReason::Faulted ||
+                res.stop_reason == debugger::StopReason::AlreadyHalted ||
+                res.stop_reason == debugger::StopReason::AlreadyFaulted) {
+                slice_timer_.stop();
+                is_running_timer_ = false;
+                last_stop_reason_ = res.stop_reason;
+                emit executionStopped(res.stop_reason);
+                emit stateChanged();
+                return;
+            }
+
+            if (remaining_budget_ == 0) {
+                slice_timer_.stop();
+                is_running_timer_ = false;
+                last_stop_reason_ = debugger::StopReason::BudgetExhausted;
+                emit executionStopped(debugger::StopReason::BudgetExhausted);
+                emit stateChanged();
+                return;
+            }
+
+            if (slice_elapsed.elapsed() >= kMaxSliceMs) {
+                break;
+            }
+        }
+
+        // Periodic UI update after time slice
         emit stateChanged();
         return;
     }

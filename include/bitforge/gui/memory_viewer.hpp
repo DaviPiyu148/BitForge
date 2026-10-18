@@ -25,6 +25,7 @@ public:
     void setController(ExecutionController* controller);
     void scrollToAddress(word_t address);
     [[nodiscard]] word_t currentBaseAddress() const noexcept { return base_address_; }
+    [[nodiscard]] QTableWidget* table() const noexcept { return table_; }
 
 public slots:
     void refresh();

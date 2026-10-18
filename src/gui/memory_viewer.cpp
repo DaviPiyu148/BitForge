@@ -139,38 +139,54 @@ void MemoryViewer::updateTable() {
 
     const bool has_diff = (prev_base_address_ == base_address_ && prev_data_.size() == range.data.size());
 
+    table_->setUpdatesEnabled(false);
+
     for (int r = 0; r < kRowsPerPage; ++r) {
         const word_t row_addr = static_cast<word_t>((base_address_ + r * kBytesPerRow) & 0xFFFF);
-        auto* addr_item = new QTableWidgetItem(
-            QString("0x%1").arg(row_addr, 4, 16, QLatin1Char('0')).toUpper()
-        );
-        addr_item->setTextAlignment(Qt::AlignCenter);
-        addr_item->setForeground(QColor(0x61, 0xaf, 0xef)); // Soft blue address
-        table_->setItem(r, 0, addr_item);
+        const QString addr_str = QString("0x%1").arg(row_addr, 4, 16, QLatin1Char('0')).toUpper();
+
+        auto* addr_item = table_->item(r, 0);
+        if (addr_item == nullptr) {
+            addr_item = new QTableWidgetItem(addr_str);
+            addr_item->setTextAlignment(Qt::AlignCenter);
+            addr_item->setForeground(QColor(0x61, 0xaf, 0xef)); // Soft blue address
+            table_->setItem(r, 0, addr_item);
+        } else if (addr_item->text() != addr_str) {
+            addr_item->setText(addr_str);
+        }
 
         QString ascii_str;
         for (int c = 0; c < kBytesPerRow; ++c) {
             const std::size_t idx = static_cast<std::size_t>(r * kBytesPerRow + c);
             const byte_t b = range.data[idx];
-            auto* byte_item = new QTableWidgetItem(
-                QString("%1").arg(b, 2, 16, QLatin1Char('0')).toUpper()
-            );
-            byte_item->setTextAlignment(Qt::AlignCenter);
+            const QString byte_str = QString("%1").arg(b, 2, 16, QLatin1Char('0')).toUpper();
+            const bool is_changed = (has_diff && b != prev_data_[idx]);
+
+            auto* byte_item = table_->item(r, c + 1);
+            if (byte_item == nullptr) {
+                byte_item = new QTableWidgetItem(byte_str);
+                byte_item->setTextAlignment(Qt::AlignCenter);
+                table_->setItem(r, c + 1, byte_item);
+            } else if (byte_item->text() != byte_str) {
+                byte_item->setText(byte_str);
+            }
 
             // Highlight recently changed memory bytes with warm amber
-            if (has_diff && b != prev_data_[idx]) {
+            if (is_changed) {
                 byte_item->setBackground(theme::kChangedBg);
                 byte_item->setForeground(theme::kChangedText);
                 QFont f = table_->font();
                 f.setBold(true);
                 byte_item->setFont(f);
-            } else if (b == 0x00) {
-                byte_item->setForeground(QColor(0x5c, 0x63, 0x70)); // Dim zero bytes
             } else {
-                byte_item->setForeground(QColor(0xdc, 0xdc, 0xdc));
+                byte_item->setBackground(Qt::NoBrush);
+                if (b == 0x00) {
+                    byte_item->setForeground(QColor(0x5c, 0x63, 0x70)); // Dim zero bytes
+                } else {
+                    byte_item->setForeground(QColor(0xdc, 0xdc, 0xdc));
+                }
+                byte_item->setFont(table_->font());
             }
-
-            table_->setItem(r, c + 1, byte_item);
 
             if (std::isprint(static_cast<unsigned char>(b))) {
                 ascii_str.append(static_cast<char>(b));
@@ -179,10 +195,17 @@ void MemoryViewer::updateTable() {
             }
         }
 
-        auto* ascii_item = new QTableWidgetItem(ascii_str);
-        ascii_item->setForeground(QColor(0x98, 0xc3, 0x79)); // Green ASCII representation
-        table_->setItem(r, 17, ascii_item);
+        auto* ascii_item = table_->item(r, 17);
+        if (ascii_item == nullptr) {
+            ascii_item = new QTableWidgetItem(ascii_str);
+            ascii_item->setForeground(QColor(0x98, 0xc3, 0x79)); // Green ASCII representation
+            table_->setItem(r, 17, ascii_item);
+        } else if (ascii_item->text() != ascii_str) {
+            ascii_item->setText(ascii_str);
+        }
     }
+
+    table_->setUpdatesEnabled(true);
 
     prev_data_ = range.data;
     prev_base_address_ = base_address_;
