@@ -98,6 +98,11 @@ From PowerShell (with MSYS2 UCRT64 in PATH):
 
 ## Catalog of Verified Examples
 
+> [!NOTE]
+> All 51 examples listed below are defined as a shared compile-time catalog in [`include/bitforge/core/example_catalog.hpp`](../include/bitforge/core/example_catalog.hpp) with structured metadata (category, program kind, expected stop reason, expected output/state, and recommended breakpoints).
+>
+> The automated test suite (`tests/unit/test_example_library.cpp`) runs the `ComprehensiveCatalogRegression51` test on every build, verifying 100% of these 51 fixtures automatically across syntax rejection, fault detection, and execution to completion.
+
 ### 1. Fundamentals (`examples/fundamentals/`)
 
 | File | Description | Termination | Expected Registers | Expected Flags |

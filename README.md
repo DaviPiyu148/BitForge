@@ -6,29 +6,34 @@ BitForge is an educational software model of a fictional 8-bit microprocessor an
 
 ---
 
-## Current Status: Phase 9 Complete (Professional UI/UX Design, Visual Polish, and Educational Experience)
+## Current Status: Phase 10 Complete (Portability, Debugging Observability, and Performance)
 
 BitForge is developed incrementally in strict adherence to [BitForge Architecture Specification v1.7](BitForge_Architecture_Specification_v1.7.md).
 
 Implemented capabilities include:
-- **Build Infrastructure:** Portable CMake 3.20+ build system with C++17 enforcement, compiler warning configurations, unified `CMakePresets.json`, and multi-platform CI workflow.
+- **Build Infrastructure & Release Presets:** Portable CMake 3.20+ build system with C++17 enforcement, compiler warning configurations, unified `CMakePresets.json` (presets: `debug`, `release`, `ci`, `gui`, and `gui-release`), and multi-platform CI workflows.
+- **Standalone Portable Windows Distribution:** Zero-dependency standalone packaging script (`scripts/package_windows.ps1`) bundling the Release GUI, headless CLI, 51 assembly examples, quickstart guide, Qt 6 runtimes, and MinGW/UCRT DLLs into a portable ZIP archive validated under sanitized `PATH`.
 - **Architectural Types & Constants:** 8-bit/16-bit fixed-width types, big-endian arithmetic helpers, and all 31 canonical instruction opcodes.
 - **Memory Model:** Flat 64 KiB byte-addressable memory with big-endian 16-bit read/write, safe 16-bit boundary wrapping, and segment loading bounds enforcement.
 - **Pure Functional ALU:** Stateless arithmetic and logic unit computing `ADD`, `SUB`, `CMP`, `INC`, `DEC`, `AND`, `OR`, `XOR`, and `NOT`, with exact flag calculation (`Z`, `C`, `N`, `V`).
 - **CPU Execution Engine:** Full 31-mnemonic fetch-decode-execute engine with atomic state commitment, state machine (`Ready`, `Running`, `Paused`, `Halted`, `Faulted`), and architectural fault records.
-- **Stack, Subroutines & Virtual I/O:** Downward-growing stack (`SP = 0xFFFF` empty sentinel), big-endian `CALL`/`RET` return addresses, virtual FIFO input (Port 0x00), text console (Port 0x01), numeric stream (Port 0x02), and 8-bit LED register (Port 0x10).
+- **Stack, Subroutines & Virtual I/O:** Downward-growing stack (`SP = 0xFFFF` empty sentinel), big-endian `CALL`/`RET` return addresses, interactive virtual FIFO input (Port 0x00), text console (Port 0x01), numeric stream (Port 0x02), and 8-bit LED register (Port 0x10).
 - **Two-Pass Assembler & Source Mapping:** Lexer, parser, symbol table, expression evaluation, multi-segment program image generation, explicit entry-point validation, line classification, and bidirectional instruction-to-source location mapping.
 - **Headless CLI Executable (`bitforge`):** Command-line assembler and execution runner supporting `help`, `assemble`, and `run` subcommands with execution step budgeting, register dumping, virtual I/O presentation, and stable numeric exit codes.
-- **Debugger Engine (`bitforge_debugger`):** Platform-independent, deterministic debugging layer (`DebuggerSession`) supporting single-stepping, bounded execution, address and source-line breakpoints with one-time bypass, read-only side-effect-free memory inspection with 16-bit address wrapping, ADR-001 stack frame inspection, bounded execution tracing with fault capture, and source location resolution.
+- **Debugger Engine & Reliable Journaled Deltas:** Platform-independent debugging layer (`DebuggerSession`) supporting single-stepping, bounded execution, address and source-line breakpoints with one-time bypass, read-only memory inspection, ADR-001 stack frame inspection, bus write journaling for zero-overhead instruction execution deltas (`ExecutionDelta`), and bounded execution tracing with fault capture.
+- **Shared Instruction Metadata:** Canonical 31-instruction descriptor table (`instruction_info.hpp`) providing operand formats, functional group classification, and architectural operation semantics.
 - **Professional Qt 6 Desktop Workbench (`bitforge_gui`):** Modern desktop IDE featuring:
   - **Cohesive Dark Design System:** Centralized charcoal palette (`#181a1f`/`#21252b`), teal accents (`#4ec9b0`), emerald green states (`#98c379`), warm amber mutation highlights (`#ffd54f`/`#3e3520`), and crimson fault indicators (`#e06c75`).
   - **Welcome Dashboard (`WelcomeWidget`):** Quick action cards (`New`, `Open`, `Browse Examples`, `Interactive Tutorial`), bounded recent-files manager with automatic pruning for deleted files, and quick reference shortcuts.
   - **Polished Assembly Editor (`CodeEditor`):** High-contrast syntax highlighting, inline search bar (`FindReplaceBar` with `Ctrl+F`, `F3`, `Shift+F3`, match count), smooth font zooming (`Ctrl++`, `Ctrl+-`, `Ctrl+0`), Go to line (`Ctrl+G`), cursor position tracking (`Ln X, Col Y`), and amber execution pointer.
-  - **CPU & Memory Visualizations:** Bit-level register LED rows (`BitViewWidget`), vector 3-digit 7-segment display (Port 0x02), virtual LEDs (Port 0x10), memory viewer with cell mutation diff highlighting, ADR-001 downward-growing stack viewer with explicit empty sentinel explanation, and instruction inspector previewing disassembly, operands, and branch outcomes.
-  - **Educational Experience:** 9-stage interactive debugging tutorial (`TutorialGuide`) guiding users through real assembly, stepping, and inspection on live emulator state; categorized example library browser (`ExamplesDialog`) with preview.
-  - **Workspace & Layout Management:** State-dependent action enablement, comprehensive shortcuts, layout persistence across launches via `QSettings`, and one-click layout restoration.
-- **Comprehensive Assembly Example Library (`examples/`):** 51 fully tested and verified assembly programs organized across 10 functional categories (Fundamentals, Arithmetic & Logic, Control Flow, Memory & Pointers, Stack & Subroutines, Virtual I/O Devices, Algorithms & ADS Benchmarks, Comprehensive Demonstrations, Edge Cases & Boundary Conditions, and Architectural Fault Demonstrations), achieving 100% ISA mnemonic coverage (all 31 canonical instructions) and validating all architectural invariants.
-- **Automated Test Suites:** 220 unit and regression tests (`BitForgeTests`) across 11 test suites plus 48 automated GUI integration test methods in `BitForgeGuiTests`, delivering 268 passing tests in the GUI preset and 220 passing tests in headless Debug and strict CI presets.
+  - **Dockable Watch Panel (`WatchPanel`):** Dedicated dock widget evaluating registers (`R0–R3`, `IX`, `PC`, `SP`), flags (`Z`, `C`, `N`, `V`), and memory expressions (`[addr]`) with amber mutation highlighting and context-menu integration.
+  - **Interactive Input FIFO:** Push raw ASCII text or whitespace-delimited hex bytes into port 0x00 directly from the Virtual Devices panel.
+  - **CPU & Memory Visualizations:** Bit-level register LED rows (`BitViewWidget`), vector 3-digit 7-segment display (Port 0x02), virtual LEDs (Port 0x10), optimized memory viewer with cell mutation diff highlighting and zero-allocation item reuse, ADR-001 downward-growing stack viewer, and enhanced instruction inspector.
+  - **Time-Sliced Turbo Execution:** Bounded execution slices via `QElapsedTimer` ensuring responsive UI event processing and smooth user interruption during full-speed execution.
+  - **Educational Experience:** 9-stage interactive debugging tutorial (`TutorialGuide`) and categorized 51-example library browser (`ExamplesDialog`) with instant search, category filtering, kind badges, and expected behavior preview.
+  - **Workspace & Layout Management:** State-dependent action enablement, comprehensive shortcuts, layout and preferences persistence across launches via `QSettings`, and one-click layout restoration.
+- **Comprehensive Assembly Example Library & Catalog (`examples/` & `example_catalog.hpp`):** 51 fully tested and verified assembly programs organized across 10 functional categories with 100% ISA coverage and catalog metadata.
+- **Automated Regression Suite:** 100% passing test coverage across headless unit tests, catalog-driven 51-example regression tests, and automated GUI integration tests. Verified across `debug`, `ci`, `gui`, and `gui-release` presets.
 
 ---
 
@@ -200,6 +205,17 @@ ctest --preset gui --output-on-failure
 # Linux / macOS:
 ./build/gui/bitforge_gui [optional_source.asm]
 ```
+
+#### Portable Standalone Windows Package
+To package BitForge into a self-contained portable distribution without installer or system runtime requirements:
+```powershell
+# Build and assemble portable distribution into dist/
+powershell -ExecutionPolicy Bypass -File scripts\package_windows.ps1
+
+# Optional: Run end-to-end launch validation under a sanitized PATH
+powershell -ExecutionPolicy Bypass -File scripts\package_windows.ps1 -Validate
+```
+This produces `dist/BitForge-Portable-Windows-x64.zip` and staged folder `dist/BitForge-Portable-Windows-x64/` with relative batch launcher `launch_bitforge.bat`, `QUICKSTART.md`, `LICENSE.txt`, required Qt 6 plugins, and MinGW/UCRT runtime DLLs.
 
 ---
 

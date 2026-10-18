@@ -132,106 +132,21 @@ $ExamplesTarget = Join-Path $StagingDir "examples"
 Copy-Item -Path $ExamplesSource -Destination $ExamplesTarget -Recurse -Force
 
 # Create relative, zero-dependency launch batch file
-$LauncherContent = @"
-@echo off
-setlocal
-cd /d "%~dp0"
-start "" "%~dp0bitforge_gui.exe" %*
-"@
+$LauncherContent = "@echo off`r`nsetlocal`r`ncd /d `"%~dp0`"`r`nstart `"`" `"%~dp0bitforge_gui.exe`" %*`r`n"
 $LauncherPath = Join-Path $StagingDir "launch_bitforge.bat"
 [System.IO.File]::WriteAllText($LauncherPath, $LauncherContent, [System.Text.Encoding]::ASCII)
 
-# Create QUICKSTART.md
-$QuickstartContent = @"
-# BitForge Portable — Quick Start Guide
+# Copy QUICKSTART.md
+$QuickstartSrc = Join-Path $ProjectRoot "docs\QUICKSTART.md"
+if (Test-Path $QuickstartSrc) {
+    Copy-Item -Path $QuickstartSrc -Destination (Join-Path $StagingDir "QUICKSTART.md") -Force
+}
 
-BitForge is a high-performance 8-bit digital computer emulator, two-pass assembler,
-source debugger, and Qt 6 educational workbench.
-
-This package is completely standalone and requires no installation, admin rights, or
-external runtimes.
-
----
-
-## 1. Quick Launch
-
-- **Double-click `launch_bitforge.bat`** (or `bitforge_gui.exe`) to start the GUI workbench.
-- **Drag and drop** any `.asm` file onto `launch_bitforge.bat` or `bitforge_gui.exe` to open it immediately.
-- **Command Line**:
-  ```cmd
-  launch_bitforge.bat examples\01_arithmetic.asm
-  ```
-
----
-
-## 2. Package Contents
-
-- `bitforge_gui.exe` — Desktop IDE and graphical debugger.
-- `bitforge_cli.exe` — Command-line assembler and headless execution runner.
-- `launch_bitforge.bat` — Relative Windows batch launcher.
-- `examples/` — Complete collection of 51 assembly examples:
-  - `fundamentals/` — Basic NOP, HALT, and register movement.
-  - `arithmetic/` — Addition, subtraction, comparisons, and flag behavior.
-  - `control_flow/` — Loops, conditional branches, and jumps.
-  - `memory/` — Direct and indexed memory addressing.
-  - `stack_subroutines/` — CALL/RET subroutines and stack manipulation.
-  - `io_devices/` — Virtual text console, numeric display, LEDs, and input FIFO.
-  - `algorithms/` — Multiplication, division, Fibonacci, and GCD.
-  - `debugger/` — Stepping, breakpoints, and memory inspection demonstrations.
-  - `faults/` & `invalid/` — Architectural fault and error detection fixtures.
-- `platforms/qwindows.dll` — Qt 6 Windows platform integration plugin.
-
----
-
-## 3. Architecture Summary
-
-- **Architecture Specification**: BitForge v1.7 (frozen contract)
-- **Registers**: R0, R1, R2, R3 (8-bit general purpose), IX (16-bit index), PC (16-bit), SP (16-bit)
-- **Status Flags**: Z (Zero), C (Carry/Borrow), N (Negative), V (Signed Overflow)
-- **Memory**: 64 KiB flat byte-addressable space
-- **Virtual I/O Ports**:
-  - `0x00`: Input FIFO
-  - `0x01`: Text console output
-  - `0x02`: Numeric display output
-  - `0x10`: 8-bit Virtual LED register
-
----
-
-## 4. Headless CLI Usage
-
-To assemble and execute an assembly file without the GUI:
-```cmd
-bitforge_cli.exe run examples\algorithms\04_fibonacci_sequence.asm --max-steps 10000
-```
-"@
-$QuickstartPath = Join-Path $StagingDir "QUICKSTART.md"
-[System.IO.File]::WriteAllText($QuickstartPath, $QuickstartContent, [System.Text.Encoding]::UTF8)
-
-# Create LICENSE.txt
-$LicenseContent = @"
-BitForge Educational Emulator and Workbench
-Copyright (c) 2026 BitForge Contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-"@
-$LicensePath = Join-Path $StagingDir "LICENSE.txt"
-[System.IO.File]::WriteAllText($LicensePath, $LicenseContent, [System.Text.Encoding]::UTF8)
+# Copy LICENSE.txt
+$LicenseSrc = Join-Path $ProjectRoot "LICENSE"
+if (Test-Path $LicenseSrc) {
+    Copy-Item -Path $LicenseSrc -Destination (Join-Path $StagingDir "LICENSE.txt") -Force
+}
 
 # 7. Compress into ZIP Archive
 Write-Host "`n[6/6] Creating ZIP archive..." -ForegroundColor Yellow

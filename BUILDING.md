@@ -201,14 +201,15 @@ Phase 6 introduces a native Qt 6 desktop application integrating the code editor
 
 ### 6.2 Building with CMake Presets
 ```bash
-# 1. Configure GUI build
+# Debug GUI build:
 cmake --preset gui
-
-# 2. Build GUI application and test suites
 cmake --build --preset gui
-
-# 3. Run all tests (unit tests and headless GUI test suite)
 ctest --preset gui --output-on-failure
+
+# Release GUI build:
+cmake --preset gui-release
+cmake --build --preset gui-release
+ctest --preset gui-release --output-on-failure
 ```
 
 ### 6.3 Launching the Desktop GUI
@@ -254,5 +255,34 @@ For Windows developers using the MSYS2 UCRT64 toolchain, `launch_bitforge.bat` i
 | `BITFORGE_WARNINGS_AS_ERRORS` | `OFF` | Treats compiler warnings as errors (`/WX` on MSVC, `-Werror` on GCC/Clang). Enabled by default in CI preset. |
 | `BITFORGE_BUILD_GUI` | `OFF` | Opt-in build of Qt 6 desktop workbench (`bitforge_gui`) and GUI tests (`bitforge_gui_tests`). Enabled in `gui` preset. |
 | `CMAKE_CXX_COMPILER` | System default | Explicit path or binary name for C++ compiler (e.g. `cl`, `g++`, `clang++`) |
+| `BITFORGE_BUILD_EXAMPLES` | `ON` | Builds example library fixtures and regression tests |
+
+---
+
+## 8. Standalone Portable Windows Packaging (`scripts/package_windows.ps1`)
+
+To assemble a fully portable Windows distribution without requiring MSYS2, MinGW, or Qt installations:
+
+```powershell
+# 1. Build and package into dist/
+powershell -ExecutionPolicy Bypass -File scripts\package_windows.ps1
+
+# 2. Package with end-to-end sanitized PATH validation:
+powershell -ExecutionPolicy Bypass -File scripts\package_windows.ps1 -Validate
+```
+
+### Packaging Outputs:
+- Staged Folder: `dist\BitForge-Portable-Windows-x64\`
+- ZIP Archive: `dist\BitForge-Portable-Windows-x64.zip`
+
+### Package Contents:
+- `bitforge_gui.exe` (Release executable)
+- `bitforge_cli.exe` (Release headless runner)
+- `launch_bitforge.bat` (Relative Windows launcher)
+- `QUICKSTART.md` and `LICENSE.txt`
+- `examples\` (Full 51-program assembly library)
+- Required Qt 6 platform plugins (`platforms\qwindows.dll`, `styles\`, `tls\`, `imageformats\`)
+- Runtime DLLs (`Qt6Core.dll`, `Qt6Gui.dll`, `Qt6Widgets.dll`, `Qt6Network.dll`, `libstdc++-6.dll`, `libgcc_s_seh-1.dll`, `libwinpthread-1.dll`)
+
 
 
