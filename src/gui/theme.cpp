@@ -127,12 +127,13 @@ QString applicationStyleSheet() {
             color: #abb2bf;
             border: 1px solid #282c34;
             border-bottom: none;
-            padding: 6px 14px;
-            margin-right: 2px;
+            padding: 5px 8px 5px 12px;
+            margin-right: 3px;
             border-top-left-radius: 4px;
             border-top-right-radius: 4px;
             font-size: 11px;
             font-weight: 500;
+            min-height: 22px;
         }
         QTabBar::tab:selected {
             background-color: #21252b;
@@ -143,6 +144,24 @@ QString applicationStyleSheet() {
         QTabBar::tab:hover:!selected {
             background-color: #282c34;
             color: #dcdcdc;
+        }
+        QTabBar::close-button {
+            image: url(:/icons/close-tab.png);
+            subcontrol-position: right;
+            margin-top: 3px;
+            margin-bottom: 2px;
+            margin-right: 5px;
+            margin-left: 8px;
+            padding: 2px;
+            border-radius: 3px;
+        }
+        QTabBar::close-button:hover {
+            image: url(:/icons/close-tab-hover.png);
+            background-color: rgba(224, 108, 117, 0.4);
+        }
+        QTabBar::close-button:pressed {
+            image: url(:/icons/close-tab-hover.png);
+            background-color: rgba(224, 108, 117, 0.7);
         }
 
         /* Text Editors & Console Views */

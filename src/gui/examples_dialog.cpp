@@ -107,6 +107,7 @@ ExamplesDialog::ExamplesDialog(QWidget* parent)
     prev_layout->addWidget(info_label_);
 
     details_banner_ = new QLabel("", prev_container);
+    details_banner_->setTextFormat(Qt::RichText);
     details_banner_->setStyleSheet("QLabel { background-color: #21252b; color: #abb2bf; border: 1px solid #3e4451; border-radius: 4px; padding: 6px 10px; font-size: 11px; }");
     details_banner_->setWordWrap(true);
     prev_layout->addWidget(details_banner_);
@@ -128,7 +129,7 @@ ExamplesDialog::ExamplesDialog(QWidget* parent)
     btn_bar->addStretch();
 
     open_btn_ = new QPushButton("Open in Editor", this);
-    open_btn_->setStyleSheet("QPushButton { background-color: #00adb5; color: white; font-weight: bold; padding: 6px 16px; border-radius: 4px; }");
+    open_btn_->setStyleSheet("QPushButton { background-color: #00adb5; color: white; font-weight: bold; padding: 6px 16px; border-radius: 4px; } QPushButton:disabled { background-color: #2b313a; color: #5c6370; }");
     cancel_btn_ = new QPushButton("Cancel", this);
 
     btn_bar->addWidget(cancel_btn_);
@@ -219,10 +220,12 @@ void ExamplesDialog::applyFilter() {
 
     if (example_list_->count() > 0) {
         example_list_->setCurrentRow(0);
+        open_btn_->setEnabled(true);
     } else {
         preview_edit_->clear();
         info_label_->setText("Program Preview (No matching examples):");
         details_banner_->setText("No programs match the selected category and search filter.");
+        open_btn_->setEnabled(false);
     }
 }
 
@@ -231,8 +234,10 @@ void ExamplesDialog::onExampleItemChanged(QListWidgetItem* current, QListWidgetI
         preview_edit_->clear();
         info_label_->setText("Program Preview:");
         details_banner_->setText("");
+        open_btn_->setEnabled(false);
         return;
     }
+    open_btn_->setEnabled(true);
 
     int cat_index = current->data(Qt::UserRole).toInt();
     if (cat_index < 0 || cat_index >= static_cast<int>(kExampleCatalog.size())) {

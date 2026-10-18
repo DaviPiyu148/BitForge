@@ -118,6 +118,8 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 void MainWindow::setupUi() {
+    setWindowIcon(QIcon(":/icons/bitforge.ico"));
+
     // Central Container: Find/Replace Bar on top, Tabbed Document Workspace below
     central_container_ = new QWidget(this);
     auto* central_layout = new QVBoxLayout(central_container_);

@@ -180,6 +180,12 @@ if (Test-Path $LicenseSrc) {
     Copy-Item -Path $LicenseSrc -Destination (Join-Path $StagingDir "LICENSE.txt") -Force
 }
 
+# Copy application icon
+$IconSrc = Join-Path $ProjectRoot "resources\icons\bitforge.ico"
+if (Test-Path $IconSrc) {
+    Copy-Item -Path $IconSrc -Destination (Join-Path $StagingDir "bitforge.ico") -Force
+}
+
 # 7. Compress into ZIP Archive
 Write-Host "`n[6/6] Creating ZIP archive..." -ForegroundColor Yellow
 $ZipPath = Join-Path $DistRoot "$PackageName.zip"

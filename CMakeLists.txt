@@ -75,8 +75,14 @@ target_link_libraries(bitforge_cli
 target_compile_options(bitforge_cli PRIVATE ${BITFORGE_WARNING_FLAGS})
 
 # CLI executable
+set(BITFORGE_WIN_RESOURCES "")
+if (WIN32)
+    set(BITFORGE_WIN_RESOURCES resources/bitforge.rc)
+endif()
+
 add_executable(bitforge
     src/cli/main.cpp
+    ${BITFORGE_WIN_RESOURCES}
 )
 
 target_link_libraries(bitforge
@@ -203,6 +209,8 @@ if (BITFORGE_BUILD_GUI)
     add_executable(bitforge_gui
         src/gui/main.cpp
         ${BITFORGE_GUI_SOURCES}
+        ${BITFORGE_WIN_RESOURCES}
+        resources/bitforge.qrc
     )
 
     target_include_directories(bitforge_gui
@@ -231,6 +239,7 @@ if (BITFORGE_BUILD_GUI)
     add_executable(bitforge_gui_tests
         tests/gui/test_gui.cpp
         ${BITFORGE_GUI_SOURCES}
+        resources/bitforge.qrc
     )
 
     target_include_directories(bitforge_gui_tests

@@ -1,0 +1,16 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/icons">
+    <file alias="bitforge.ico">icons/bitforge.ico</file>
+    <file alias="bitforge.svg">icons/bitforge.svg</file>
+    <file alias="bitforge.png">icons/bitforge.png</file>
+    <file alias="bitforge-256.png">icons/bitforge-256.png</file>
+    <file alias="bitforge-128.png">icons/bitforge-128.png</file>
+    <file alias="bitforge-64.png">icons/bitforge-64.png</file>
+    <file alias="bitforge-48.png">icons/bitforge-48.png</file>
+    <file alias="bitforge-32.png">icons/bitforge-32.png</file>
+    <file alias="bitforge-24.png">icons/bitforge-24.png</file>
+    <file alias="bitforge-16.png">icons/bitforge-16.png</file>
+    <file alias="close-tab.png">icons/close-tab.png</file>
+    <file alias="close-tab-hover.png">icons/close-tab-hover.png</file>
+</qresource>
+</RCC>

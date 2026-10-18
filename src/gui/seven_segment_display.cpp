@@ -49,11 +49,11 @@ QString SevenSegmentDisplay::displayText() const {
 }
 
 QSize SevenSegmentDisplay::minimumSizeHint() const {
-    return QSize(160, 80);
+    return QSize(160, 66);
 }
 
 QSize SevenSegmentDisplay::sizeHint() const {
-    return QSize(220, 96);
+    return QSize(200, 84);
 }
 
 void SevenSegmentDisplay::paintEvent(QPaintEvent* /* event */) {
@@ -63,26 +63,34 @@ void SevenSegmentDisplay::paintEvent(QPaintEvent* /* event */) {
     const QRect r = rect();
 
     // 1. Dark bezel background
-    painter.setPen(QPen(QColor(44, 44, 48), 1));
-    painter.setBrush(QColor(18, 18, 20));
+    painter.setPen(QPen(QColor(44, 48, 56), 1));
+    painter.setBrush(QColor(16, 18, 22));
     painter.drawRoundedRect(r.adjusted(1, 1, -1, -1), 6.0, 6.0);
 
     // 2. Title header
     painter.setFont(QFont("Segoe UI", 8, QFont::Bold));
-    painter.setPen(QColor(160, 160, 168));
-    painter.drawText(QRect(r.left() + 8, r.top() + 4, r.width() - 16, 16),
-                     Qt::AlignLeft | Qt::AlignVCenter, "DECIMAL READOUT");
+    painter.setPen(QColor(97, 175, 239));
+    painter.drawText(QRect(r.left() + 8, r.top() + 3, r.width() - 16, 14),
+                     Qt::AlignLeft | Qt::AlignVCenter, "DECIMAL READOUT (PORT 0x02)");
 
-    // 3. Three 7-segment digits
-    const int digit_y = r.top() + 22;
-    const int digit_h = r.height() - 42;
+    // 3. Three 7-segment digits with preserved aspect ratio
+    const int available_h = r.height() - 38; // Space between title and subtitle
     const int total_avail_w = r.width() - 24;
     const int digit_spacing = 8;
-    const int digit_w = std::min(36, (total_avail_w - (digit_spacing * 2)) / 3);
 
-    // Center the 3 digits horizontally
+    // Standard LED segment aspect ratio: width is ~52% of height
+    int digit_h = std::clamp(available_h, 22, 54);
+    int digit_w = static_cast<int>(digit_h * 0.52);
+    const int max_allowed_w = (total_avail_w - (digit_spacing * 2)) / 3;
+    if (digit_w > max_allowed_w) {
+        digit_w = std::max(12, max_allowed_w);
+        digit_h = static_cast<int>(digit_w / 0.52);
+    }
+
+    // Center digits horizontally and vertically within digit area
     const int total_digits_w = (digit_w * 3) + (digit_spacing * 2);
     const int start_x = r.left() + (r.width() - total_digits_w) / 2;
+    const int digit_y = r.top() + 18 + (available_h - digit_h) / 2;
 
     int d2 = 0; // Hundreds
     int d1 = 0; // Tens
@@ -104,12 +112,12 @@ void SevenSegmentDisplay::paintEvent(QPaintEvent* /* event */) {
 
     // 4. Subtitle / readout label
     painter.setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    painter.setPen(has_value_ ? QColor(255, 120, 120) : QColor(100, 100, 108));
+    painter.setPen(has_value_ ? QColor(255, 120, 120) : QColor(120, 124, 134));
     QString sub_text = has_value_ ? QString("Value: %1 (0x%2)")
                                         .arg(value_)
                                         .arg(value_, 2, 16, QLatin1Char('0')).toUpper()
                                   : QString("[No Output Yet]");
-    painter.drawText(QRect(r.left() + 8, r.bottom() - 18, r.width() - 16, 16),
+    painter.drawText(QRect(r.left() + 8, r.bottom() - 17, r.width() - 16, 15),
                      Qt::AlignCenter, sub_text);
 }
 
@@ -120,12 +128,13 @@ void SevenSegmentDisplay::drawDigit(QPainter& painter, int digit_x, int digit_y,
                                      ? kDigitPatterns[digit_val]
                                      : 0;
 
-    const QColor active_color(255, 59, 48);     // Bright digital red
-    const QColor inactive_color(38, 20, 22);    // Faint dimmed outline
+    const QColor active_color(255, 59, 48);      // Bright digital red
+    const QColor inactive_color(46, 24, 26);     // Distinguishable unlit segment skeleton
+    const QColor inactive_border(58, 30, 32);    // Faint unlit segment outline
 
     const qreal w = digit_w;
     const qreal h = digit_h;
-    const qreal t = std::max(2.5, w * 0.15);    // Segment thickness
+    const qreal t = std::max(2.5, w * 0.16);    // Segment thickness
     const qreal g = 1.0;                        // Gap between segments
 
     const qreal x0 = digit_x;
@@ -133,7 +142,7 @@ void SevenSegmentDisplay::drawDigit(QPainter& painter, int digit_x, int digit_y,
     const qreal half_h = h / 2.0;
 
     auto drawHorizontal = [&](qreal sx, qreal sy, bool on) {
-        painter.setPen(Qt::NoPen);
+        painter.setPen(on ? Qt::NoPen : QPen(inactive_border, 0.5));
         painter.setBrush(on ? active_color : inactive_color);
         QPolygonF poly;
         poly << QPointF(sx + t * 0.5 + g, sy)
@@ -144,7 +153,7 @@ void SevenSegmentDisplay::drawDigit(QPainter& painter, int digit_x, int digit_y,
     };
 
     auto drawMiddle = [&](qreal sx, qreal sy, bool on) {
-        painter.setPen(Qt::NoPen);
+        painter.setPen(on ? Qt::NoPen : QPen(inactive_border, 0.5));
         painter.setBrush(on ? active_color : inactive_color);
         QPolygonF poly;
         poly << QPointF(sx + t * 0.5 + g, sy)
@@ -157,7 +166,7 @@ void SevenSegmentDisplay::drawDigit(QPainter& painter, int digit_x, int digit_y,
     };
 
     auto drawBottom = [&](qreal sx, qreal sy, bool on) {
-        painter.setPen(Qt::NoPen);
+        painter.setPen(on ? Qt::NoPen : QPen(inactive_border, 0.5));
         painter.setBrush(on ? active_color : inactive_color);
         QPolygonF poly;
         poly << QPointF(sx + t + g, sy)
@@ -168,7 +177,7 @@ void SevenSegmentDisplay::drawDigit(QPainter& painter, int digit_x, int digit_y,
     };
 
     auto drawVertical = [&](qreal sx, qreal sy, qreal len, bool on) {
-        painter.setPen(Qt::NoPen);
+        painter.setPen(on ? Qt::NoPen : QPen(inactive_border, 0.5));
         painter.setBrush(on ? active_color : inactive_color);
         QPolygonF poly;
         poly << QPointF(sx, sy + t * 0.5 + g)

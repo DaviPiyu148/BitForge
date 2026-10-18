@@ -34,6 +34,7 @@ public:
     [[nodiscard]] QLabel* fifoUnderflowLabel() const noexcept { return fifo_underflow_label_; }
     [[nodiscard]] QLabel* fifoContentsLabel() const noexcept { return fifo_contents_label_; }
     [[nodiscard]] QLabel* ledValueLabel() const noexcept { return led_value_label_; }
+    [[nodiscard]] const std::array<QLabel*, 8>& ledDots() const noexcept { return led_dots_; }
     [[nodiscard]] QPlainTextEdit* textConsole() const noexcept { return text_console_; }
     [[nodiscard]] QPlainTextEdit* numericConsole() const noexcept { return numeric_console_; }
     [[nodiscard]] QTableWidget* diagnosticTable() const noexcept { return diag_table_; }

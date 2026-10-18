@@ -1,4 +1,8 @@
 #include "bitforge/gui/main_window.hpp"
+#include "bitforge/gui/theme.hpp"
+#include "bitforge/gui/devices_panel.hpp"
+#include "bitforge/gui/seven_segment_display.hpp"
+#include "bitforge/gui/examples_dialog.hpp"
 
 #include <QTest>
 #include <QSignalSpy>
@@ -9,9 +13,12 @@
 #include <QTimer>
 #include <QDockWidget>
 #include <QTabWidget>
+#include <QTabBar>
 #include <QSettings>
 #include <QElapsedTimer>
 #include <QScrollBar>
+#include <QIcon>
+#include <QPixmap>
 
 using namespace bitforge;
 using namespace bitforge::gui;
@@ -127,6 +134,10 @@ private slots:
     void testIsolatedSettingsProfileRegistrySafety();
     void testCurriculumLessonScrollingAndResetPolicy();
     void testRestoreDefaultLayoutPreservesWindowGeometryAndState();
+    void testApplicationAndWindowIconIntegration();
+    void testEditorTabCloseButtonMetricsAndStyle();
+    void testVirtualLedAndNumericDisplayLayoutAndStyling();
+    void testExamplesDialogFilterAndOpenButtonState();
     void cleanupTestCase();
 };
 
@@ -774,6 +785,10 @@ void GuiTest::testOffscreenScreenshotCapture() {
     bool saved3 = pixmap3.save(artifact_dir + "/gui_smoke_devices.png");
     QVERIFY(saved3);
 
+    QPixmap pixmap_devices_panel = window.devicesPanel()->grab();
+    bool saved_dp = pixmap_devices_panel.save(artifact_dir + "/gui_smoke_devices_panel.png");
+    QVERIFY(saved_dp);
+
     // Switch tabs to show Bit Visualization and Instruction Inspector
     for (auto* tw : tab_widgets) {
         for (int i = 0; i < tw->count(); ++i) {
@@ -826,6 +841,10 @@ void GuiTest::testOffscreenScreenshotCapture() {
     QPixmap pixmap_multidoc = window.grab();
     bool saved_multidoc = pixmap_multidoc.save(artifact_dir + "/gui_smoke_tabs_multidocument.png");
     QVERIFY(saved_multidoc);
+
+    QPixmap pixmap_tabbar = window.documentTabs()->tabBar()->grab();
+    bool saved_tabbar = pixmap_tabbar.save(artifact_dir + "/gui_smoke_tabbar.png");
+    QVERIFY(saved_tabbar);
 
     // Capture Phase 12.2 Curriculum Lesson Details widget
     window.showWelcomeScreen();
@@ -3100,7 +3119,7 @@ void GuiTest::testCurriculumLessonScrollingAndResetPolicy() {
     QCOMPARE(ww->currentLessonIndex(), 1);
     QCOMPARE(vsb->value(), 0);
     QVERIFY(content->toHtml().contains("The Assembly Editor"));
-    QCOMPARE(btn->text(), QString("Open 08_bitwise_logic.asm in Editor"));
+    QCOMPARE(btn->text(), QString("Open 03_bitwise_logic.asm in Editor"));
 
     // 4. Scroll within lesson 1, ensure ordinary interaction works
     if (vsb->maximum() > 20) {
@@ -3173,6 +3192,137 @@ void GuiTest::testRestoreDefaultLayoutPreservesWindowGeometryAndState() {
     window.onRestoreDefaultLayout();
     QVERIFY(window.width() >= 900);
     QVERIFY(window.height() >= 600);
+}
+
+void GuiTest::testApplicationAndWindowIconIntegration() {
+    MainWindow window;
+    QIcon icon = window.windowIcon();
+    QVERIFY(!icon.isNull());
+
+    QPixmap p16 = icon.pixmap(16, 16);
+    QVERIFY(!p16.isNull());
+    QCOMPARE(p16.width(), 16);
+    QCOMPARE(p16.height(), 16);
+
+    QPixmap p32 = icon.pixmap(32, 32);
+    QVERIFY(!p32.isNull());
+    QCOMPARE(p32.width(), 32);
+    QCOMPARE(p32.height(), 32);
+
+    QPixmap p256 = icon.pixmap(256, 256);
+    QVERIFY(!p256.isNull());
+    QCOMPARE(p256.width(), 256);
+    QCOMPARE(p256.height(), 256);
+
+    QVERIFY(QFile::exists(":/icons/bitforge-256.png"));
+    QVERIFY(QFile::exists(":/icons/bitforge-32.png"));
+    QVERIFY(QFile::exists(":/icons/bitforge.ico"));
+    QVERIFY(QFile::exists(":/icons/close-tab.png"));
+    QVERIFY(QFile::exists(":/icons/close-tab-hover.png"));
+}
+
+void GuiTest::testEditorTabCloseButtonMetricsAndStyle() {
+    MainWindow window;
+    window.show();
+    window.newFile();
+    window.newFile();
+
+    auto* tab_bar = window.documentTabs()->tabBar();
+    QVERIFY(tab_bar != nullptr);
+    QVERIFY(tab_bar->tabsClosable());
+    QVERIFY(window.documentTabs()->count() >= 2);
+
+    const QString theme_css = theme::applicationStyleSheet();
+    QVERIFY(theme_css.contains("QTabBar::close-button"));
+    QVERIFY(theme_css.contains("url(:/icons/close-tab.png)"));
+    QVERIFY(theme_css.contains("url(:/icons/close-tab-hover.png)"));
+    QVERIFY(theme_css.contains("margin-top: 3px"));
+    QVERIFY(theme_css.contains("margin-right: 5px"));
+    QVERIFY(theme_css.contains("margin-left: 8px"));
+
+    auto* btn0 = tab_bar->tabButton(0, QTabBar::RightSide);
+    if (!btn0) btn0 = tab_bar->tabButton(0, QTabBar::LeftSide);
+    QVERIFY(btn0 != nullptr);
+    QVERIFY(btn0->isVisible());
+}
+
+void GuiTest::testVirtualLedAndNumericDisplayLayoutAndStyling() {
+    MainWindow window;
+    window.show();
+
+    auto* devices = window.devicesPanel();
+    QVERIFY(devices != nullptr);
+
+    auto* seven_seg = devices->sevenSegmentDisplay();
+    QVERIFY(seven_seg != nullptr);
+
+    // Initial state: no output written yet
+    devices->refresh();
+    QVERIFY(!seven_seg->hasValue());
+    QCOMPARE(seven_seg->displayText(), QString("---"));
+
+    // Check size hints and geometry
+    QSize min_size = seven_seg->minimumSizeHint();
+    QVERIFY(min_size.height() >= 66);
+    QVERIFY(min_size.width() >= 160);
+
+    // Test writing Port 0x02 value 0: must be distinct from uninitialized state!
+    window.controller()->bus().write_io(0x02, 0x00);
+    devices->refresh();
+    QVERIFY(seven_seg->hasValue());
+    QCOMPARE(seven_seg->value(), static_cast<byte_t>(0));
+    QCOMPARE(seven_seg->displayText(), QString("0"));
+
+    // Test writing Port 0x02 non-zero
+    window.controller()->bus().write_io(0x02, 42);
+    devices->refresh();
+    QCOMPARE(seven_seg->value(), static_cast<byte_t>(42));
+    QCOMPARE(seven_seg->displayText(), QString("42"));
+
+    // Test Virtual LEDs (Port 0x10)
+    const auto& dots = devices->ledDots();
+    QCOMPARE(dots.size(), static_cast<std::size_t>(8));
+    for (auto* dot : dots) {
+        QVERIFY(dot != nullptr);
+        QCOMPARE(dot->width(), 18);
+        QCOMPARE(dot->height(), 18);
+    }
+
+    // Write LED pattern 0b10101010 (0xAA)
+    window.controller()->bus().write_io(0x10, 0xAA);
+    devices->refresh();
+    auto* val_label = devices->ledValueLabel();
+    QVERIFY(val_label != nullptr);
+    QVERIFY(val_label->text().contains("0xAA"));
+    QVERIFY(val_label->text().contains("0b10101010"));
+
+    // Bit 0 is 0 (off), Bit 1 is 1 (on), Bit 7 is 1 (on)
+    QVERIFY(dots[0]->styleSheet().contains("#1b1d23"));
+    QVERIFY(dots[1]->styleSheet().contains("#4ec9b0"));
+    QVERIFY(dots[7]->styleSheet().contains("#4ec9b0"));
+}
+
+void GuiTest::testExamplesDialogFilterAndOpenButtonState() {
+    MainWindow window;
+    ExamplesDialog dlg(&window);
+    QVERIFY(dlg.openButton() != nullptr);
+    QVERIFY(dlg.searchInput() != nullptr);
+    QVERIFY(dlg.exampleList() != nullptr);
+
+    // Initial state: 51 examples, first item selected, button enabled
+    QVERIFY(dlg.exampleList()->count() > 0);
+    QVERIFY(dlg.openButton()->isEnabled());
+
+    // Enter a search filter with zero matching items
+    dlg.searchInput()->setText("zz_nonexistent_token_9999_xyz");
+    QCOMPARE(dlg.exampleList()->count(), 0);
+    QVERIFY(!dlg.openButton()->isEnabled());
+    QVERIFY(dlg.detailsBanner()->text().contains("No programs match"));
+
+    // Clear filter: examples restored, open button re-enabled
+    dlg.searchInput()->clear();
+    QVERIFY(dlg.exampleList()->count() > 0);
+    QVERIFY(dlg.openButton()->isEnabled());
 }
 
 QTEST_MAIN(GuiTest)

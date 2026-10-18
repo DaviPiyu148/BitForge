@@ -1,6 +1,7 @@
 #include "bitforge/gui/main_window.hpp"
 
 #include <QApplication>
+#include <QIcon>
 #include <QStringList>
 #include <QTimer>
 #include <iostream>
@@ -10,6 +11,12 @@ int main(int argc, char* argv[]) {
     app.setApplicationName("BitForge");
     app.setApplicationVersion("0.1.0");
     app.setOrganizationName("BitForge");
+
+    QIcon app_icon(":/icons/bitforge.ico");
+    if (app_icon.isNull()) {
+        app_icon = QIcon(":/icons/bitforge-256.png");
+    }
+    app.setWindowIcon(app_icon);
 
     const QStringList args = app.arguments();
 

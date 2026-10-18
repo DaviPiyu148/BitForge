@@ -26,6 +26,7 @@ public:
     [[nodiscard]] QLineEdit* searchInput() const noexcept { return search_input_; }
     [[nodiscard]] QLabel* infoLabel() const noexcept { return info_label_; }
     [[nodiscard]] QLabel* detailsBanner() const noexcept { return details_banner_; }
+    [[nodiscard]] QPushButton* openButton() const noexcept { return open_btn_; }
 
 signals:
     void exampleSelected(const QString& filePath);

@@ -61,8 +61,8 @@ const LessonData kLessons[11] = {
     {
         "Lesson 2 — The Assembly Editor",
         "Syntax formatting, directives, line numbers, and multi-document tabs",
-        "examples/08_bitwise_logic.asm",
-        "Open 08_bitwise_logic.asm in Editor",
+        "examples/arithmetic/03_bitwise_logic.asm",
+        "Open 03_bitwise_logic.asm in Editor",
         "<h3>Lesson 2 — The Assembly Editor</h3>"
         "<p>The BitForge multi-document assembly editor provides syntax highlighting, line numbers, a breakpoint gutter, search/replace, and tabbed file management.</p>"
         "<h4>Instruction Syntax</h4>"
@@ -90,8 +90,8 @@ const LessonData kLessons[11] = {
     {
         "Lesson 3 — The Two-Pass Assembler & Diagnostics",
         "Symbol resolution, error diagnostics, and source-stale tracking",
-        "examples/01_invalid_unknown_instruction.asm",
-        "Open Invalid Instruction Example in Editor",
+        "examples/invalid/01_unknown_mnemonic.asm",
+        "Open 01_unknown_mnemonic.asm in Editor",
         "<h3>Lesson 3 — The Two-Pass Assembler & Diagnostics</h3>"
         "<p>BitForge uses a native two-pass assembler to transform human-readable assembly into executable machine bytecode.</p>"
         "<h4>Two-Pass Operation</h4>"
@@ -130,8 +130,8 @@ const LessonData kLessons[11] = {
     {
         "Lesson 5 — CPU Registers & Flags",
         "General-purpose registers, program counter, and status flags (Z, C, N, V)",
-        "examples/04_conditional_branches.asm",
-        "Open 04_conditional_branches.asm in Editor",
+        "examples/control_flow/02_branch_zero.asm",
+        "Open 02_branch_zero.asm in Editor",
         "<h3>Lesson 5 — CPU Registers & Flags</h3>"
         "<p>The <b>CPU Registers & Flags</b> dock displays real-time state for all architectural registers.</p>"
         "<h4>Registers</h4>"
@@ -155,8 +155,8 @@ const LessonData kLessons[11] = {
     {
         "Lesson 6 — Memory and the Hardware Stack",
         "64 KiB memory space, memory mapping, and stack call frame mechanics",
-        "examples/05_stack_subroutine.asm",
-        "Open 05_stack_subroutine.asm in Editor",
+        "examples/stack_subroutines/02_subroutine_call_ret.asm",
+        "Open 02_subroutine_call_ret.asm in Editor",
         "<h3>Lesson 6 — Memory and the Hardware Stack</h3>"
         "<p>BitForge features a uniform 16-bit address space encompassing 65,536 individual 8-bit bytes.</p>"
         "<h4>Memory Map</h4>"
@@ -176,8 +176,8 @@ const LessonData kLessons[11] = {
     {
         "Lesson 7 — Breakpoints, Tracing, and the Instruction Inspector",
         "Interactive debugging, execution history, and opcode decoding",
-        "examples/06_bubble_sort.asm",
-        "Open 06_bubble_sort.asm in Editor",
+        "examples/debugger/03_breakpoint_target.asm",
+        "Open 03_breakpoint_target.asm in Editor",
         "<h3>Lesson 7 — Breakpoints, Tracing, and the Instruction Inspector</h3>"
         "<p>Professional debugging requires observability into past, present, and future machine states.</p>"
         "<h4>Breakpoints</h4>"
@@ -192,8 +192,8 @@ const LessonData kLessons[11] = {
     {
         "Lesson 8 — Watch Expressions",
         "Monitoring registers, flags, and memory addresses dynamically",
-        "examples/07_watch_variables.asm",
-        "Open 07_watch_variables.asm in Editor",
+        "examples/debugger/06_memory_inspection_step.asm",
+        "Open 06_memory_inspection_step.asm in Editor",
         "<h3>Lesson 8 — Watch Expressions</h3>"
         "<p>The <b>Watch Expressions</b> dock enables continuous tracking of arbitrary machine state during stepping and execution.</p>"
         "<h4>Supported Watch Targets</h4>"
@@ -231,8 +231,8 @@ const LessonData kLessons[11] = {
     {
         "Lesson 10 — Examples and Further Practice",
         "51 curated assembly programs covering algorithms, subroutines, and fault recovery",
-        "examples/03_loop_counter.asm",
-        "Open 03_loop_counter.asm in Editor",
+        "examples/control_flow/04_countdown_loop.asm",
+        "Open 04_countdown_loop.asm in Editor",
         "<h3>Lesson 10 — Examples and Further Practice</h3>"
         "<p>BitForge ships with 51 comprehensive, self-contained assembly examples organized into clear educational categories:</p>"
         "<ul>"

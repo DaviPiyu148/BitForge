@@ -56,38 +56,58 @@ DevicesPanel::DevicesPanel(QWidget* parent)
 
     // 1. Group: Virtual LEDs (Port 0x10)
     auto* led_group = new QGroupBox("Virtual LEDs (Port 0x10)", this);
-    auto* led_layout = new QHBoxLayout(led_group);
-    led_layout->setContentsMargins(8, 8, 8, 8);
+    auto* led_vbox = new QVBoxLayout(led_group);
+    led_vbox->setContentsMargins(6, 4, 6, 4);
+    led_vbox->setSpacing(3);
+
+    auto* led_bank_layout = new QHBoxLayout();
+    led_bank_layout->setContentsMargins(0, 0, 0, 0);
+    led_bank_layout->setSpacing(6);
 
     for (int i = 7; i >= 0; --i) {
         auto* dot_container = new QVBoxLayout();
+        dot_container->setContentsMargins(0, 0, 0, 0);
+        dot_container->setSpacing(1);
+        dot_container->setAlignment(Qt::AlignCenter);
+
         auto* bit_label = new QLabel(QString::number(i), led_group);
         bit_label->setAlignment(Qt::AlignCenter);
+        bit_label->setStyleSheet("QLabel { color: #61afef; font-size: 10px; font-weight: bold; }");
 
         auto* dot = new QLabel(led_group);
-        dot->setFixedSize(16, 16);
-        dot->setStyleSheet("QLabel { background-color: #6c757d; border-radius: 8px; border: 1px solid #495057; }");
+        dot->setFixedSize(18, 18);
+        dot->setAlignment(Qt::AlignCenter);
+        dot->setStyleSheet("QLabel { background-color: #1b1d23; border-radius: 9px; border: 1px solid #3b4048; }");
         led_dots_[static_cast<std::size_t>(i)] = dot;
 
-        dot_container->addWidget(bit_label);
-        dot_container->addWidget(dot);
-        led_layout->addLayout(dot_container);
+        dot_container->addWidget(bit_label, 0, Qt::AlignCenter);
+        dot_container->addWidget(dot, 0, Qt::AlignCenter);
+        led_bank_layout->addLayout(dot_container);
     }
+    led_bank_layout->addStretch(1);
+    led_vbox->addLayout(led_bank_layout);
 
-    led_layout->addSpacing(16);
+    auto* val_layout = new QHBoxLayout();
+    val_layout->setContentsMargins(0, 0, 0, 0);
+    val_layout->setSpacing(4);
+
     led_value_label_ = new QLabel("0x00 (0b00000000)", led_group);
     led_value_label_->setFont(mono_font);
-    led_layout->addWidget(led_value_label_);
-    led_layout->addStretch();
+    led_value_label_->setStyleSheet(
+        "QLabel { background-color: #1e1e1e; color: #abb2bf; border: 1px solid #282c34; border-radius: 4px; padding: 2px 6px; font-size: 10px; }"
+    );
+    val_layout->addWidget(led_value_label_, 0, Qt::AlignLeft);
+    val_layout->addStretch(1);
+    led_vbox->addLayout(val_layout);
 
     main_layout->addWidget(led_group);
 
     // 2. Group: 7-Segment Numeric Display (Port 0x02)
     auto* seg_group = new QGroupBox("Numeric Display (Port 0x02)", this);
     auto* seg_layout = new QVBoxLayout(seg_group);
-    seg_layout->setContentsMargins(8, 8, 8, 8);
+    seg_layout->setContentsMargins(6, 4, 6, 4);
     seven_seg_display_ = new SevenSegmentDisplay(seg_group);
-    seven_seg_display_->setMinimumHeight(65);
+    seven_seg_display_->setMinimumHeight(66);
     seg_layout->addWidget(seven_seg_display_);
 
     main_layout->addWidget(seg_group);
@@ -95,8 +115,8 @@ DevicesPanel::DevicesPanel(QWidget* parent)
     // 3. Group: Input FIFO (Port 0x00)
     auto* fifo_group = new QGroupBox("Input FIFO (Port 0x00)", this);
     auto* fifo_layout = new QVBoxLayout(fifo_group);
-    fifo_layout->setContentsMargins(8, 8, 8, 8);
-    fifo_layout->setSpacing(6);
+    fifo_layout->setContentsMargins(6, 4, 6, 4);
+    fifo_layout->setSpacing(4);
 
     // Row 1: Hex Input + Enqueue Button + Clear Button
     auto* input_row = new QHBoxLayout();
@@ -224,11 +244,11 @@ void DevicesPanel::refresh() {
         bool bit_set = (led_val & (1 << i)) != 0;
         if (bit_set) {
             led_dots_[static_cast<std::size_t>(i)]->setStyleSheet(
-                "QLabel { background-color: #28a745; border-radius: 8px; border: 1px solid #1e7e34; }"
+                "QLabel { background-color: #4ec9b0; border-radius: 9px; border: 1px solid #7be5d0; }"
             );
         } else {
             led_dots_[static_cast<std::size_t>(i)]->setStyleSheet(
-                "QLabel { background-color: #6c757d; border-radius: 8px; border: 1px solid #495057; }"
+                "QLabel { background-color: #1b1d23; border-radius: 9px; border: 1px solid #3b4048; }"
             );
         }
     }
