@@ -301,6 +301,14 @@ void GuiTest::testSingleStepRefreshesState() {
     window.onStep();
     QCOMPARE(window.controller()->session().state(), MachineState::Halted);
     QCOMPARE(window.controller()->session().pc(), 0x0207);
+
+    // Prohibited continuation while Halted: onStep() must report AlreadyHalted without state mutation
+    const auto steps_at_halt = window.controller()->session().total_steps_executed();
+    window.onStep();
+    QCOMPARE(window.controller()->session().state(), MachineState::Halted);
+    QCOMPARE(window.controller()->lastStopReason(), debugger::StopReason::AlreadyHalted);
+    QCOMPARE(window.controller()->session().total_steps_executed(), steps_at_halt);
+    QCOMPARE(window.controller()->session().pc(), 0x0207);
 }
 
 void GuiTest::testBreakpointStopsBeforeExecution() {
@@ -370,6 +378,13 @@ void GuiTest::testHaltAndFaultVisualDistinction() {
     QCOMPARE(window.controller()->session().last_stop_reason(), debugger::StopReason::Faulted);
     QVERIFY(window.controller()->cpu().last_fault().has_fault());
     QCOMPARE(window.controller()->cpu().last_fault().type, FaultType::InvalidOpcode);
+
+    // Prohibited continuation while Faulted: onStep() must report AlreadyFaulted without state mutation
+    const auto steps_at_fault = window.controller()->session().total_steps_executed();
+    window.onStep();
+    QCOMPARE(window.controller()->session().state(), MachineState::Faulted);
+    QCOMPARE(window.controller()->lastStopReason(), debugger::StopReason::AlreadyFaulted);
+    QCOMPARE(window.controller()->session().total_steps_executed(), steps_at_fault);
 }
 
 void GuiTest::testEditingSourceMarksProgramStale() {

@@ -264,6 +264,7 @@ ExitCode execute_run(const CliOptions& options, std::ostream& out, std::ostream&
            steps_executed < options.max_steps) {
         StepResult step_res = cpu.step();
         ++steps_executed;
+        bus.clear_write_events();
         if (step_res.faulted || cpu.state() == MachineState::Faulted) {
             stop_reason = "Faulted";
             break;

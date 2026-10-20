@@ -1,5 +1,6 @@
 #include "test_harness.hpp"
 #include "bitforge/core/cpu.hpp"
+#include "bitforge/core/alu.hpp"
 #include "bitforge/memory/memory.hpp"
 #include "bitforge/bus/system_bus.hpp"
 #include "bitforge/core/constants.hpp"
@@ -913,4 +914,465 @@ TEST(CpuInstructions, RawByteProgramExecutionConformance) {
     EXPECT_EQ(fix.memory.read_byte(0x8010), 50);
     EXPECT_TRUE(fix.cpu.flags().z);
     EXPECT_TRUE(fix.cpu.flags().c);
+}
+
+// =============================================================
+// 10. Phase 2: Four-Byte Instruction 64 KiB Boundary Wraparound
+// =============================================================
+
+TEST(CpuInstructions, FourByteInstruction_LdStraddling64K_FFFD) {
+    CpuFixture fix;
+    // LD R1, [0x8050] occupies 4 bytes:
+    // 0xFFFD: opcode 0x12 (LD)
+    // 0xFFFE: dst reg 0x01 (R1)
+    // 0xFFFF: addr_hi 0x80
+    // 0x0000: addr_lo 0x50 (wraps across 64 KiB boundary)
+    fix.memory.write_byte(0xFFFD, 0x12);
+    fix.memory.write_byte(0xFFFE, 0x01);
+    fix.memory.write_byte(0xFFFF, 0x80);
+    fix.memory.write_byte(0x0000, 0x50);
+    fix.memory.write_byte(0x8050, 0x42);
+
+    fix.cpu.reset(0xFFFD);
+    auto res = fix.cpu.step();
+
+    EXPECT_TRUE(res.executed);
+    EXPECT_FALSE(res.faulted);
+    EXPECT_EQ(fix.cpu.registers().r[1], 0x42);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0001); // 0xFFFD + 4 mod 65536 = 0x0001
+}
+
+TEST(CpuInstructions, FourByteInstruction_LdStraddling64K_FFFE) {
+    CpuFixture fix;
+    // LD R2, [0x8055] occupies 4 bytes:
+    // 0xFFFE: opcode 0x12 (LD)
+    // 0xFFFF: dst reg 0x02 (R2)
+    // 0x0000: addr_hi 0x80 (wraps)
+    // 0x0001: addr_lo 0x55 (wraps)
+    fix.memory.write_byte(0xFFFE, 0x12);
+    fix.memory.write_byte(0xFFFF, 0x02);
+    fix.memory.write_byte(0x0000, 0x80);
+    fix.memory.write_byte(0x0001, 0x55);
+    fix.memory.write_byte(0x8055, 0x77);
+
+    fix.cpu.reset(0xFFFE);
+    auto res = fix.cpu.step();
+
+    EXPECT_TRUE(res.executed);
+    EXPECT_FALSE(res.faulted);
+    EXPECT_EQ(fix.cpu.registers().r[2], 0x77);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0002); // 0xFFFE + 4 mod 65536 = 0x0002
+}
+
+TEST(CpuInstructions, FourByteInstruction_LdStraddling64K_FFFF) {
+    CpuFixture fix;
+    // LD R3, [0x8070] occupies 4 bytes:
+    // 0xFFFF: opcode 0x12 (LD)
+    // 0x0000: dst reg 0x03 (R3) (wraps)
+    // 0x0001: addr_hi 0x80 (wraps)
+    // 0x0002: addr_lo 0x70 (wraps)
+    fix.memory.write_byte(0xFFFF, 0x12);
+    fix.memory.write_byte(0x0000, 0x03);
+    fix.memory.write_byte(0x0001, 0x80);
+    fix.memory.write_byte(0x0002, 0x70);
+    fix.memory.write_byte(0x8070, 0x88);
+
+    fix.cpu.reset(0xFFFF);
+    auto res = fix.cpu.step();
+
+    EXPECT_TRUE(res.executed);
+    EXPECT_FALSE(res.faulted);
+    EXPECT_EQ(fix.cpu.registers().r[3], 0x88);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0003); // 0xFFFF + 4 mod 65536 = 0x0003
+}
+
+TEST(CpuInstructions, FourByteInstruction_StStraddling64K_FFFD) {
+    CpuFixture fix;
+    // Pre-load R2 with 0x99 via LDI at 0xFFFA..0xFFFC
+    fix.memory.write_byte(0xFFFA, 0x10); // LDI
+    fix.memory.write_byte(0xFFFB, 0x02); // R2
+    fix.memory.write_byte(0xFFFC, 0x99); // imm 0x99
+
+    // ST [0x8060], R2 occupies 4 bytes:
+    // 0xFFFD: opcode 0x13 (ST)
+    // 0xFFFE: addr_hi 0x80
+    // 0xFFFF: addr_lo 0x60
+    // 0x0000: src reg 0x02 (R2) (wraps)
+    fix.memory.write_byte(0xFFFD, 0x13);
+    fix.memory.write_byte(0xFFFE, 0x80);
+    fix.memory.write_byte(0xFFFF, 0x60);
+    fix.memory.write_byte(0x0000, 0x02);
+
+    fix.cpu.reset(0xFFFA);
+    fix.cpu.step(); // Execute LDI, PC reaches 0xFFFD, R2 = 0x99
+
+    auto res = fix.cpu.step(); // Execute ST across boundary
+    EXPECT_TRUE(res.executed);
+    EXPECT_FALSE(res.faulted);
+    EXPECT_EQ(fix.memory.read_byte(0x8060), 0x99);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0001); // 0xFFFD + 4 mod 65536 = 0x0001
+}
+
+TEST(CpuInstructions, FourByteInstruction_StStraddling64K_FFFE) {
+    CpuFixture fix;
+    // Pre-load R3 with 0xAA via LDI at 0xFFFB..0xFFFD
+    fix.memory.write_byte(0xFFFB, 0x10); // LDI
+    fix.memory.write_byte(0xFFFC, 0x03); // R3
+    fix.memory.write_byte(0xFFFD, 0xAA); // imm 0xAA
+
+    // ST [0x8065], R3 occupies 4 bytes:
+    // 0xFFFE: opcode 0x13 (ST)
+    // 0xFFFF: addr_hi 0x80
+    // 0x0000: addr_lo 0x65 (wraps)
+    // 0x0001: src reg 0x03 (R3) (wraps)
+    fix.memory.write_byte(0xFFFE, 0x13);
+    fix.memory.write_byte(0xFFFF, 0x80);
+    fix.memory.write_byte(0x0000, 0x65);
+    fix.memory.write_byte(0x0001, 0x03);
+
+    fix.cpu.reset(0xFFFB);
+    fix.cpu.step(); // Execute LDI, PC reaches 0xFFFE, R3 = 0xAA
+
+    auto res = fix.cpu.step(); // Execute ST across boundary
+    EXPECT_TRUE(res.executed);
+    EXPECT_FALSE(res.faulted);
+    EXPECT_EQ(fix.memory.read_byte(0x8065), 0xAA);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0002); // 0xFFFE + 4 mod 65536 = 0x0002
+}
+
+TEST(CpuInstructions, FourByteInstruction_StStraddling64K_FFFF) {
+    CpuFixture fix;
+    // Pre-load R1 with 0x55 via LDI at 0xFFFC..0xFFFE
+    fix.memory.write_byte(0xFFFC, 0x10); // LDI
+    fix.memory.write_byte(0xFFFD, 0x01); // R1
+    fix.memory.write_byte(0xFFFE, 0x55); // imm 0x55
+
+    // ST [0x8075], R1 occupies 4 bytes:
+    // 0xFFFF: opcode 0x13 (ST)
+    // 0x0000: addr_hi 0x80 (wraps)
+    // 0x0001: addr_lo 0x75 (wraps)
+    // 0x0002: src reg 0x01 (R1) (wraps)
+    fix.memory.write_byte(0xFFFF, 0x13);
+    fix.memory.write_byte(0x0000, 0x80);
+    fix.memory.write_byte(0x0001, 0x75);
+    fix.memory.write_byte(0x0002, 0x01);
+
+    fix.cpu.reset(0xFFFC);
+    fix.cpu.step(); // Execute LDI, PC reaches 0xFFFF, R1 = 0x55
+
+    auto res = fix.cpu.step(); // Execute ST across boundary
+    EXPECT_TRUE(res.executed);
+    EXPECT_FALSE(res.faulted);
+    EXPECT_EQ(fix.memory.read_byte(0x8075), 0x55);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0003); // 0xFFFF + 4 mod 65536 = 0x0003
+}
+
+TEST(CpuInstructions, FourByteInstruction_TargetAddressAt64KBoundary) {
+    CpuFixture fix;
+    // LD R0, [0xFFFF]
+    fix.memory.write_byte(0x0200, 0x12); // LD
+    fix.memory.write_byte(0x0201, 0x00); // R0
+    fix.memory.write_byte(0x0202, 0xFF); // addr_hi
+    fix.memory.write_byte(0x0203, 0xFF); // addr_lo
+    fix.memory.write_byte(0xFFFF, 0x3E);
+
+    fix.cpu.reset(0x0200);
+    auto res_ld = fix.cpu.step();
+    EXPECT_TRUE(res_ld.executed);
+    EXPECT_EQ(fix.cpu.registers().r[0], 0x3E);
+
+    // ST [0xFFFF], R1 (modifies byte at 0xFFFF)
+    fix.memory.write_byte(0x0204, 0x10); // LDI R1, 0x7B
+    fix.memory.write_byte(0x0205, 0x01);
+    fix.memory.write_byte(0x0206, 0x7B);
+    fix.memory.write_byte(0x0207, 0x13); // ST [0xFFFF], R1
+    fix.memory.write_byte(0x0208, 0xFF);
+    fix.memory.write_byte(0x0209, 0xFF);
+    fix.memory.write_byte(0x020A, 0x01);
+
+    fix.cpu.step(); // LDI R1, 0x7B
+    auto res_st = fix.cpu.step(); // ST
+    EXPECT_TRUE(res_st.executed);
+    EXPECT_EQ(fix.memory.read_byte(0xFFFF), 0x7B);
+}
+
+// =============================================================
+// 11. Phase 2: Boundary Matrix on CPU Arithmetic Instructions
+// =============================================================
+
+TEST(CpuInstructions, ArithmeticInstructionBoundaryMatrix) {
+    const bitforge::byte_t boundaries[] = {0x00, 0x01, 0x7F, 0x80, 0xFE, 0xFF};
+
+    for (const auto val_a : boundaries) {
+        for (const auto val_b : boundaries) {
+            CpuFixture fix;
+            // 0x0200: LDI R0, val_a
+            // 0x0203: LDI R1, val_b
+            // 0x0206: ADD R0, R1
+            fix.memory.write_byte(0x0200, 0x10); fix.memory.write_byte(0x0201, 0x00); fix.memory.write_byte(0x0202, val_a);
+            fix.memory.write_byte(0x0203, 0x10); fix.memory.write_byte(0x0204, 0x01); fix.memory.write_byte(0x0205, val_b);
+            fix.memory.write_byte(0x0206, 0x20); fix.memory.write_byte(0x0207, 0x00); fix.memory.write_byte(0x0208, 0x01);
+
+            fix.cpu.reset(0x0200);
+            fix.cpu.step(); // LDI R0
+            fix.cpu.step(); // LDI R1
+            auto res_add = fix.cpu.step(); // ADD
+
+            const auto expected_add = bitforge::Alu::add(val_a, val_b);
+            EXPECT_TRUE(res_add.executed);
+            EXPECT_EQ(fix.cpu.registers().r[0], expected_add.result);
+            EXPECT_EQ(fix.cpu.flags(), expected_add.flags);
+        }
+    }
+}
+
+// =============================================================
+// 12. Phase 2: Register & Flag Isolation / Unaffected Integrity
+// =============================================================
+
+TEST(CpuInstructions, UnaffectedRegistersAndFlagsIntegrity) {
+    CpuFixture fix;
+    // Set R1, R2, R3, IX to non-zero known states
+    fix.memory.write_byte(0x0200, 0x10); fix.memory.write_byte(0x0201, 0x01); fix.memory.write_byte(0x0202, 0x11); // LDI R1, 0x11
+    fix.memory.write_byte(0x0203, 0x10); fix.memory.write_byte(0x0204, 0x02); fix.memory.write_byte(0x0205, 0x22); // LDI R2, 0x22
+    fix.memory.write_byte(0x0206, 0x10); fix.memory.write_byte(0x0207, 0x03); fix.memory.write_byte(0x0208, 0x33); // LDI R3, 0x33
+    fix.memory.write_byte(0x0209, 0x14); fix.memory.write_byte(0x020A, 0x12); fix.memory.write_byte(0x020B, 0x34); // LDI16 IX, 0x1234
+    // Set known flag state via SUB R1, R1 (Z=1, C=1, N=0, V=0)
+    fix.memory.write_byte(0x020C, 0x21); fix.memory.write_byte(0x020D, 0x01); fix.memory.write_byte(0x020E, 0x01);
+    // INX (must NOT affect R1, R2, R3, SP, or ANY flags)
+    fix.memory.write_byte(0x020F, 0x17);
+    // DEX (must NOT affect R1, R2, R3, SP, or ANY flags)
+    fix.memory.write_byte(0x0210, 0x18);
+    // JMP 0x0215 (must NOT affect ANY registers or flags)
+    fix.memory.write_byte(0x0211, 0x50); fix.memory.write_byte(0x0212, 0x02); fix.memory.write_byte(0x0213, 0x15);
+    fix.memory.write_byte(0x0214, 0x00); // NOP (skipped)
+    // At 0x0215: HALT
+    fix.memory.write_byte(0x0215, 0x01);
+
+    fix.cpu.reset(0x0200);
+    // Step through LDI R1, R2, R3, LDI16 IX, SUB
+    for (int i = 0; i < 5; ++i) {
+        fix.cpu.step();
+    }
+    const auto baseline_flags = fix.cpu.flags();
+    EXPECT_TRUE(baseline_flags.z);
+    EXPECT_TRUE(baseline_flags.c);
+
+    // Step INX
+    fix.cpu.step();
+    EXPECT_EQ(fix.cpu.registers().ix, 0x1235);
+    EXPECT_EQ(fix.cpu.registers().r[2], 0x22);
+    EXPECT_EQ(fix.cpu.registers().r[3], 0x33);
+    EXPECT_EQ(fix.cpu.flags(), baseline_flags);
+
+    // Step DEX
+    fix.cpu.step();
+    EXPECT_EQ(fix.cpu.registers().ix, 0x1234);
+    EXPECT_EQ(fix.cpu.registers().r[2], 0x22);
+    EXPECT_EQ(fix.cpu.registers().r[3], 0x33);
+    EXPECT_EQ(fix.cpu.flags(), baseline_flags);
+
+    // Step JMP
+    fix.cpu.step();
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0215);
+    EXPECT_EQ(fix.cpu.registers().ix, 0x1234);
+    EXPECT_EQ(fix.cpu.flags(), baseline_flags);
+}
+
+// =============================================================
+// 13. Phase 2: Comprehensive Register Encoding Fault Atomicity
+// =============================================================
+
+TEST(CpuInstructions, ExhaustiveRegisterEncodingValidationAndAtomicity) {
+    // Check all instructions taking register operands
+    // (both 1-reg and 2-reg instructions)
+    struct RegTestCase {
+        bitforge::byte_t opcode;
+        std::vector<bitforge::byte_t> operands;
+        const char* name;
+    };
+
+    const RegTestCase cases[] = {
+        {0x10, {0x04, 0x42}, "LDI reg=4"},
+        {0x11, {0x04, 0x00}, "MOV dst=4"},
+        {0x11, {0x00, 0x04}, "MOV src=4"},
+        {0x12, {0x04, 0x80, 0x00}, "LD reg=4"},
+        {0x13, {0x80, 0x00, 0x04}, "ST reg=4"},
+        {0x15, {0x04}, "LDX reg=4"},
+        {0x16, {0x04}, "STX reg=4"},
+        {0x20, {0x04, 0x00}, "ADD dst=4"},
+        {0x20, {0x00, 0x04}, "ADD src=4"},
+        {0x21, {0x04, 0x00}, "SUB dst=4"},
+        {0x21, {0x00, 0x04}, "SUB src=4"},
+        {0x22, {0x04}, "INC reg=4"},
+        {0x23, {0x04}, "DEC reg=4"},
+        {0x30, {0x04, 0x00}, "AND dst=4"},
+        {0x30, {0x00, 0x04}, "AND src=4"},
+        {0x31, {0x04, 0x00}, "OR dst=4"},
+        {0x31, {0x00, 0x04}, "OR src=4"},
+        {0x32, {0x04, 0x00}, "XOR dst=4"},
+        {0x32, {0x00, 0x04}, "XOR src=4"},
+        {0x33, {0x04}, "NOT reg=4"},
+        {0x40, {0x04, 0x00}, "CMP left=4"},
+        {0x40, {0x00, 0x04}, "CMP right=4"},
+        {0x62, {0x04}, "PUSH reg=4"},
+        {0x63, {0x04}, "POP reg=4"},
+        {0x70, {0x04, 0x00}, "IN reg=4"},
+        {0x71, {0x01, 0x04}, "OUT reg=4"}
+    };
+
+    for (const auto& tc : cases) {
+        CpuFixture fix;
+        fix.cpu.reset(0x0200);
+
+        fix.memory.write_byte(0x0200, tc.opcode);
+        for (std::size_t i = 0; i < tc.operands.size(); ++i) {
+            fix.memory.write_byte(static_cast<bitforge::word_t>(0x0201 + i), tc.operands[i]);
+        }
+
+        const auto pre_regs = fix.cpu.registers();
+        const auto pre_flags = fix.cpu.flags();
+
+        auto res = fix.cpu.step();
+        EXPECT_FALSE(res.executed);
+        EXPECT_TRUE(res.faulted);
+        EXPECT_EQ(fix.cpu.last_fault().type, bitforge::FaultType::InvalidRegisterEncoding);
+        EXPECT_EQ(res.instruction_address, 0x0200);
+        EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Faulted);
+        // Universal PC preservation rule: PC remains at instruction start address
+        EXPECT_EQ(fix.cpu.registers().pc, 0x0200);
+        // State atomicity: zero register or flag mutations
+        EXPECT_EQ(fix.cpu.registers().r[0], pre_regs.r[0]);
+        EXPECT_EQ(fix.cpu.registers().r[1], pre_regs.r[1]);
+        EXPECT_EQ(fix.cpu.registers().r[2], pre_regs.r[2]);
+        EXPECT_EQ(fix.cpu.registers().r[3], pre_regs.r[3]);
+        EXPECT_EQ(fix.cpu.registers().ix, pre_regs.ix);
+        EXPECT_EQ(fix.cpu.registers().sp, pre_regs.sp);
+        EXPECT_EQ(fix.cpu.flags(), pre_flags);
+    }
+}
+
+// =============================================================
+// 14. Phase 2: Comprehensive Invalid Opcode Fault Atomicity
+// =============================================================
+
+TEST(CpuInstructions, InvalidOpcodeFaultAtomicityComprehensive) {
+    const bitforge::byte_t invalid_opcodes[] = {
+        0x02, 0x0F, 0x19, 0x1A, 0x24, 0x2F, 0x34, 0x3F,
+        0x41, 0x4E, 0x55, 0x5E, 0x64, 0x6F, 0x72, 0xFE, 0xFF
+    };
+
+    for (const auto bad_op : invalid_opcodes) {
+        CpuFixture fix;
+        fix.cpu.reset(0x0400);
+        fix.memory.write_byte(0x0400, bad_op);
+
+        const auto pre_regs = fix.cpu.registers();
+        const auto pre_flags = fix.cpu.flags();
+
+        auto res = fix.cpu.step();
+        EXPECT_FALSE(res.executed);
+        EXPECT_TRUE(res.faulted);
+        EXPECT_EQ(fix.cpu.last_fault().type, bitforge::FaultType::InvalidOpcode);
+        EXPECT_EQ(res.instruction_address, 0x0400);
+        EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Faulted);
+        // Universal PC preservation rule
+        EXPECT_EQ(fix.cpu.registers().pc, 0x0400);
+        // State atomicity
+        EXPECT_EQ(fix.cpu.registers().r[0], pre_regs.r[0]);
+        EXPECT_EQ(fix.cpu.registers().sp, pre_regs.sp);
+        EXPECT_EQ(fix.cpu.flags(), pre_flags);
+    }
+}
+
+// =============================================================
+// 15. Phase 2: Self-Modifying Code Observability
+// =============================================================
+
+TEST(CpuInstructions, SelfModifyingCode_OverwritesSubsequentInstruction) {
+    CpuFixture fix;
+    // Program:
+    // 0x0200: LDI R0, 0x01            (HALT opcode = 0x01)
+    // 0x0203: ST [0x0207], R0         (dynamically overwrites byte at 0x0207 with HALT)
+    // 0x0207: NOP                     (initially 0x00, will be overwritten with 0x01)
+    // 0x0208: NOP                     (should never execute if HALT took effect)
+    fix.memory.write_byte(0x0200, 0x10); fix.memory.write_byte(0x0201, 0x00); fix.memory.write_byte(0x0202, 0x01);
+    fix.memory.write_byte(0x0203, 0x13); fix.memory.write_byte(0x0204, 0x02); fix.memory.write_byte(0x0205, 0x07); fix.memory.write_byte(0x0206, 0x00);
+    fix.memory.write_byte(0x0207, 0x00); // NOP initially
+    fix.memory.write_byte(0x0208, 0x00); // NOP
+
+    fix.cpu.reset(0x0200);
+
+    // Step 1: LDI R0, 0x01
+    auto r1 = fix.cpu.step();
+    EXPECT_TRUE(r1.executed);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0203);
+    EXPECT_EQ(fix.cpu.registers().r[0], 0x01);
+
+    // Step 2: ST [0x0207], R0 -> overwrites memory location 0x0207
+    auto r2 = fix.cpu.step();
+    EXPECT_TRUE(r2.executed);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0207);
+    EXPECT_EQ(fix.memory.read_byte(0x0207), 0x01); // Now contains HALT opcode!
+
+    // Step 3: Fetch at 0x0207 must read the freshly modified byte (HALT)
+    auto r3 = fix.cpu.step();
+    EXPECT_TRUE(r3.executed);
+    EXPECT_TRUE(r3.halted);
+    EXPECT_EQ(r3.opcode, bitforge::Opcode::HALT);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Halted);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0208); // Advanced past HALT
+}
+
+// =============================================================
+// 16. Phase 2: CPU State Transitions & Reset Baseline Contract
+// =============================================================
+
+TEST(CpuInstructions, ResetFromFaultedAndHaltedRestoresDocumentedBaseline) {
+    CpuFixture fix;
+
+    // 1. Induce a fault
+    fix.cpu.reset(0x0200);
+    fix.memory.write_byte(0x0200, 0xFF); // Invalid opcode
+    fix.cpu.step();
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Faulted);
+
+    // Stepping from Faulted must be a no-op
+    auto noop_res = fix.cpu.step();
+    EXPECT_FALSE(noop_res.executed);
+    EXPECT_TRUE(noop_res.faulted);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Faulted);
+
+    // Reset restores to Ready and clears fault
+    fix.cpu.reset(0x0300);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Ready);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0300);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xFFFF);
+    EXPECT_EQ(fix.cpu.registers().r[0], 0);
+    EXPECT_EQ(fix.cpu.registers().r[1], 0);
+    EXPECT_EQ(fix.cpu.registers().r[2], 0);
+    EXPECT_EQ(fix.cpu.registers().r[3], 0);
+    EXPECT_EQ(fix.cpu.registers().ix, 0);
+    EXPECT_FALSE(fix.cpu.flags().z);
+    EXPECT_FALSE(fix.cpu.flags().c);
+    EXPECT_FALSE(fix.cpu.flags().n);
+    EXPECT_FALSE(fix.cpu.flags().v);
+    EXPECT_EQ(fix.cpu.last_fault().type, bitforge::FaultType::None);
+
+    // 2. Transition to Halted
+    fix.memory.write_byte(0x0300, 0x01); // HALT
+    fix.cpu.step();
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Halted);
+
+    // Stepping from Halted must be a no-op
+    auto noop_halt = fix.cpu.step();
+    EXPECT_FALSE(noop_halt.executed);
+    EXPECT_TRUE(noop_halt.halted);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Halted);
+
+    // Reset again
+    fix.cpu.reset(0x0000);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Ready);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0000);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xFFFF);
 }

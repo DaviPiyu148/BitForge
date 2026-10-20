@@ -1344,4 +1344,454 @@ TEST(Debugger, FaultAtomicity_InvalidPort) {
     EXPECT_TRUE(delta->memory_writes.empty());
 }
 
+// =================================================================
+// Phase 6 Audit Tests — Debugger Observability & Execution Integrity
+// =================================================================
+
+// 40. Breakpoint on operand byte is not hit sequentially, but hit if jumped to directly
+TEST(Debugger, Audit_BreakpointOnOperandByteNotHitSequentially) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 42\n"       // 0x0200: Opcode 0x10 (1B), 0x0201: Reg 0 (1B), 0x0202: Imm 42 (1B) -> 3 bytes
+        "    HALT\n"             // 0x0203: Opcode 0x01
+    );
+
+    // Set breakpoint on operand byte 0x0201
+    auto bp_res = ctx.session->add_breakpoint(0x0201);
+    EXPECT_TRUE(bp_res.success);
+    EXPECT_TRUE(ctx.session->has_breakpoint(0x0201));
+
+    // Sequential run: should NOT hit 0x0201 because instruction fetch jumps 0x0200 -> 0x0203
+    auto res = ctx.session->run();
+    EXPECT_EQ(res.stop_reason, StopReason::Halted);
+    EXPECT_EQ(res.pc, 0x0204);
+    EXPECT_EQ(ctx.session->r(0), 42);
+
+    // Now test direct jump into the operand byte address
+    DebuggerTestContext ctx_jmp;
+    ctx_jmp.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    JMP 0x0205\n"       // 0x0200: JMP 0x0205 (3 bytes: 0x0200..0x0202)
+        "    LDI R0, 42\n"       // 0x0203: Opcode 0x10, 0x0204: Reg 0, 0x0205: Imm 42
+        "    HALT\n"
+    );
+    ctx_jmp.session->add_breakpoint(0x0205);
+    auto res_jmp = ctx_jmp.session->run();
+    EXPECT_EQ(res_jmp.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(res_jmp.pc, 0x0205);
+    EXPECT_EQ(res_jmp.steps_executed, 1); // Only JMP executed
+}
+
+// 41. Breakpoint placed at initial entry point stops at step 0
+TEST(Debugger, Audit_BreakpointAtInitialEntryPointStopsAtStepZero) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 10\n"
+        "    HALT\n"
+    );
+
+    ctx.session->add_breakpoint(0x0200);
+    auto res = ctx.session->run();
+
+    EXPECT_EQ(res.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(res.pc, 0x0200);
+    EXPECT_EQ(res.steps_executed, 0);
+    EXPECT_EQ(ctx.session->r(0), 0); // LDI has not yet executed
+
+    // Continuing bypasses and executes LDI, then halts
+    auto cont_res = ctx.session->continue_execution();
+    EXPECT_EQ(cont_res.stop_reason, StopReason::Halted);
+    EXPECT_EQ(ctx.session->r(0), 10);
+    EXPECT_EQ(cont_res.steps_executed, 2); // LDI + HALT
+}
+
+// 42. Breakpoint handling across subroutine calls and returns
+TEST(Debugger, Audit_BreakpointAcrossSubroutineCallsAndReturns) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    CALL my_sub\n"      // 0x0200: 3 bytes (0x0200..0x0202)
+        "ret_site:\n"
+        "    HALT\n"             // 0x0203: 1 byte
+        "my_sub:\n"
+        "    LDI R0, 77\n"       // 0x0204: 3 bytes
+        "    RET\n"              // 0x0207: 1 byte
+    );
+
+    // Place breakpoint at subroutine entry (0x0204) and return site (0x0203)
+    ctx.session->add_breakpoint(0x0204);
+    ctx.session->add_breakpoint(0x0203);
+
+    // Run to first breakpoint (subroutine entry)
+    auto res1 = ctx.session->run();
+    EXPECT_EQ(res1.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(res1.pc, 0x0204);
+    EXPECT_EQ(res1.steps_executed, 1); // CALL executed
+    EXPECT_EQ(ctx.session->sp(), 0xFFFD); // SP decremented by 2
+
+    // Continue to next breakpoint (return site)
+    auto res2 = ctx.session->continue_execution();
+    EXPECT_EQ(res2.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(res2.pc, 0x0203);
+    EXPECT_EQ(ctx.session->r(0), 77);
+    EXPECT_EQ(ctx.session->sp(), 0xFFFF); // SP restored by RET
+
+    // Continue to HALT
+    auto res3 = ctx.session->continue_execution();
+    EXPECT_EQ(res3.stop_reason, StopReason::Halted);
+    EXPECT_EQ(res3.pc, 0x0204); // PC after HALT
+}
+
+// 43. Breakpoint conditional branch taken vs untaken
+TEST(Debugger, Audit_BreakpointConditionalBranchTakenVsUntaken) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 0\n"         // 0x0200: 3B
+        "    LDI R1, 0\n"         // 0x0203: 3B
+        "    CMP R0, R1\n"        // 0x0206: 3B -> Sets Z=1
+        "    JZ taken_target\n"   // 0x0209: 3B -> Taken, jumps to 0x020F
+        "    LDI R2, 11\n"        // 0x020C: 3B
+        "taken_target:\n"
+        "    LDI R2, 22\n"        // 0x020F: 3B
+        "    LDI R0, 1\n"         // 0x0212: 3B
+        "    CMP R0, R1\n"        // 0x0215: 3B -> Sets Z=0
+        "    JZ untaken_target\n" // 0x0218: 3B -> Untaken, falls through
+        "    LDI R3, 33\n"        // 0x021B: 3B
+        "    HALT\n"              // 0x021E: 1B
+        "untaken_target:\n"
+        "    LDI R3, 99\n"        // 0x021F: 3B
+        "    HALT\n"              // 0x0222: 1B
+    );
+
+    // Breakpoint at taken_target (0x020F) and untaken_target (0x021F)
+    ctx.session->add_breakpoint(0x020F);
+    ctx.session->add_breakpoint(0x021F);
+
+    // Run to first breakpoint: branch taken
+    auto res1 = ctx.session->run();
+    EXPECT_EQ(res1.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(res1.pc, 0x020F);
+
+    // Continue execution: second branch is NOT taken, should bypass untaken_target and reach HALT at 0x021E
+    auto res2 = ctx.session->continue_execution();
+    EXPECT_EQ(res2.stop_reason, StopReason::Halted);
+    EXPECT_EQ(res2.pc, 0x021F); // PC after executing HALT at 0x021E
+    EXPECT_EQ(ctx.session->r(2), 22);
+    EXPECT_EQ(ctx.session->r(3), 33); // 99 bypassed!
+}
+
+// 44. Breakpoint on HALT stops before HALT executes
+TEST(Debugger, Audit_BreakpointOnHaltStopsBeforeHalt) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 5\n"
+        "    HALT\n"
+    );
+
+    // Line 5 is HALT at 0x0203
+    auto bp_res = ctx.session->add_line_breakpoint(5);
+    EXPECT_TRUE(bp_res.success);
+    EXPECT_EQ(bp_res.address, 0x0203);
+
+    // Run stops BEFORE executing HALT
+    auto res1 = ctx.session->run();
+    EXPECT_EQ(res1.stop_reason, StopReason::BreakpointHit);
+    EXPECT_EQ(res1.pc, 0x0203);
+    EXPECT_EQ(ctx.session->state(), MachineState::Running);
+    EXPECT_FALSE(ctx.session->state() == MachineState::Halted);
+
+    // Continue executes HALT and enters Halted state
+    auto res2 = ctx.session->continue_execution();
+    EXPECT_EQ(res2.stop_reason, StopReason::Halted);
+    EXPECT_EQ(ctx.session->state(), MachineState::Halted);
+    EXPECT_EQ(res2.pc, 0x0204);
+}
+
+// 45. Step semantics across nested subroutines and SP stack convention
+TEST(Debugger, Audit_NestedSubroutineExecutionAndStepping) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    CALL sub_a\n"       // Step 1 (0x0200) -> SP: 0xFFFD
+        "    HALT\n"             // Step 6 (0x0203)
+        "sub_a:\n"
+        "    CALL sub_b\n"       // Step 2 (0x0204) -> SP: 0xFFFB
+        "    RET\n"              // Step 5 (0x0207) -> SP: 0xFFFF
+        "sub_b:\n"
+        "    LDI R0, 0xAA\n"     // Step 3 (0x0208)
+        "    RET\n"              // Step 4 (0x020B) -> SP: 0xFFFD
+    );
+
+    // Step 1: CALL sub_a
+    auto s1 = ctx.session->step();
+    EXPECT_EQ(s1.stop_reason, StopReason::StepCompleted);
+    EXPECT_EQ(ctx.session->pc(), 0x0204);
+    EXPECT_EQ(ctx.session->sp(), 0xFFFD);
+    // ADR-001 big-endian return address: memory[0xFFFD]=0x02, memory[0xFFFE]=0x03
+    EXPECT_EQ(ctx.memory.read_byte(0xFFFD), 0x02);
+    EXPECT_EQ(ctx.memory.read_byte(0xFFFE), 0x03);
+
+    // Step 2: CALL sub_b
+    auto s2 = ctx.session->step();
+    EXPECT_EQ(s2.stop_reason, StopReason::StepCompleted);
+    EXPECT_EQ(ctx.session->pc(), 0x0208);
+    EXPECT_EQ(ctx.session->sp(), 0xFFFB);
+    // Return address to sub_a: 0x0207 (memory[0xFFFB]=0x02, memory[0xFFFC]=0x07)
+    EXPECT_EQ(ctx.memory.read_byte(0xFFFB), 0x02);
+    EXPECT_EQ(ctx.memory.read_byte(0xFFFC), 0x07);
+
+    // Step 3: LDI R0, 0xAA
+    auto s3 = ctx.session->step();
+    EXPECT_EQ(s3.stop_reason, StopReason::StepCompleted);
+    EXPECT_EQ(ctx.session->r(0), 0xAA);
+    EXPECT_EQ(ctx.session->pc(), 0x020B);
+
+    // Step 4: RET from sub_b
+    auto s4 = ctx.session->step();
+    EXPECT_EQ(s4.stop_reason, StopReason::StepCompleted);
+    EXPECT_EQ(ctx.session->pc(), 0x0207);
+    EXPECT_EQ(ctx.session->sp(), 0xFFFD);
+
+    // Step 5: RET from sub_a
+    auto s5 = ctx.session->step();
+    EXPECT_EQ(s5.stop_reason, StopReason::StepCompleted);
+    EXPECT_EQ(ctx.session->pc(), 0x0203);
+    EXPECT_EQ(ctx.session->sp(), 0xFFFF);
+
+    // Step 6: HALT
+    auto s6 = ctx.session->step();
+    EXPECT_EQ(s6.stop_reason, StopReason::Halted);
+    EXPECT_EQ(ctx.session->state(), MachineState::Halted);
+}
+
+// 46. ExecutionDelta multi-mutation verification and step isolation
+TEST(Debugger, Audit_ExecutionDeltaMultiMutationAndIsolation) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 127\n"      // Step 1: 0x7F
+        "    LDI R1, 1\n"        // Step 2: 0x01
+        "    ADD R0, R1\n"       // Step 3: 127 + 1 = 128 (0x80) -> N=1, V=1, Z=0, C=0
+        "    NOP\n"              // Step 4: PC changes only
+        "    HALT\n"
+    );
+
+    ctx.session->step(); // Step 1: LDI R0
+    ctx.session->step(); // Step 2: LDI R1
+
+    // Step 3: ADD R0, R1 -> mutates R0 and flags (N=1, V=1)
+    ctx.session->step();
+    auto delta_add = ctx.session->last_delta();
+    ASSERT_TRUE(delta_add.has_value());
+    EXPECT_TRUE(delta_add->has_changes());
+
+    bool found_r0 = false;
+    for (const auto& rc : delta_add->register_changes) {
+        if (rc.name == "R0") {
+            found_r0 = true;
+            EXPECT_EQ(rc.old_value, 127);
+            EXPECT_EQ(rc.new_value, 128);
+        }
+    }
+    EXPECT_TRUE(found_r0);
+
+    bool found_n = false;
+    bool found_v = false;
+    for (const auto& fc : delta_add->flag_changes) {
+        if (fc.name == "N") { found_n = true; EXPECT_TRUE(fc.new_value); }
+        if (fc.name == "V") { found_v = true; EXPECT_TRUE(fc.new_value); }
+    }
+    EXPECT_TRUE(found_n);
+    EXPECT_TRUE(found_v);
+
+    // Step 4: NOP -> Verifies DELTA ISOLATION (no leftover flag or register changes from Step 3)
+    ctx.session->step();
+    auto delta_nop = ctx.session->last_delta();
+    ASSERT_TRUE(delta_nop.has_value());
+    EXPECT_TRUE(delta_nop->flag_changes.empty());
+    EXPECT_TRUE(delta_nop->memory_writes.empty());
+    EXPECT_TRUE(delta_nop->io_events.empty());
+    EXPECT_EQ(delta_nop->register_changes.size(), 1);
+    EXPECT_EQ(delta_nop->register_changes[0].name, "PC");
+}
+
+// 47. Trace history ring buffer wraparound, monotonicity, and capacity adjustment
+TEST(Debugger, Audit_TraceHistoryCapacityWraparoundChronology) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 10\n"
+        "loop:\n"
+        "    DEC R0\n"
+        "    JNZ loop\n"
+        "    HALT\n"
+    );
+
+    ctx.session->set_trace_capacity(5);
+    EXPECT_EQ(ctx.session->trace_capacity(), 5);
+
+    auto res = ctx.session->run();
+    EXPECT_EQ(res.stop_reason, StopReason::Halted);
+    EXPECT_EQ(ctx.session->total_steps_executed(), 22);
+
+    const auto& trace = ctx.session->trace();
+    ASSERT_EQ(trace.size(), 5);
+
+    // Monotonically increasing step numbers
+    for (std::size_t i = 0; i < 5; ++i) {
+        EXPECT_EQ(trace[i].step_number, 18 + i);
+    }
+    EXPECT_EQ(trace.back().mnemonic, "HALT");
+    EXPECT_EQ(trace.back().state_after, MachineState::Halted);
+
+    // Shrink capacity
+    ctx.session->set_trace_capacity(3);
+    EXPECT_EQ(ctx.session->trace().size(), 3);
+    EXPECT_EQ(ctx.session->trace()[0].step_number, 20);
+    EXPECT_EQ(ctx.session->trace()[1].step_number, 21);
+    EXPECT_EQ(ctx.session->trace()[2].step_number, 22);
+
+    // Clear trace
+    ctx.session->clear_trace();
+    EXPECT_TRUE(ctx.session->trace().empty());
+}
+
+// 48. State transitions, fault non-continuation, and clean reset
+TEST(Debugger, Audit_StateTransitionsAndFaultNonContinuation) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    .BYTE 0xFF\n"
+        "    HALT\n"
+    );
+
+    EXPECT_EQ(ctx.session->state(), MachineState::Ready);
+
+    auto res1 = ctx.session->step();
+    EXPECT_EQ(res1.stop_reason, StopReason::Faulted);
+    EXPECT_EQ(ctx.session->state(), MachineState::Faulted);
+    EXPECT_TRUE(res1.is_faulted());
+    EXPECT_EQ(ctx.session->last_fault().type, FaultType::InvalidOpcode);
+
+    auto res2 = ctx.session->step();
+    EXPECT_EQ(res2.stop_reason, StopReason::AlreadyFaulted);
+    EXPECT_EQ(res2.steps_executed, 0);
+    EXPECT_EQ(ctx.session->state(), MachineState::Faulted);
+
+    auto res3 = ctx.session->run();
+    EXPECT_EQ(res3.stop_reason, StopReason::AlreadyFaulted);
+    EXPECT_EQ(res3.steps_executed, 0);
+
+    ctx.session->reset();
+    EXPECT_EQ(ctx.session->state(), MachineState::Ready);
+    EXPECT_EQ(ctx.session->pc(), 0x0200);
+    EXPECT_EQ(ctx.session->sp(), 0xFFFF);
+    EXPECT_FALSE(ctx.session->last_fault().has_fault());
+    EXPECT_EQ(ctx.session->last_stop_reason(), StopReason::None);
+    EXPECT_FALSE(ctx.session->last_delta().has_value());
+    EXPECT_TRUE(ctx.session->trace().empty());
+    EXPECT_EQ(ctx.session->total_steps_executed(), 0);
+}
+
+// 49. Breakpoint lifecycle, boundaries, and reset preservation audit (Phase 6.2)
+TEST(Debugger, Audit_BreakpointLifecycleBoundariesAndResetPreservation) {
+    DebuggerTestContext ctx;
+    ctx.load_source(
+        ".ORG 0x0200\n"
+        ".ENTRY start\n"
+        "start:\n"
+        "    LDI R0, 10\n"
+        "    HALT\n"
+    );
+
+    // 1. Boundary addresses (0x0000 and 0xFFFF)
+    auto b0 = ctx.session->add_breakpoint(0x0000);
+    EXPECT_TRUE(b0.success);
+    EXPECT_EQ(b0.address, 0x0000);
+    EXPECT_FALSE(b0.duplicate);
+
+    auto bmax = ctx.session->add_breakpoint(0xFFFF);
+    EXPECT_TRUE(bmax.success);
+    EXPECT_EQ(bmax.address, 0xFFFF);
+    EXPECT_FALSE(bmax.duplicate);
+
+    EXPECT_TRUE(ctx.session->has_breakpoint(0x0000));
+    EXPECT_TRUE(ctx.session->has_breakpoint(0xFFFF));
+
+    // Sorted ascending retrieval
+    auto bps = ctx.session->breakpoints();
+    ASSERT_EQ(bps.size(), 2);
+    EXPECT_EQ(bps[0], 0x0000);
+    EXPECT_EQ(bps[1], 0xFFFF);
+
+    // 2. Duplicate add at boundary
+    auto b0_dup = ctx.session->add_breakpoint(0x0000);
+    EXPECT_TRUE(b0_dup.success);
+    EXPECT_TRUE(b0_dup.duplicate);
+    EXPECT_EQ(ctx.session->breakpoints().size(), 2);
+
+    // 3. Non-existent removal
+    auto rm_none = ctx.session->remove_breakpoint(0x0001);
+    EXPECT_FALSE(rm_none.success);
+    EXPECT_TRUE(rm_none.not_found);
+
+    // 4. Removal at boundary
+    auto rm0 = ctx.session->remove_breakpoint(0x0000);
+    EXPECT_TRUE(rm0.success);
+    EXPECT_FALSE(rm0.not_found);
+    EXPECT_FALSE(ctx.session->has_breakpoint(0x0000));
+    EXPECT_EQ(ctx.session->breakpoints().size(), 1);
+
+    // 5. Breakpoint state preserved across session reset()
+    auto b_entry = ctx.session->add_breakpoint(0x0200);
+    EXPECT_TRUE(b_entry.success);
+    EXPECT_EQ(ctx.session->breakpoints().size(), 2);
+
+    ctx.session->reset();
+    EXPECT_TRUE(ctx.session->has_breakpoint(0x0200));
+    EXPECT_TRUE(ctx.session->has_breakpoint(0xFFFF));
+    EXPECT_EQ(ctx.session->breakpoints().size(), 2);
+
+    // 6. Clear all breakpoints
+    ctx.session->clear_breakpoints();
+    EXPECT_FALSE(ctx.session->has_breakpoint(0x0200));
+    EXPECT_FALSE(ctx.session->has_breakpoint(0xFFFF));
+    EXPECT_TRUE(ctx.session->breakpoints().empty());
+
+    // 7. Session without attached program image rejects line breakpoints predictably
+    DebuggerSession standalone_session(ctx.cpu, nullptr);
+    EXPECT_TRUE(standalone_session.breakpoints().empty());
+
+    auto line_bp = standalone_session.add_line_breakpoint(4);
+    EXPECT_FALSE(line_bp.success);
+    EXPECT_NE(line_bp.message.find("No program image attached"), std::string::npos);
+
+    auto rm_line_bp = standalone_session.remove_line_breakpoint(4);
+    EXPECT_FALSE(rm_line_bp.success);
+    EXPECT_NE(rm_line_bp.message.find("No program image attached"), std::string::npos);
+}
 

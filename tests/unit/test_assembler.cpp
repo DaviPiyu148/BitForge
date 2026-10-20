@@ -966,3 +966,594 @@ TEST(AssemblerTest, ProgramImageLoadIntoSeparation) {
     cpu.reset(res.image.entry_point());
     EXPECT_EQ(cpu.registers().pc, 0x0100);
 }
+
+// =============================================================
+// 8. Phase 4 Comprehensive Verification Matrix
+// =============================================================
+
+TEST(AssemblerTest, InstructionEncodingRegisterMatrix) {
+    const std::string source = R"(
+        .ORG 0x0200
+        ; Group 2: INC, DEC, NOT, PUSH, POP across R0..R3
+        INC R0
+        INC R1
+        INC R2
+        INC R3
+        DEC R0
+        DEC R1
+        DEC R2
+        DEC R3
+        NOT R0
+        NOT R1
+        NOT R2
+        NOT R3
+        PUSH R0
+        PUSH R1
+        PUSH R2
+        PUSH R3
+        POP R0
+        POP R1
+        POP R2
+        POP R3
+
+        ; Group 3: MOV, ADD, SUB, AND, OR, XOR, CMP across register pairs
+        MOV R0, R1
+        MOV R2, R3
+        MOV R3, R0
+        ADD R0, R2
+        ADD R1, R3
+        SUB R2, R0
+        SUB R3, R1
+        AND R0, R1
+        AND R2, R3
+        OR R1, R0
+        OR R3, R2
+        XOR R0, R3
+        XOR R2, R1
+        CMP R1, R2
+        CMP R3, R0
+
+        ; Group 4: LDI Rd, imm8
+        LDI R0, -128
+        LDI R1, -1
+        LDI R2, 0
+        LDI R3, 255
+
+        ; Group 5: LDI16 IX, addr16
+        LDI16 IX, 0x0000
+        LDI16 IX, 0xBEEF
+
+        ; Group 6: LD Rd, [addr16]
+        LD R0, [0x0000]
+        LD R1, [0x1234]
+        LD R2, [0x8000]
+        LD R3, [0xEFFF]
+
+        ; Group 7: ST [addr16], Rs
+        ST [0x0000], R0
+        ST [0x1234], R1
+        ST [0x8000], R2
+        ST [0xEFFF], R3
+
+        ; Group 8: LDX Rd, [IX]
+        LDX R0, [IX]
+        LDX R1, [IX]
+        LDX R2, [IX]
+        LDX R3, [IX]
+
+        ; Group 9: STX [IX], Rs
+        STX [IX], R0
+        STX [IX], R1
+        STX [IX], R2
+        STX [IX], R3
+
+        ; Group 10: JMP, JZ, JNZ, JC, JNC, CALL
+        JMP 0x1000
+        JZ 0x2000
+        JNZ 0x3000
+        JC 0x4000
+        JNC 0x5000
+        CALL 0x6000
+
+        ; Group 11: IN Rd, port8
+        IN R0, 0x00
+        IN R1, 0x01
+        IN R2, 0x02
+        IN R3, 0x10
+
+        ; Group 12: OUT port8, Rs
+        OUT 0x00, R0
+        OUT 0x01, R1
+        OUT 0x02, R2
+        OUT 0x10, R3
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_TRUE(res.success);
+    EXPECT_EQ(res.diagnostics.size(), 0);
+
+    const std::vector<bitforge::byte_t> expected = {
+        // Group 2: INC, DEC, NOT, PUSH, POP
+        0x22, 0x00,  0x22, 0x01,  0x22, 0x02,  0x22, 0x03,
+        0x23, 0x00,  0x23, 0x01,  0x23, 0x02,  0x23, 0x03,
+        0x33, 0x00,  0x33, 0x01,  0x33, 0x02,  0x33, 0x03,
+        0x62, 0x00,  0x62, 0x01,  0x62, 0x02,  0x62, 0x03,
+        0x63, 0x00,  0x63, 0x01,  0x63, 0x02,  0x63, 0x03,
+
+        // Group 3: MOV, ADD, SUB, AND, OR, XOR, CMP
+        0x11, 0x00, 0x01,
+        0x11, 0x02, 0x03,
+        0x11, 0x03, 0x00,
+        0x20, 0x00, 0x02,
+        0x20, 0x01, 0x03,
+        0x21, 0x02, 0x00,
+        0x21, 0x03, 0x01,
+        0x30, 0x00, 0x01,
+        0x30, 0x02, 0x03,
+        0x31, 0x01, 0x00,
+        0x31, 0x03, 0x02,
+        0x32, 0x00, 0x03,
+        0x32, 0x02, 0x01,
+        0x40, 0x01, 0x02,
+        0x40, 0x03, 0x00,
+
+        // Group 4: LDI Rd, imm8
+        0x10, 0x00, 0x80,
+        0x10, 0x01, 0xFF,
+        0x10, 0x02, 0x00,
+        0x10, 0x03, 0xFF,
+
+        // Group 5: LDI16 IX, addr16
+        0x14, 0x00, 0x00,
+        0x14, 0xBE, 0xEF,
+
+        // Group 6: LD Rd, [addr16]
+        0x12, 0x00, 0x00, 0x00,
+        0x12, 0x01, 0x12, 0x34,
+        0x12, 0x02, 0x80, 0x00,
+        0x12, 0x03, 0xEF, 0xFF,
+
+        // Group 7: ST [addr16], Rs
+        0x13, 0x00, 0x00, 0x00,
+        0x13, 0x12, 0x34, 0x01,
+        0x13, 0x80, 0x00, 0x02,
+        0x13, 0xEF, 0xFF, 0x03,
+
+        // Group 8: LDX Rd, [IX]
+        0x15, 0x00,
+        0x15, 0x01,
+        0x15, 0x02,
+        0x15, 0x03,
+
+        // Group 9: STX [IX], Rs
+        0x16, 0x00,
+        0x16, 0x01,
+        0x16, 0x02,
+        0x16, 0x03,
+
+        // Group 10: JMP, JZ, JNZ, JC, JNC, CALL
+        0x50, 0x10, 0x00,
+        0x51, 0x20, 0x00,
+        0x52, 0x30, 0x00,
+        0x53, 0x40, 0x00,
+        0x54, 0x50, 0x00,
+        0x60, 0x60, 0x00,
+
+        // Group 11: IN Rd, port8
+        0x70, 0x00, 0x00,
+        0x70, 0x01, 0x01,
+        0x70, 0x02, 0x02,
+        0x70, 0x03, 0x10,
+
+        // Group 12: OUT port8, Rs
+        0x71, 0x00, 0x00,
+        0x71, 0x01, 0x01,
+        0x71, 0x02, 0x02,
+        0x71, 0x10, 0x03
+    };
+
+    auto flat = extract_flat_bytes(res.image);
+    EXPECT_EQ(flat.size(), expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_EQ(flat[i], expected[i]);
+    }
+}
+
+TEST(AssemblerTest, ExpressionsAndSymbolArithmetic) {
+    const std::string source = R"(
+        .ORG 0x0200
+        base:
+            NOP
+        data_block:
+            .BYTE 10 + 20, 50 - 8, -5 + 10, 0x10 + 0x20
+            .WORD base + 0x100, 0x1000 - 0x0001
+        start:
+            LDI R0, 5 + 15
+            LDI R1, 100 - 40
+            LD R2, [data_block + 2]
+            JMP start + 3
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_TRUE(res.success);
+    EXPECT_EQ(res.diagnostics.size(), 0);
+
+    const std::vector<bitforge::byte_t> expected = {
+        // NOP at 0x0200
+        0x00,
+        // .BYTE 30, 42, 5, 48 at 0x0201
+        30, 42, 5, 0x30,
+        // .WORD 0x0200 + 0x0100 = 0x0300 at 0x0205
+        0x03, 0x00,
+        // .WORD 0x1000 - 0x0001 = 0x0FFF at 0x0207
+        0x0F, 0xFF,
+        // LDI R0, 20 at 0x0209
+        0x10, 0x00, 20,
+        // LDI R1, 60 at 0x020C
+        0x10, 0x01, 60,
+        // LD R2, [data_block + 2] = [0x0203] at 0x020F
+        0x12, 0x02, 0x02, 0x03,
+        // JMP start + 3 = 0x0209 + 3 = 0x020C at 0x0213
+        0x50, 0x02, 0x0C
+    };
+
+    auto flat = extract_flat_bytes(res.image);
+    EXPECT_EQ(flat.size(), expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_EQ(flat[i], expected[i]);
+    }
+}
+
+TEST(AssemblerTest, SymbolResolutionCaseSensitivityAndShadowing) {
+    const std::string source = R"(
+        .ORG 0x0200
+        .ENTRY Start_Label
+
+        Target_Label:
+            NOP
+
+        Start_Label:
+            JZ TARGET_LABEL
+            JNZ target_label
+            JMP Target_Label
+    )";
+
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_TRUE(res.success);
+    EXPECT_EQ(res.image.entry_point(), 0x0201);
+    EXPECT_TRUE(res.symbols.contains("TARGET_LABEL"));
+    EXPECT_TRUE(res.symbols.contains("target_label"));
+    EXPECT_TRUE(res.symbols.contains("Target_Label"));
+    EXPECT_EQ(res.symbols.lookup("TARGET_LABEL")->address, 0x0200);
+    EXPECT_EQ(res.symbols.lookup("target_label")->address, 0x0200);
+
+    // Duplicate label with differing casing must be rejected
+    const std::string dup_source = R"(
+        my_loop:
+            NOP
+        MY_LOOP:
+            HALT
+    )";
+    auto dup_res = assem.assemble(dup_source);
+    EXPECT_FALSE(dup_res.success);
+    bool found_dup = false;
+    for (const auto& d : dup_res.diagnostics) {
+        if (d.message.find("Duplicate label") != std::string::npos) {
+            found_dup = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_dup);
+}
+
+TEST(AssemblerTest, StackBoundaryCollisionExhaustiveMatrix) {
+    bitforge::assembler::Assembler assem;
+
+    // 1. Exact-fit tests ending exactly at 0xEFFF:
+    // 1-byte instruction at 0xEFFF
+    {
+        auto res = assem.assemble(".ORG 0xEFFF\nNOP\n");
+        EXPECT_TRUE(res.success);
+        EXPECT_EQ(res.image.segments().size(), 1);
+        EXPECT_EQ(res.image.segments()[0].start_address, 0xEFFF);
+        EXPECT_EQ(res.image.segments()[0].data.size(), 1);
+        EXPECT_EQ(res.image.segments()[0].data[0], 0x00);
+    }
+    // 2-byte instruction at 0xEFFE
+    {
+        auto res = assem.assemble(".ORG 0xEFFE\nINC R0\n");
+        EXPECT_TRUE(res.success);
+        EXPECT_EQ(res.image.segments().size(), 1);
+        EXPECT_EQ(res.image.segments()[0].start_address, 0xEFFE);
+        EXPECT_EQ(res.image.segments()[0].data.size(), 2);
+    }
+    // 3-byte instruction at 0xEFFD
+    {
+        auto res = assem.assemble(".ORG 0xEFFD\nLDI R0, 1\n");
+        EXPECT_TRUE(res.success);
+        EXPECT_EQ(res.image.segments().size(), 1);
+        EXPECT_EQ(res.image.segments()[0].start_address, 0xEFFD);
+        EXPECT_EQ(res.image.segments()[0].data.size(), 3);
+    }
+    // 4-byte instruction at 0xEFFC
+    {
+        auto res = assem.assemble(".ORG 0xEFFC\nLD R0, [0x1000]\n");
+        EXPECT_TRUE(res.success);
+        EXPECT_EQ(res.image.segments().size(), 1);
+        EXPECT_EQ(res.image.segments()[0].start_address, 0xEFFC);
+        EXPECT_EQ(res.image.segments()[0].data.size(), 4);
+    }
+
+    // 2. Overrun crossing into 0xF000:
+    // 2-byte instruction at 0xEFFF (byte 2 lands at 0xF000)
+    {
+        auto res = assem.assemble(".ORG 0xEFFF\nINC R0\n");
+        EXPECT_FALSE(res.success);
+        EXPECT_TRUE(res.image.segments().empty());
+        EXPECT_EQ(res.image.total_bytes(), 0);
+        bool found = false;
+        for (const auto& d : res.diagnostics) {
+            if (d.message.find("0xF000") != std::string::npos || d.message.find("stack") != std::string::npos) {
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found);
+    }
+    // 3-byte instruction at 0xEFFE (byte 3 lands at 0xF000)
+    {
+        auto res = assem.assemble(".ORG 0xEFFE\nLDI R0, 1\n");
+        EXPECT_FALSE(res.success);
+        EXPECT_TRUE(res.image.segments().empty());
+        EXPECT_EQ(res.image.total_bytes(), 0);
+        bool found = false;
+        for (const auto& d : res.diagnostics) {
+            if (d.message.find("0xF000") != std::string::npos || d.message.find("stack") != std::string::npos) {
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found);
+    }
+    // 4-byte instruction at 0xEFFD (byte 4 lands at 0xF000)
+    {
+        auto res = assem.assemble(".ORG 0xEFFD\nLD R0, [0x1000]\n");
+        EXPECT_FALSE(res.success);
+        EXPECT_TRUE(res.image.segments().empty());
+        EXPECT_EQ(res.image.total_bytes(), 0);
+        bool found = false;
+        for (const auto& d : res.diagnostics) {
+            if (d.message.find("0xF000") != std::string::npos || d.message.find("stack") != std::string::npos) {
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found);
+    }
+    // Direct .ORG at 0xF000
+    {
+        auto res = assem.assemble(".ORG 0xF000\nNOP\n");
+        EXPECT_FALSE(res.success);
+        EXPECT_TRUE(res.image.segments().empty());
+        EXPECT_EQ(res.image.total_bytes(), 0);
+    }
+    // Direct .ORG at 0xFFFF
+    {
+        auto res = assem.assemble(".ORG 0xFFFF\nNOP\n");
+        EXPECT_FALSE(res.success);
+        EXPECT_TRUE(res.image.segments().empty());
+        EXPECT_EQ(res.image.total_bytes(), 0);
+    }
+    // Earlier valid segment followed by stack overrun: verifies that no partial image is returned
+    {
+        const std::string multi_seg = R"(
+            .ORG 0x0200
+            start:
+                NOP
+            .ORG 0xEFFF
+                INC R0
+        )";
+        auto res = assem.assemble(multi_seg);
+        EXPECT_FALSE(res.success);
+        EXPECT_TRUE(res.image.segments().empty());
+        EXPECT_EQ(res.image.total_bytes(), 0);
+
+        // Loading a failed assembly image into memory mutates nothing
+        bitforge::Memory mem;
+        EXPECT_TRUE(res.image.load_into(mem));
+        EXPECT_EQ(mem.read_byte(0x0200), 0x00);
+        EXPECT_EQ(mem.read_byte(0xEFFF), 0x00);
+        EXPECT_EQ(mem.read_byte(0xF000), 0x00);
+
+        bool found = false;
+        for (const auto& d : res.diagnostics) {
+            if (d.message.find("0xF000") != std::string::npos || d.message.find("stack") != std::string::npos) {
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found);
+    }
+}
+
+TEST(AssemblerTest, MalformedInputComprehensiveMatrix) {
+    bitforge::assembler::Assembler assem;
+    const std::vector<std::string> malformed_snippets = {
+        "INVALID_OPCODE\n",
+        "MOV R0\n",
+        "MOV R0, R4\n",
+        "MOV R4, R0\n",
+        "MOV R0 R1\n",
+        "LDI R0\n",
+        "LDI R0,\n",
+        "LDI R0, 256\n",
+        "LDI R0, -129\n",
+        "LDI16 R0, 0x1000\n",
+        "LDI16 IX\n",
+        "LD R0, 0x1000\n",
+        "LD R0, [0x1000\n",
+        "LD R4, [0x1000]\n",
+        "ST 0x1000, R0\n",
+        "ST [0x1000], R4\n",
+        "LDX R0, [R1]\n",
+        "STX [R0], R1\n",
+        "INC R4\n",
+        "DEC R4\n",
+        "PUSH R4\n",
+        "POP R4\n",
+        "IN R0, 256\n",
+        "OUT 256, R0\n",
+        "IN R4, 0x01\n",
+        "OUT 0x01, R4\n",
+        ".BYTE 256\n",
+        ".BYTE -129\n",
+        ".WORD 65536\n",
+        ".WORD -32769\n",
+        ".ORG 0x10000\n"
+    };
+
+    for (const auto& snippet : malformed_snippets) {
+        auto res = assem.assemble(snippet);
+        EXPECT_FALSE(res.success);
+        EXPECT_FALSE(res.diagnostics.empty());
+    }
+}
+
+TEST(AssemblerTest, ExamplesAssemblyAndExecutionVerification) {
+    // 1. Example 01: 01_arithmetic.asm
+    {
+        const std::string ex01 = R"(
+            ; BitForge Example 01: Arithmetic Baseline
+            ; Computes 10 + 20 and stores the result (0x1E / 30) at address 0x8000
+
+            .ORG 0x0200
+            .ENTRY start
+
+            start:
+                LDI R0, 10         ; R0 = 10 (0x0A)
+                LDI R1, 20         ; R1 = 20 (0x14)
+                ADD R0, R1         ; R0 = R0 + R1 = 30 (0x1E)
+                ST [0x8000], R0    ; memory[0x8000] = 30
+                HALT               ; halt execution
+        )";
+        bitforge::assembler::Assembler assem;
+        auto res = assem.assemble(ex01);
+        EXPECT_TRUE(res.success);
+        EXPECT_EQ(res.diagnostics.size(), 0);
+        EXPECT_EQ(res.image.entry_point(), 0x0200);
+
+        bitforge::Memory mem;
+        bitforge::SystemBus bus(mem);
+        bitforge::Cpu cpu(bus);
+
+        EXPECT_TRUE(res.image.load_into(mem));
+        cpu.reset(res.image.entry_point());
+
+        auto run_res = bitforge::test::run_with_budget(cpu, 100);
+        EXPECT_TRUE(run_res.success);
+        EXPECT_EQ(cpu.state(), bitforge::MachineState::Halted);
+        EXPECT_EQ(cpu.registers().r[0], 30);
+        EXPECT_EQ(mem.read_byte(0x8000), 30);
+    }
+
+    // 2. Example 02: 02_io_demo.asm
+    {
+        const std::string ex02 = R"(
+            ; BitForge Example 02: Virtual I/O Demonstration
+            ; Demonstrates text output (Port 0x01), numeric output (Port 0x02), and LEDs (Port 0x10)
+
+            .ORG 0x0200
+            .ENTRY main
+
+            main:
+                ; Text console: Output "HI!"
+                LDI R0, 'H'
+                OUT 0x01, R0
+                LDI R0, 'I'
+                OUT 0x01, R0
+                LDI R0, '!'
+                OUT 0x01, R0
+
+                ; Numeric console: Output 42
+                LDI R0, 42
+                OUT 0x02, R0
+
+                ; Virtual LEDs: Set pattern 0x55 (0b01010101)
+                LDI R0, 0x55
+                OUT 0x10, R0
+
+                HALT
+        )";
+        bitforge::assembler::Assembler assem;
+        auto res = assem.assemble(ex02);
+        EXPECT_TRUE(res.success);
+        EXPECT_EQ(res.diagnostics.size(), 0);
+        EXPECT_EQ(res.image.entry_point(), 0x0200);
+
+        bitforge::Memory mem;
+        bitforge::SystemBus bus(mem);
+        bitforge::Cpu cpu(bus);
+
+        EXPECT_TRUE(res.image.load_into(mem));
+        cpu.reset(res.image.entry_point());
+
+        auto run_res = bitforge::test::run_with_budget(cpu, 100);
+        EXPECT_TRUE(run_res.success);
+        EXPECT_EQ(cpu.state(), bitforge::MachineState::Halted);
+        EXPECT_EQ(bus.text_output(), "HI!");
+        EXPECT_EQ(bus.numeric_output(), "42");
+        EXPECT_EQ(bus.led_state(), 0x55);
+    }
+}
+
+TEST(AssemblerTest, ProgramImageAndSourceMapQueryAudit) {
+    const std::string source = R"(
+        .ORG 0x0100
+        ; Comment line
+        start:
+            LDI R0, 42
+            INC R0
+            HALT
+    )";
+    bitforge::assembler::Assembler assem;
+    auto res = assem.assemble(source);
+    EXPECT_TRUE(res.success);
+
+    // ProgramImage inspection
+    EXPECT_EQ(res.image.total_bytes(), 3 + 2 + 1); // LDI(3) + INC(2) + HALT(1) = 6 bytes
+    EXPECT_EQ(res.image.segments().size(), 1);
+    EXPECT_EQ(res.image.segments()[0].start_address, 0x0100);
+    EXPECT_EQ(res.image.segments()[0].data.size(), 6);
+
+    // SourceMap inspection
+    const auto& sm = res.image.source_map();
+    EXPECT_GE(sm.instructions().size(), 3);
+
+    // Find instructions by address
+    const auto* inst1 = sm.find_instruction_by_address(0x0100);
+    EXPECT_NE(inst1, nullptr);
+    EXPECT_EQ(inst1->mnemonic, "LDI");
+    EXPECT_EQ(inst1->size, 3);
+
+    const auto* inst2 = sm.find_instruction_by_address(0x0103);
+    EXPECT_NE(inst2, nullptr);
+    EXPECT_EQ(inst2->mnemonic, "INC");
+    EXPECT_EQ(inst2->size, 2);
+
+    const auto* inst3 = sm.find_instruction_by_address(0x0105);
+    EXPECT_NE(inst3, nullptr);
+    EXPECT_EQ(inst3->mnemonic, "HALT");
+    EXPECT_EQ(inst3->size, 1);
+
+    // Non-instruction address (e.g. operand byte at 0x0101)
+    EXPECT_EQ(sm.find_instruction_by_address(0x0101), nullptr);
+
+    // Breakpoint line resolution
+    // Line 5: LDI R0, 42
+    auto bp_line5 = sm.resolve_line_breakpoint(5);
+    EXPECT_TRUE(bp_line5.success);
+    EXPECT_EQ(bp_line5.address, 0x0100);
+
+    // Line 3: Comment line -> fails breakpoint resolution
+    auto bp_line3 = sm.resolve_line_breakpoint(3);
+    EXPECT_FALSE(bp_line3.success);
+}

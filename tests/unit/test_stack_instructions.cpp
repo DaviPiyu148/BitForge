@@ -281,3 +281,215 @@ TEST(StackTest, InvalidRegisterEncodingsInPushAndPop) {
     EXPECT_EQ(fix.cpu.registers().pc, 0x0300);
     EXPECT_EQ(fix.cpu.registers().sp, 0xFFFF);
 }
+
+// =============================================================
+// 5. Phase 3 ADR-001 Boundary, Sentinel, and Atomicity Tests
+// =============================================================
+
+TEST(StackTest, ExactBoundaryPushAtF001AndOverflowAtF000) {
+    StackFixture fix;
+
+    // Setup push loop at 0x0200:
+    // 0x0200: PUSH R0 (0x62, 0x00)
+    // 0x0202: JMP 0x0200 (0x50, 0x02, 0x00)
+    fix.memory.write_byte(0x01F0, 0x10); fix.memory.write_byte(0x01F1, 0x00); fix.memory.write_byte(0x01F2, 0x5A); // LDI R0, 0x5A
+    fix.memory.write_byte(0x01F3, 0x50); fix.memory.write_byte(0x01F4, 0x02); fix.memory.write_byte(0x01F5, 0x00); // JMP 0x0200
+
+    fix.memory.write_byte(0x0200, 0x62); fix.memory.write_byte(0x0201, 0x00);
+    fix.memory.write_byte(0x0202, 0x50); fix.memory.write_byte(0x0203, 0x02); fix.memory.write_byte(0x0204, 0x00);
+
+    fix.cpu.reset(0x01F0);
+    fix.cpu.step(); // LDI R0, 0x5A
+    fix.cpu.step(); // JMP 0x0200
+    EXPECT_EQ(fix.cpu.registers().r[0], 0x5A);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xFFFF);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0200);
+
+    // Execute 4094 iterations of (PUSH R0; JMP 0x0200) to advance SP from 0xFFFF down to 0xF001
+    for (int i = 0; i < 4094; ++i) {
+        auto r_push = fix.cpu.step();
+        EXPECT_TRUE(r_push.executed);
+        auto r_jmp = fix.cpu.step();
+        EXPECT_TRUE(r_jmp.executed);
+    }
+    EXPECT_EQ(fix.cpu.registers().sp, 0xF001);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0200);
+    EXPECT_EQ(fix.memory.read_byte(0xF001), 0x5A);
+    EXPECT_EQ(fix.memory.read_byte(0xF000), 0x00);
+    EXPECT_EQ(fix.memory.read_byte(0xEFFF), 0x00);
+
+    // Final valid push from SP == 0xF001 under ADR-001 §4:
+    // Pre-validation (SP > 0xF000) passes; SP decrements to 0xF000 and writes byte to 0xF000
+    auto r_last_valid_push = fix.cpu.step();
+    EXPECT_TRUE(r_last_valid_push.executed);
+    EXPECT_FALSE(r_last_valid_push.faulted);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Running);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xF000);
+    EXPECT_EQ(fix.memory.read_byte(0xF000), 0x5A);
+    // Boundary neighbor isolation: RAM below 0xF000 must NOT be modified
+    EXPECT_EQ(fix.memory.read_byte(0xEFFF), 0x00);
+
+    // Jump back to 0x0200
+    auto r_jmp2 = fix.cpu.step();
+    EXPECT_TRUE(r_jmp2.executed);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0200);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xF000);
+
+    // Subsequent PUSH when SP == 0xF000 must immediately fault with StackOverflow!
+    auto r_overflow = fix.cpu.step();
+    EXPECT_FALSE(r_overflow.executed);
+    EXPECT_TRUE(r_overflow.faulted);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Faulted);
+    EXPECT_EQ(fix.cpu.last_fault().type, bitforge::FaultType::StackOverflow);
+    EXPECT_EQ(fix.cpu.last_fault().instruction_address, 0x0200);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0200); // Universal PC preservation
+    EXPECT_EQ(fix.cpu.registers().sp, 0xF000); // SP unchanged
+    EXPECT_EQ(fix.cpu.registers().r[0], 0x5A); // Register unchanged
+    EXPECT_EQ(fix.memory.read_byte(0xEFFF), 0x00); // Memory below 0xF000 untouched
+    EXPECT_EQ(fix.memory.read_byte(0xF000), 0x5A); // Existing top byte intact
+}
+
+TEST(StackTest, ExactBoundaryCallAtF002AndOverflowAtF001AndF000) {
+    StackFixture fix;
+
+    // 1. Position SP at 0xF002 by pushing 4093 bytes (0xFFFF - 4093 = 0xF002)
+    fix.memory.write_byte(0x0200, 0x62); // PUSH R0
+    fix.memory.write_byte(0x0201, 0x00);
+    fix.memory.write_byte(0x0202, 0x50); // JMP 0x0200
+    fix.memory.write_byte(0x0203, 0x02);
+    fix.memory.write_byte(0x0204, 0x00);
+
+    fix.cpu.reset(0x0200);
+    for (int i = 0; i < 4093; ++i) {
+        fix.cpu.step(); // PUSH
+        fix.cpu.step(); // JMP
+    }
+    EXPECT_EQ(fix.cpu.registers().sp, 0xF002);
+
+    // Write CALL 0x0300 at 0x0200
+    fix.memory.write_byte(0x0200, 0x60);
+    fix.memory.write_byte(0x0201, 0x03);
+    fix.memory.write_byte(0x0202, 0x00);
+
+    // Write CALL 0x0400 at 0x0300
+    fix.memory.write_byte(0x0300, 0x60);
+    fix.memory.write_byte(0x0301, 0x04);
+    fix.memory.write_byte(0x0302, 0x00);
+
+    // CALL at SP == 0xF002 succeeds and decrements SP to 0xF000
+    auto r_call = fix.cpu.step();
+    EXPECT_TRUE(r_call.executed);
+    EXPECT_FALSE(r_call.faulted);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xF000);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0300);
+    // Return address 0x0203 stored big-endian: hi at 0xF000, lo at 0xF001
+    EXPECT_EQ(fix.memory.read_byte(0xF000), 0x02);
+    EXPECT_EQ(fix.memory.read_byte(0xF001), 0x03);
+    EXPECT_EQ(fix.memory.read_byte(0xEFFF), 0x00); // Neighbor isolation
+
+    // Next CALL at SP == 0xF000 must fault with StackOverflow
+    auto r_overflow = fix.cpu.step();
+    EXPECT_FALSE(r_overflow.executed);
+    EXPECT_TRUE(r_overflow.faulted);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Faulted);
+    EXPECT_EQ(fix.cpu.last_fault().type, bitforge::FaultType::StackOverflow);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0300);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xF000);
+    EXPECT_EQ(fix.memory.read_byte(0xEFFF), 0x00);
+
+    // 2. Also test CALL when SP == 0xF001
+    fix.memory.reset();
+    fix.cpu.reset(0x0200);
+    fix.memory.write_byte(0x0200, 0x62); // restore PUSH loop
+    fix.memory.write_byte(0x0201, 0x00);
+    fix.memory.write_byte(0x0202, 0x50); // JMP 0x0200
+    fix.memory.write_byte(0x0203, 0x02);
+    fix.memory.write_byte(0x0204, 0x00);
+    for (int i = 0; i < 4094; ++i) { // 4094 pushes -> SP = 0xF001
+        fix.cpu.step();
+        fix.cpu.step();
+    }
+    EXPECT_EQ(fix.cpu.registers().sp, 0xF001);
+
+    // Write CALL 0x0300 at 0x0200
+    fix.memory.write_byte(0x0200, 0x60);
+    fix.memory.write_byte(0x0201, 0x03);
+    fix.memory.write_byte(0x0202, 0x00);
+
+    auto r_call_f001 = fix.cpu.step();
+    EXPECT_FALSE(r_call_f001.executed);
+    EXPECT_TRUE(r_call_f001.faulted);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Faulted);
+    EXPECT_EQ(fix.cpu.last_fault().type, bitforge::FaultType::StackOverflow);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0200);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xF001);
+    EXPECT_EQ(fix.memory.read_byte(0xF000), 0x00);
+    EXPECT_EQ(fix.memory.read_byte(0xEFFF), 0x00);
+}
+
+TEST(StackTest, SentinelAddress0xFFFFGeneralMemoryIndependence) {
+    StackFixture fix;
+    // Preload RAM at 0xFFFF with 0x7E
+    fix.memory.write_byte(0xFFFF, 0x7E);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xFFFF);
+
+    // Program at 0x0200:
+    // LDI R0, 0x42
+    // PUSH R0 (decrements to 0xFFFE, writes 0x42 to 0xFFFE)
+    // POP R1  (reads 0x42 from 0xFFFE, increments to 0xFFFF)
+    fix.memory.write_byte(0x0200, 0x10); fix.memory.write_byte(0x0201, 0x00); fix.memory.write_byte(0x0202, 0x42);
+    fix.memory.write_byte(0x0203, 0x62); fix.memory.write_byte(0x0204, 0x00);
+    fix.memory.write_byte(0x0205, 0x63); fix.memory.write_byte(0x0206, 0x01);
+
+    fix.cpu.step(); // LDI R0
+    fix.cpu.step(); // PUSH R0
+    EXPECT_EQ(fix.cpu.registers().sp, 0xFFFE);
+    EXPECT_EQ(fix.memory.read_byte(0xFFFE), 0x42);
+    EXPECT_EQ(fix.memory.read_byte(0xFFFF), 0x7E); // Memory at 0xFFFF is distinct and untouched
+
+    fix.cpu.step(); // POP R1
+    EXPECT_EQ(fix.cpu.registers().sp, 0xFFFF);
+    EXPECT_EQ(fix.cpu.registers().r[1], 0x42);
+    EXPECT_EQ(fix.memory.read_byte(0xFFFF), 0x7E); // Still untouched
+}
+
+TEST(StackTest, StackFaultAtomicityAndRegisterPreservation) {
+    StackFixture fix;
+
+    // 1. POP on empty stack must preserve destination register and PC
+    // LDI R0, 0xAA; POP R0
+    fix.memory.write_byte(0x0200, 0x10); fix.memory.write_byte(0x0201, 0x00); fix.memory.write_byte(0x0202, 0xAA);
+    fix.memory.write_byte(0x0203, 0x63); fix.memory.write_byte(0x0204, 0x00);
+
+    fix.cpu.step(); // LDI R0
+    EXPECT_EQ(fix.cpu.registers().r[0], 0xAA);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xFFFF);
+
+    auto r_pop_underflow = fix.cpu.step(); // POP R0
+    EXPECT_FALSE(r_pop_underflow.executed);
+    EXPECT_TRUE(r_pop_underflow.faulted);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Faulted);
+    EXPECT_EQ(fix.cpu.last_fault().type, bitforge::FaultType::StackUnderflow);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0203);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xFFFF);
+    EXPECT_EQ(fix.cpu.registers().r[0], 0xAA); // Preserved
+
+    // 2. RET on 1-byte stack (SP == 0xFFFE)
+    fix.cpu.reset(0x0300);
+    fix.memory.write_byte(0x0300, 0x10); fix.memory.write_byte(0x0301, 0x01); fix.memory.write_byte(0x0302, 0x55);
+    fix.memory.write_byte(0x0303, 0x62); fix.memory.write_byte(0x0304, 0x01); // PUSH R1 -> SP 0xFFFE
+    fix.memory.write_byte(0x0305, 0x61); // RET requires at least 2 bytes
+
+    fix.cpu.step(); // LDI
+    fix.cpu.step(); // PUSH
+    EXPECT_EQ(fix.cpu.registers().sp, 0xFFFE);
+
+    auto r_ret_underflow = fix.cpu.step();
+    EXPECT_FALSE(r_ret_underflow.executed);
+    EXPECT_TRUE(r_ret_underflow.faulted);
+    EXPECT_EQ(fix.cpu.state(), bitforge::MachineState::Faulted);
+    EXPECT_EQ(fix.cpu.last_fault().type, bitforge::FaultType::StackUnderflow);
+    EXPECT_EQ(fix.cpu.registers().pc, 0x0305);
+    EXPECT_EQ(fix.cpu.registers().sp, 0xFFFE);
+    EXPECT_EQ(fix.cpu.registers().r[1], 0x55);
+}
