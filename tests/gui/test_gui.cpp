@@ -3569,6 +3569,8 @@ void GuiTest::testVisualDesignSystemTokensAndHierarchy() {
     QCOMPARE(theme::kRadiusPanel, 6);
     QCOMPARE(theme::kRadiusLarge, 8);
     QCOMPARE(theme::kRadiusPill, 12);
+    QCOMPARE(theme::kRadiusPillSmall, 10);
+    QCOMPARE(theme::kRadiusLed, 9);
 
     // 2. Sizing & Metric tokens
     QCOMPARE(theme::kControlHeight, 28);
@@ -3579,6 +3581,8 @@ void GuiTest::testVisualDesignSystemTokensAndHierarchy() {
     QCOMPARE(theme::kTabCloseButtonSize, 18);
     QCOMPARE(theme::kCloseButtonSize, 18);
     QCOMPARE(theme::kSpinButtonWidth, 18);
+    QCOMPARE(theme::kBadgeHeight, 24);
+    QCOMPARE(theme::kBadgeHeightSmall, 20);
     QCOMPARE(theme::kLedIndicatorSize, 18);
     QCOMPARE(theme::kLedRadiusPill, 9);
 
@@ -3733,6 +3737,8 @@ void GuiTest::testVisualDesignSystemTokensAndHierarchy() {
         TutorialGuide guide(&window);
         guide.resize(520, 400);
         guide.show();
+        QCOMPARE(window.stateBadge()->height(), theme::kBadgeHeight);
+        QCOMPARE(guide.stepBadgeLabel()->height(), theme::kBadgeHeight);
         guide.grab().save(artifact_dir + "/gui_smoke_tutorial_guide_dialog.png");
         guide.close();
     }

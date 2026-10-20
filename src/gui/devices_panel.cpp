@@ -80,7 +80,7 @@ DevicesPanel::DevicesPanel(QWidget* parent)
         dot->setAlignment(Qt::AlignCenter);
         dot->setStyleSheet(QString("QLabel { background-color: %1; border-radius: %2px; border: 1px solid %3; }")
                                .arg(theme::kLedOffBg.name())
-                               .arg(theme::kLedRadiusPill)
+                               .arg(theme::kRadiusLed)
                                .arg(theme::kBorderMedium.name()));
         led_dots_[static_cast<std::size_t>(i)] = dot;
 
@@ -257,14 +257,14 @@ void DevicesPanel::refresh() {
             led_dots_[static_cast<std::size_t>(i)]->setStyleSheet(
                 QString("QLabel { background-color: %1; border-radius: %2px; border: 1px solid %3; }")
                     .arg(theme::kAccentTeal.name())
-                    .arg(theme::kLedRadiusPill)
+                    .arg(theme::kRadiusLed)
                     .arg(theme::kLedOnBorder.name())
             );
         } else {
             led_dots_[static_cast<std::size_t>(i)]->setStyleSheet(
                 QString("QLabel { background-color: %1; border-radius: %2px; border: 1px solid %3; }")
                     .arg(theme::kLedOffBg.name())
-                    .arg(theme::kLedRadiusPill)
+                    .arg(theme::kRadiusLed)
                     .arg(theme::kBorderMedium.name())
             );
         }

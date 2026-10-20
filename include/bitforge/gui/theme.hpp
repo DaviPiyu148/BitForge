@@ -21,7 +21,9 @@ inline constexpr int kRadiusSmall = 3;      // Micro badges, tab close buttons, 
 inline constexpr int kRadiusControl = 4;    // Standard interactive controls (buttons, line edits, combos, spinboxes, tab tops)
 inline constexpr int kRadiusPanel = 6;      // Group boxes, dock frames, context menus, popup dropdowns
 inline constexpr int kRadiusLarge = 8;      // Hero cards (Welcome action cards), preview card, major dialog containers
-inline constexpr int kRadiusPill = 12;      // Semicircular pill radius for 20-24px status badges and indicator capsules (radius == height / 2)
+inline constexpr int kRadiusPill = 12;      // Semicircular pill radius for 24px status badges and indicator capsules (kBadgeHeight / 2)
+inline constexpr int kRadiusPillSmall = 10; // Semicircular capsule radius for 20px compact badges (kBadgeHeightSmall / 2)
+inline constexpr int kRadiusLed = 9;        // Circular 18x18 LED indicator radius (kLedIndicatorSize / 2)
 
 // Control Sizing & Metrics (in pixels)
 inline constexpr int kControlHeight = 28;       // Standard interactive control target height (dialog inputs, main push buttons)
@@ -32,8 +34,10 @@ inline constexpr int kIconButtonSize = 22;      // Standalone icon/action button
 inline constexpr int kTabCloseButtonSize = 18;  // Document tab close button hit area (18x18, containing 10x10 vector cross)
 inline constexpr int kCloseButtonSize = 18;     // Backwards-compatible alias for kTabCloseButtonSize
 inline constexpr int kSpinButtonWidth = 18;     // Spinbox arrow subcontrol width
+inline constexpr int kBadgeHeight = 24;         // Status capsule badge target height (state badge, tutorial step)
+inline constexpr int kBadgeHeightSmall = 20;    // Compact capsule badge target height
 inline constexpr int kLedIndicatorSize = 18;    // Emissive 8-LED circular indicator diameter (18x18)
-inline constexpr int kLedRadiusPill = 9;        // Circular LED dot radius (kLedIndicatorSize / 2)
+inline constexpr int kLedRadiusPill = kRadiusLed; // Backwards-compatible alias for kRadiusLed
 
 // Layout Spacing & Padding Tokens
 inline constexpr int kSpacingTight = 4;         // Inter-control compact spacing

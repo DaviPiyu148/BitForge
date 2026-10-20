@@ -762,6 +762,8 @@ void MainWindow::setupMenusAndToolbars() {
     toolbar->addWidget(spacer);
 
     state_badge_ = new QLabel(" READY ", toolbar);
+    state_badge_->setFixedHeight(theme::kBadgeHeight);
+    state_badge_->setAlignment(Qt::AlignCenter);
     state_badge_->setStyleSheet(theme::stateBadgeStyle(MachineState::Ready, false, false));
     toolbar->addWidget(state_badge_);
 }

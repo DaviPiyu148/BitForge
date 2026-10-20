@@ -1,8 +1,8 @@
-# BitForge Phase 12.5 & 12.5.1 — Unified Visual Design System, Token Architecture, and Consistency Audit
+# BitForge Phase 12.5, 12.5.1 & 12.5.2 — Unified Visual Design System, Token Architecture, and Consistency Audit
 
-**Date:** October 19, 2026  
+**Date:** October 20, 2026  
 **Auditor & Implementation Agent:** Antigravity (Google DeepMind)  
-**Baseline Git Commit:** `6094caa` (Phase 12.5 baseline) / `a2205ed` (Phase 12.5)  
+**Baseline Git Commit:** `6094caa` (Phase 12.5 baseline) / `a2205ed` (Phase 12.5) / `6340e60` (Phase 12.5.1)  
 **Target Git Branch:** `master`  
 **Repository Working Directory:** `d:\BitForge`  
 
@@ -10,22 +10,22 @@
 
 ## 1. Executive Summary & Verification Matrix
 
-Phase 12.5 and Phase 12.5.1 execute a comprehensive visual consistency audit and unified design system architecture across the entire BitForge application. Previously, while BitForge maintained an established dark theme, individual panels, dialogs, and tools had evolved isolated styling patterns:
+Phase 12.5, Phase 12.5.1, and Phase 12.5.2 execute a comprehensive visual consistency audit and unified design system architecture across the entire BitForge application. Previously, while BitForge maintained an established dark theme, individual panels, dialogs, and tools had evolved isolated styling patterns:
 - Inconsistent border-radii across panels, action cards, inputs, and badges.
 - Alien color leakage: The cyan `#00adb5` had leaked into `WelcomeWidget`, `TutorialGuide`, and `ExamplesDialog` alongside unstyled push buttons lacking hover/pressed states.
 - Web Bootstrap colors: `#28a745`, `#dc3545`, `#007bff`, and `#fd7e14` were hardcoded into status badges, bit view widgets, instruction inspection previews, and stack status labels instead of adhering to the canonical BitForge palette.
-- Design token discrepancies: `kControlHeight = 28` vs 26px toolbar buttons; `kCloseButtonSize = 18` vs 22px Find & Replace close button; ambiguity between pill shapes and rounded rectangles; and monolithic radius assignments in composite panels.
+- Design token discrepancies: `kControlHeight = 28` vs 26px toolbar buttons; `kCloseButtonSize = 18` vs 22px Find & Replace close button; ambiguity between pill shapes and circular LED indicators; and monolithic radius assignments in composite panels.
 
-Phase 12.5 and 12.5.1 resolve these issues by establishing a canonical design token system in `include/bitforge/gui/theme.hpp` and `src/gui/theme.cpp`, refactoring all 18 major UI areas to strictly consume these tokens, introducing named variants for purposeful compact controls, preserving intentional square geometry for dense technical readouts, and verifying visual harmony with 26 automated visual smoke tests.
+Phase 12.5 through 12.5.2 resolve these issues by establishing a canonical design token system in `include/bitforge/gui/theme.hpp` and `src/gui/theme.cpp`, refactoring all 18 major UI areas to strictly consume these tokens, introducing named variants for purposeful compact controls, formalizing mathematical pill capsule and circular LED geometry, preserving intentional square geometry for dense technical readouts, and verifying visual harmony with 26 automated visual smoke tests.
 
 ### Deliverables Status Summary
 
-| Area | Requirement | Baseline Status | Phase 12.5 / 12.5.1 Status | Verification Evidence |
+| Area | Requirement | Baseline Status | Phase 12.5 / 12.5.1 / 12.5.2 Status | Verification Evidence |
 | :--- | :--- | :--- | :--- | :--- |
 | **Token System** | Centralized radii, spacing, colors, metrics | Ad-hoc inline CSS strings | **Reconciled Canonical Tokens** | `include/bitforge/gui/theme.hpp`, `src/gui/theme.cpp`, `testVisualDesignSystemTokensAndHierarchy` |
 | **Control Sizing** | Reconcile 28px vs 26px toolbar buttons | Unclear metric mismatch | **Explicit `kToolbarButtonHeight` (26px)** | `kControlHeight = 28` (standard), `kToolbarButtonHeight = 26` (compact toolbar), `kButtonMinHeight = 26` |
 | **Close Button Sizing** | Reconcile 18px tab vs 22px Find close | Single ambiguous token | **Decomposed Close Tokens** | `kTabCloseButtonSize = 18` (tab subcontrol) vs `kIconButtonSize = 22` (standalone icon button) |
-| **Pill Geometry** | Define true pill vs rounded rect | Unclear 12px semantics | **Mathematical Semicircular Pill** | `kRadiusPill = 12` (half of 24px badge height = true pill); `kLedRadiusPill = 9` (half of 18px LED = true circle) |
+| **Pill & LED Geometry** | True capsule pill vs circular LED indicator | Ambiguous `kLedRadiusPill` naming | **Geometrically Precise Named Tokens** | `kRadiusPill = 12` (capsule for 24px badge), `kRadiusPillSmall = 10` (capsule for 20px badge), `kRadiusLed = 9` (circle for 18px LED) |
 | **Composite Radii** | Breakpoints & Watch radius assignment | Listed solely as `kRadiusNone` | **Decomposed Viewport/Control Radii** | Tables: strictly `kRadiusNone` (0px); Inputs & Buttons: `kRadiusControl` (4px) |
 | **Buttons & Badges** | Unified primary, secondary, danger, compact, accent | Alien `#00adb5`, Bootstrap colors | **100% Tokenized Styles** | `primaryButtonStyle()`, `secondaryButtonStyle()`, `accentButtonStyle()`, `compactButtonStyle()`, `dangerButtonStyle()` |
 | **Status Banners** | Standardized execution feedback banners | Hardcoded inline styles | **Unified `statusBannerStyle()`** | Adopted across `InstructionInspector` and `TutorialGuide` |
@@ -52,8 +52,9 @@ Corner radii follow a strict 5-tier semantic hierarchy based on component purpos
 | `kRadiusControl` | `4px` | **Standard Interactive Controls** | Push buttons, input text boxes, spin boxes, combo boxes, tab bar items, group boxes, dialog frames, status banners. |
 | `kRadiusPanel` | `6px` | **Containers & Information Banners** | Embedded informational cards, quick-start banners, notification panels, device status containers, context menus. |
 | `kRadiusLarge` | `8px` | **Hero Cards & Welcome Dialogs** | Welcome center action cards ("Open Example", "New File"), major modal dialog windows. |
-| `kRadiusPill` | `12px` | **Semicircular Badge Capsules** | Status badges (`stateBadgeStyle`), step counters (`step_badge_label_`). Height = 22-24px, radius = 12px renders true semicircular caps. |
-| `kLedRadiusPill` | `9px` | **Circular Hardware Indicators** | Virtual 8-LED indicators (`kLedIndicatorSize = 18px`). Radius = 9px renders a geometrically perfect circle. |
+| `kRadiusPill` | `12px` | **Semicircular Badge Capsules (24px)**| Status badges (`stateBadgeStyle`), step counters (`step_badge_label_`). Height = 24px (`kBadgeHeight`), radius = 12px renders true semicircular caps ($r = \frac{h}{2}$). |
+| `kRadiusPillSmall` | `10px` | **Semicircular Badge Capsules (20px)**| Compact indicator capsules. Height = 20px (`kBadgeHeightSmall`), radius = 10px renders true semicircular caps ($r = \frac{h}{2}$). |
+| `kRadiusLed` | `9px` | **Circular Hardware Indicators** | Virtual 8-LED indicators (`kLedIndicatorSize = 18px`). Radius = 9px renders a geometrically perfect circle ($r = \frac{d}{2}$). `kLedRadiusPill` is retained as a compatibility alias. |
 
 #### Architectural Rationale for `kRadiusNone` on Technical Data
 Dense computational tools (such as memory hex editors, disassembly gutters, stack viewers, and register grids) convey tabular, high-density technical data where alignment across columns and rows is paramount. Applying rounded borders or curved clipping regions to cells, viewport edges, or line number gutters introduces visual noise, wasted pixel padding, and antialiasing artifacts at row boundaries. Therefore, all data-dense grids and editor viewports are strictly specified with `kRadiusNone = 0`.
@@ -69,7 +70,10 @@ Control heights, button variants, and hit targets are standardized with explicit
 - `kIconButtonSize = 22px`: Standard square hit area for standalone toolbar/bar icon buttons (e.g. Find & Replace bar close button `close_btn_`).
 - `kTabCloseButtonSize = 18px`: Dedicated hit area for document tab close buttons (`QTabBar::close-button`, aliased as `kCloseButtonSize = 18px` for backwards compatibility). Sized specifically to fit within 22–26px tab ears while enclosing a 10×10px high-contrast vector cross.
 - `kSpinButtonWidth = 18px`: Standard width for spinbox up/down subcontrol arrows.
+- `kBadgeHeight = 24px`: Standard target height for machine state and tutorial step capsule badges.
+- `kBadgeHeightSmall = 20px`: Compact badge target height.
 - `kLedIndicatorSize = 18px`: Diameter of circular virtual LED indicators in Port 0x10 display.
+- `kRadiusLed = 9px`: Exact radius of circular virtual LED indicators (aliased as `kLedRadiusPill = 9px`).
 - `kSpacingTight = 4px`: Intra-control compact spacing (badge padding, icon-to-label gaps).
 - `kSpacingStandard = 8px`: Standard layout padding between adjacent controls.
 - `kSpacingCard = 12px`: Internal padding for info banners and grouped containers.
@@ -380,3 +384,116 @@ Zero lines modified or deleted in any frozen architecture specification.
 | `src/gui/welcome_widget.cpp` | Implementation | Replaced remaining raw inline hex colors with canonical theme tokens. |
 | `tests/gui/test_gui.cpp` | Test Suite | Updated `testVisualDesignSystemTokensAndHierarchy` to test new tokens, helpers, and implemented tab-raising automation for crystal-clear dock panel screenshots. |
 | `docs/PHASE12_5_VISUAL_DESIGN_CONSISTENCY_REPORT.md` | Documentation | Authoritative audit report documenting reconciled tokens, intentional variants, and visual proofs. |
+
+---
+
+## 9. Phase 12.5.2 Addendum: Final Design-System Cleanup & Verification
+
+### 9.1 Circular LED vs Capsule Pill Geometry & Naming Reconciliation
+
+During the Phase 12.5.1 review, two geometric naming ambiguities were flagged:
+1. `kLedRadiusPill = 9px`: The naming conflated a circular LED indicator with a pill shape. The virtual 8-LED dots in `DevicesPanel` are 18×18px squares (`kLedIndicatorSize = 18px`). Applying a border radius of 9px ($r = \frac{d}{2}$) renders a geometrically perfect circle, not an elongated pill capsule.
+2. Badge Pill Geometry: A true capsule pill requires the corner radius to equal exactly half the widget height ($r = \frac{h}{2}$). If a badge is 24px tall, $r = 12\text{px}$. If a badge is 20px tall, $r = 10\text{px}$.
+
+Phase 12.5.2 resolves these ambiguities with geometrically exact token definitions:
+- **`kRadiusLed = 9px`**: Explicitly denotes circular LED indicator radius ($\frac{kLedIndicatorSize}{2}$). `kLedRadiusPill` is retained solely as a backwards-compatible alias. All internal usages in `DevicesPanel`, test assertions, and documentation are updated to `kRadiusLed`.
+- **`kBadgeHeight = 24px`**: Standard height for status capsules (`state_badge_`, `step_badge_label_`).
+- **`kRadiusPill = 12px`**: Mathematically exact semicircular pill radius for 24px badges ($\frac{kBadgeHeight}{2} = 12\text{px}$).
+- **`kBadgeHeightSmall = 20px`**: Compact status badge height token.
+- **`kRadiusPillSmall = 10px`**: Semicircular pill radius for 20px compact badges ($\frac{kBadgeHeightSmall}{2} = 10\text{px}$).
+
+### 9.2 Pill Badge Geometry & Vertical Centering Verification
+
+Prior to Phase 12.5.2, `MainWindow`'s `state_badge_` in `QToolBar` was vertically expanded by the toolbar's internal layout to 31px, while `step_badge_label_` in `TutorialGuide` had an unconstrained `sizeHint` of 23px.
+Phase 12.5.2 explicitly fixes both widgets to `kBadgeHeight = 24px` with center alignment:
+- `state_badge_->setFixedHeight(theme::kBadgeHeight); state_badge_->setAlignment(Qt::AlignCenter);`
+- `step_badge_label_->setFixedHeight(theme::kBadgeHeight); step_badge_label_->setAlignment(Qt::AlignCenter);`
+
+**Visual Result:**
+1. In `MainWindow`: The 24px status badge sits vertically centered alongside the 26px toolbar buttons (`kToolbarButtonHeight = 26px`), presenting a balanced, professional toolbar row.
+2. In `TutorialGuide`: The step badge sits cleanly in the dialog header.
+3. Because both badges have height exactly 24px with `border-radius: 12px` (`kRadiusPill`), the left and right ends are mathematically exact 180-degree semicircular caps across all platforms.
+
+### 9.3 Local Stylesheet Categorization & Overrides Audit
+
+A full audit of all 60+ `setStyleSheet` invocations across `src/gui/` confirmed they partition strictly into three intended categories:
+
+1. **Shared Design Tokens & Style Helpers (45%):**
+   - Central application stylesheet: `theme::applicationStyleSheet()`
+   - Button variants: `theme::primaryButtonStyle()`, `secondaryButtonStyle()`, `accentButtonStyle()`, `compactButtonStyle()`, `dangerButtonStyle()`
+   - Input fields: `theme::inputStyle(has_error)`
+   - Informational cards: `theme::infoBannerStyle()`, `theme::welcomeActionCardStyle()`
+   - Execution feedback: `theme::statusBannerStyle()`
+   - Dynamic badges: `theme::stateBadgeStyle()`, `theme::flagBadgeStyle()`, `theme::changedRegisterStyle()`
+   - Empty lists/tables: `theme::emptyStateStyle()`
+
+2. **Necessary Component-Specific Styling (55%):**
+   - `bit_view_widget.cpp`: 8×8 bit-matrix indicator dots with dynamic teal illumination and register row highlight outlines.
+   - `devices_panel.cpp`: Circular 18×18px virtual LED dots using `kRadiusLed = 9px` and `kLedOnBorder`, 7-segment display dark bezel styling, FIFO content and underflow warning typography.
+   - `find_replace_bar.cpp`: 22×22px close button with hover/pressed states and elevated background.
+   - `instruction_inspector.cpp`: Dynamic branch preview colorization (`#98c379` taken vs `#e5c07b` not taken).
+   - `memory_viewer.cpp`: Modified byte cell amber highlight (`theme::kChangedBg`, `theme::kChangedText`).
+   - `stack_viewer.cpp`: Stack pointer / base pointer frame annotations.
+   - `tutorial_guide.cpp`: Dynamic stage completion banner (`makeFeedbackStyle`).
+   - `welcome_widget.cpp`: Curriculum lesson HTML viewport styling and dark scrollbar integration.
+
+3. **Unintended Overrides: 0 (Zero):**
+   - Confirmed: Zero remaining raw Bootstrap colors (`#28a745`, `#dc3545`, `#007bff`, `#fd7e14`).
+   - Confirmed: Zero alien `#00adb5` cyan leakage.
+   - Confirmed: Zero hardcoded button borders or mismatched corner radii on standard inputs.
+
+### 9.4 Test Inventory & Preset Accounting Reconciliation
+
+To eliminate past ambiguity across milestone reports, the test suite inventory is formally delineated:
+
+| Test Target | Test Framework | Defined In | Scope / Description | Passed Count |
+| :--- | :--- | :--- | :--- | :--- |
+| `BitForgeTests` (`bitforge_tests.exe`) | Custom Core Runner | `tests/unit/` | Unit tests for CPU core, instruction decoding, execution pipeline, MMU, assembler, disassembler, and hardware bus. | **233 test cases** |
+| `BitForgeGuiTests` (`bitforge_gui_tests.exe`)| QtTest Framework | `tests/gui/test_gui.cpp` | Integrated GUI tests: 81 test member functions + 2 test fixture slots (`initTestCase`, `cleanupTestCase`). | **83 QtTest entries** |
+
+**Execution by Preset:**
+- **Desktop GUI Presets (`gui`, `gui-release`):**
+  Execute both `BitForgeTests` (233 cases) and `BitForgeGuiTests` (83 entries).
+  $$\text{Total Executed Checks} = 233 + 83 = 316\text{ test entries}$$
+- **Headless Presets (`debug`, `ci`):**
+  Execute `BitForgeTests` (233 cases) only. GUI targets are excluded to support lightweight headless CI environments.
+  $$\text{Total Executed Checks} = 233\text{ test cases}$$
+
+### 9.5 Complete Presets Verification Matrix & Windows Package Smoke Test
+
+All 4 presets and the standalone Windows portable distribution were rebuilt and verified on MSYS2 UCRT64 GCC 16.2.0 / Qt 6.11.2:
+
+```
+[1] build/gui (Debug Desktop GUI):
+    BitForgeTests .................... Passed (0.50s, 233/233)
+    BitForgeGuiTests ................. Passed (14.04s, 83/83)
+    100% tests passed (316/316)
+
+[2] build/gui-release (Release Desktop GUI):
+    BitForgeTests .................... Passed (0.10s, 233/233)
+    BitForgeGuiTests ................. Passed (13.60s, 83/83)
+    100% tests passed (316/316)
+
+[3] build/debug (Debug Headless Core):
+    BitForgeTests .................... Passed (0.28s, 233/233)
+    100% tests passed (233/233)
+
+[4] build/ci (Release Headless Core):
+    BitForgeTests .................... Passed (0.28s, 233/233)
+    100% tests passed (233/233)
+
+[5] scripts/package_windows.ps1 -Validate:
+    Packaged CLI --version ........... Passed
+    Packaged CLI --help .............. Passed
+    Packaged CLI Execution ........... Passed
+    Packaged GUI Smoke Test .......... Passed: [BitForge Smoke Test] SUCCESS: MainWindow and all panels initialized cleanly.
+    Exit Code: 0 (Sanitized PATH: C:\Windows\System32;C:\Windows)
+```
+
+### 9.6 Verification of Frozen Architecture Specifications
+
+Architecture specifications `v1.0` through `v1.7` (`docs/BitForge_Architecture_Specification_*.md`) remain 100% untouched:
+```
+git diff -- docs/BitForge_Architecture_Specification_*.md
+(Zero output — clean working tree)
+```

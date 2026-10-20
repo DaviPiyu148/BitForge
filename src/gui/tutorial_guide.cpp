@@ -106,6 +106,8 @@ TutorialGuide::TutorialGuide(QWidget* parent)
     header_layout->addWidget(stage_title_label_, 1);
 
     step_badge_label_ = new QLabel("Step 1 of 9", this);
+    step_badge_label_->setFixedHeight(theme::kBadgeHeight);
+    step_badge_label_->setAlignment(Qt::AlignCenter);
     step_badge_label_->setStyleSheet(
         QString("QLabel { font-size: 11px; font-weight: bold; color: %1; background: %2; border: 1px solid %3; border-radius: %4px; padding: 3px 10px; }")
             .arg(theme::kAccentBlue.name(), theme::kBgMedium.name(), theme::kBorderMedium.name())
