@@ -3,7 +3,6 @@ build/
 build*/
 bin/
 out/
-dist/
 
 # CMake artifacts
 CMakeCache.txt
